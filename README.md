@@ -10,8 +10,6 @@ The book is organized around a single practical question: how do you move from a
   chapter companion material that stays close to the printed text
 - `tex/`
   LaTeX source for the manuscript, covers, figures, bibliography, and chapter files
-- `editorial/`
-  editorial notes, review materials, and planning documents
 - `book.pdf`
   current compiled manuscript
 - `cover.pdf`
@@ -73,8 +71,8 @@ See [VERSIONING.md](VERSIONING.md) for the release convention used here.
 
 The repository uses a split license model.
 
-- The manuscript text, original figures, covers, and editorial materials are
-  licensed under `CC BY-NC-SA 4.0`; see [LICENSE](LICENSE).
+- The manuscript text, original figures, and covers are licensed under
+  `CC BY-NC-SA 4.0`; see [LICENSE](LICENSE).
 - Code in [`companion/`](companion/) is licensed under `MIT`; see
   [companion/LICENSE](companion/LICENSE).
 - Third-party assets are excluded from those blanket licenses unless explicitly
