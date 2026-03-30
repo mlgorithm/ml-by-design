@@ -1,0 +1,133 @@
+\definecolor{correctcolor}{rgb}{0.15,0.60,0.15}
+\definecolor{shortcutcolor}{rgb}{0.85,0.20,0.10}
+\definecolor{puzzlecolor}{rgb}{0.30,0.35,0.75}
+\definecolor{panelbg}{rgb}{0.96,0.96,0.96}
+\definecolor{failbg}{rgb}{1.0,0.93,0.93}
+
+\begin{tikzpicture}[
+    x=1cm, y=1cm,
+    font=\small,
+    every node/.style={align=center},
+    sbox/.style={draw, rounded corners=3pt, fill=panelbg,
+                 minimum width=2.2cm, minimum height=0.95cm, font=\small},
+    fbox/.style={draw=shortcutcolor!80, rounded corners=3pt,
+                 fill=failbg, minimum width=2.4cm, minimum height=1.2cm,
+                 font=\footnotesize},
+    arr/.style={-{Stealth[length=3mm]}, thick},
+]
+
+%% ── Title ────────────────────────────────────────────────────────────────
+\node[font=\small\bfseries] at (7.0,12.0)
+    {Shortcut Learning in Vision: What Models Really Learn};
+
+%% ── Panel headers ────────────────────────────────────────────────────────
+\node[font=\small\bfseries, correctcolor, align=center, text width=3.0cm] at (2.6,11.1)
+    {What we think\\the model learned};
+\node[font=\small\bfseries, shortcutcolor, align=center, text width=3.4cm] at (11.0,11.1)
+    {What the model\\actually learned};
+
+%% ── Horizontal rule below headers ────────────────────────────────────────
+\draw[gray!60] (0.2,10.65) -- (13.8,10.65);
+%% Vertical divider between panels
+\draw[dashed, gray!70, thick] (7.0,10.65) -- (7.0,6.90);
+
+%% ═══════════════════════════════════════════════════════════════════════════
+%% LEFT PANEL  –  intended semantic features
+%% ═══════════════════════════════════════════════════════════════════════════
+
+%% Pedestrian icon (schematic: head + body + arms + legs)
+\begin{scope}[shift={(2.0,9.1)}]
+  \draw[thick, correctcolor] (0,0)   ellipse (0.32cm and 0.40cm); % head
+  \draw[thick, correctcolor] (0,-0.40) -- (0,-1.15);              % torso
+  \draw[thick, correctcolor] (-0.42,-0.68) -- (0.42,-0.68);       % arms
+  \draw[thick, correctcolor] (0,-1.15) -- (-0.35,-1.80);          % left leg
+  \draw[thick, correctcolor] (0,-1.15) -- (0.35,-1.80);           % right leg
+\end{scope}
+
+\node[font=\footnotesize, correctcolor, align=center, text width=2.6cm] at (2.0,6.95)
+    {Human shape,\\body pose,\\motion cues};
+
+%% Arrow: features → model → output
+\draw[arr, correctcolor]  (3.1,8.5) -- (4.2,8.5);
+\node[sbox, draw=correctcolor] at (5.2,8.5) {\textbf{Vision}\\\textbf{Model}};
+\draw[arr]                (6.2,8.5) -- (6.8,8.5);
+\node[sbox, fill=green!15, draw=green!55!black, font=\footnotesize] at (6.5,7.65)
+    {\textbf{Pedestrian}\\\textbf{Detected}};
+\draw[arr] (6.2,8.5) to[out=0,in=90] (6.5,8.15);
+
+%% ═══════════════════════════════════════════════════════════════════════════
+%% RIGHT PANEL  –  spurious shortcuts actually learned
+%% ═══════════════════════════════════════════════════════════════════════════
+
+\node[font=\footnotesize\bfseries, shortcutcolor, align=center, text width=4.8cm] at (10.9,10.25)
+    {Training cues the model over-relies on:};
+
+%% ── Shortcut cue 1: crosswalk stripes ────────────────────────────────────
+\begin{scope}[shift={(8.0,8.8)}]
+  \fill[gray!30]  (0,0) rectangle (1.6,1.2);
+  \foreach \i in {0, 0.4, 0.8, 1.2}
+      \fill[white] (\i,0) rectangle (\i+0.25,1.2);
+  \draw[gray!60]  (0,0) rectangle (1.6,1.2);
+\end{scope}
+\node[font=\footnotesize, shortcutcolor] at (8.8,8.55) {Crosswalk stripes};
+
+%% ── Shortcut cue 2: dashboard + glare ───────────────────────────────────
+\begin{scope}[shift={(11.0,8.8)}]
+  \fill[brown!40]  (0,0)    rectangle (1.6,0.25);   % dashboard
+  \fill[yellow!25] (0,0.30) -- (1.5,0.30) -- (1.25,1.2) -- (-0.1,1.2) -- cycle;
+  \draw[gray!60]   (0,0)    rectangle (1.6,1.2);
+\end{scope}
+\node[font=\footnotesize, shortcutcolor] at (11.8,8.55) {Dashboard + glare};
+
+%% ── Shortcut cue 3: road texture ────────────────────────────────────────
+\begin{scope}[shift={(8.0,7.2)}]
+  \fill[gray!20]    (0,0) rectangle (1.6,1.2);
+  \foreach \i in {0,...,7}
+      \draw[gray!55, very thin] (0.2*\i,0) -- (0.2*\i,1.2);
+  \foreach \j in {0,...,5}
+      \draw[gray!55, very thin] (0,0.2*\j) -- (1.6,0.2*\j);
+  \draw[gray!60]    (0,0) rectangle (1.6,1.2);
+\end{scope}
+\node[font=\footnotesize, shortcutcolor] at (8.8,7.0) {Road texture};
+
+%% ── Shortcut cue 4: bright lighting ─────────────────────────────────────
+\begin{scope}[shift={(11.0,7.2)}]
+  \fill[yellow!35] (0,0) rectangle (1.6,1.2);
+  \draw[orange!60, line width=1.5pt] (0.8,0.9) -- (0.8,1.1);
+  \draw[orange!60, line width=1.5pt] (0.5,0.9) -- (0.35,1.05);
+  \draw[orange!60, line width=1.5pt] (1.1,0.9) -- (1.25,1.05);
+  \draw[gray!60]   (0,0) rectangle (1.6,1.2);
+\end{scope}
+\node[font=\footnotesize, shortcutcolor] at (11.8,7.0) {Bright daylight};
+
+%% ═══════════════════════════════════════════════════════════════════════════
+%% LEARNED RULE
+%% ═══════════════════════════════════════════════════════════════════════════
+\node[draw=puzzlecolor, rounded corners=4pt, fill=puzzlecolor!10,
+      minimum width=13.0cm, minimum height=1.4cm, font=\small] at (7.0,6.1)
+    {\textbf{Learned Shortcut Rule}\\[3pt]
+     \texttt{IF}\ \ crosswalk\_stripes\ $+$\ familiar\_camera\ $+$\ bright\_lighting
+     \ \ \texttt{THEN}\ pedestrian\_detected};
+
+%% ═══════════════════════════════════════════════════════════════════════════
+%% DEPLOYMENT FAILURES
+%% ═══════════════════════════════════════════════════════════════════════════
+\node[font=\small\bfseries, shortcutcolor] at (7.0,5.15) {Deployment Failures};
+
+%% Four failure boxes at y=3.8
+\foreach \xi/\lab in {1.7/No crosswalk, 4.6/Night scene, 8.1/New camera, 11.0/Park setting}{
+  \node[fbox] at (\xi,3.95) {\lab};
+  %% Red "X" overlay
+  \draw[red!80!black, very thick, line width=1.2pt]
+      (\xi-1.05,3.35) -- (\xi+1.05,4.55);
+  \draw[red!80!black, very thick, line width=1.2pt]
+      (\xi-1.05,4.55) -- (\xi+1.05,3.35);
+}
+
+%% ── Key lesson box ───────────────────────────────────────────────────────
+\node[draw=shortcutcolor!70, rounded corners=4pt, fill=red!5,
+      minimum width=13.0cm, minimum height=1.1cm, font=\small] at (7.0,2.5)
+    {\textcolor{shortcutcolor}{\bfseries High benchmark accuracy $\neq$ robust visual understanding}\\[2pt]
+     \textcolor{puzzlecolor}{Slice-by-slice evaluation reveals the true decision boundaries}};
+
+\end{tikzpicture}

@@ -1,0 +1,94 @@
+\definecolor{c9startBlue}{RGB}{56,103,170}
+\definecolor{c9startBg}{RGB}{220,233,251}
+\definecolor{c9decBg}{RGB}{237,231,250}
+\definecolor{c9decLine}{RGB}{120,80,180}
+\definecolor{c9methBg}{RGB}{210,238,220}
+\definecolor{c9methLine}{RGB}{26,112,64}
+\definecolor{c9ragBg}{RGB}{254,243,219}
+\definecolor{c9ragLine}{RGB}{184,92,16}
+
+\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
+  %% Start/end rectangles
+  sbox/.style={draw=c9startBlue, fill=c9startBg, rounded corners=4pt,
+               align=center, text width=2.7cm, minimum height=0.9cm,
+               text=c9startBlue},
+  %% Decision diamonds
+  diam/.style={draw=c9decLine, fill=c9decBg, diamond, aspect=2.2,
+               align=center, text width=2.5cm, minimum width=3.8cm, minimum height=1.0cm,
+               font=\small, text=c9decLine, inner sep=2pt},
+  %% Terminal method boxes
+  mbox/.style={draw=c9methLine, fill=c9methBg, rounded corners=3pt,
+               align=center, text width=2.5cm, minimum width=3.0cm, minimum height=0.9cm,
+               text=c9methLine},
+  %% RAG box (amber)
+  rbox/.style={draw=c9ragLine, fill=c9ragBg, rounded corners=3pt,
+               align=center, text width=2.7cm, minimum width=3.2cm, minimum height=0.9cm,
+               text=c9ragLine},
+  arr/.style={-Latex, thick, black!60},
+  lbl/.style={font=\footnotesize, black!70, fill=white, inner sep=1pt},
+]
+
+%% ── Main spine (x=0) ─────────────────────────────────────────────────────
+%%    2.8cm row spacing; diamonds centred; terminals branch left/right
+\node[sbox] (start)     at (0,  0.0) {NLP task defined};
+\node[diam] (tokens)    at (0, -2.8) {Is token presence enough?};
+\node[diam] (order)     at (0, -5.6) {Does local order matter?};
+\node[diam] (longrange) at (0, -8.4) {Need long-range context?};
+\node[diam] (external)  at (0,-11.2) {Need external knowledge?};
+\node[diam] (output)    at (0,-14.0) {What output shape?};
+
+%% ── Left-branch terminals ────────────────────────────────────────────────
+\node[mbox] (bow)       at (-5.0, -2.8) {Bag-of-words baseline};
+\node[mbox] (ngram)     at (-5.0, -5.6) {n-gram sequence model};
+\node[mbox] (contextual)at (-5.0, -8.4) {Contextual encoder};
+
+%% ── Right-branch terminal ────────────────────────────────────────────────
+\node[rbox] (rag)       at ( 5.0,-11.2) {Retrieval-augmented generation};
+
+%% ── Bottom output terminals ──────────────────────────────────────────────
+\node[mbox] (classify)  at (-3.2,-16.5) {Classification};
+\node[mbox] (extract)   at ( 0.0,-16.5) {Span extraction};
+\node[mbox] (generate)  at ( 3.2,-16.5) {Generation};
+
+%% ── Main spine arrows ────────────────────────────────────────────────────
+\draw[arr] (start)     -- (tokens);
+\draw[arr] (tokens)    -- node[lbl,right] {No}  (order);
+\draw[arr] (order)     -- node[lbl,right] {No}  (longrange);
+\draw[arr] (longrange) -- node[lbl,right] {No}  (external);
+\draw[arr] (external)  -- node[lbl,right] {No}  (output);
+
+%% ── Yes branches (left) ──────────────────────────────────────────────────
+\draw[arr] (tokens)    -- node[lbl,above] {Yes} (bow);
+\draw[arr] (order)     -- node[lbl,above] {Yes} (ngram);
+%% Purely horizontal Yes branch (contextual aligned with longrange)
+\draw[arr] (longrange.west) -- node[lbl,above] {Yes} (contextual.east);
+
+%% Contextual Encoder → External knowledge: clean L-bend down then right
+\draw[arr] (contextual.south) -- ++(0,-0.8) -| (external.west);
+
+%% ── Right Yes branch ─────────────────────────────────────────────────────
+\draw[arr] (external.east) -- node[lbl,above] {Yes} (rag);
+
+%% ── Output branches ──────────────────────────────────────────────────────
+\draw[arr] (output.south west) -- node[lbl,left]  {Label}    (classify.north);
+\draw[arr] (output.south)      -- node[lbl,right] {Span}     (extract.north);
+\draw[arr] (output.south east) -- node[lbl,right] {Text}     (generate.north);
+
+%% ── Complexity arrow: left of method boxes, label at arrow tip ────────────
+\draw[-Latex, thick, black!50]
+  (-6.9,-2.2) -- (-6.9,-13.8);
+\node[font=\footnotesize\itshape, black!60, anchor=north, align=center]
+  at (-6.9,-14.0) {increasing\\model complexity};
+
+%% ── Context Audit annotation (far left, no overlap) ─────────────────────
+\node[align=left, font=\footnotesize, black!65, text width=3.3cm]
+  at (-9.6,-5.8) {%
+  \textbf{Context Audit}\\[2pt]
+  $\cdot$ token presence\\
+  $\cdot$ local order\\
+  $\cdot$ long-range context\\
+  $\cdot$ external knowledge\\
+  $\cdot$ dialect coverage\\
+  $\cdot$ output format};
+
+\end{tikzpicture}

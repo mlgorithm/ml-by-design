@@ -1,0 +1,600 @@
+\chapter{Audio, Time, and Prediction-Time Realism}
+
+\begin{learninggoals}
+\item Explain why sequential problems should be framed around what information is truly available at the decision moment.
+\item Use a prediction-time audit to define horizon, allowed context, forbidden future information, and latency constraints.
+\item Understand waveforms, spectrograms, lag features, trends, seasonality, and regime change as representation choices for sequential data.
+\item Distinguish speech recognition, keyword spotting, speaker verification, forecasting, and anomaly detection before choosing a model family.
+\item Evaluate sequential systems with time-faithful splits, realistic baselines, and deployment-aware stress tests.
+\item Produce a sequential design card before making a serious sequential-model claim.
+\end{learninggoals}
+
+The language chapter treated meaning as sequence structure shaped by context and grounding. Audio and time-series data extend that sequential viewpoint into different signal types and operational constraints. Once time enters the problem, examples stop being static records and become evolving processes. That change makes representation, splitting, latency, and leakage part of the modeling claim itself. The chapter culminates in a sequential design card, so the audit stays tied to a reusable design decision rather than remaining a checklist.
+
+\begin{problemsolvinglens}
+This chapter asks one practical question: at the moment a sequential system must act, what information is actually available, what past context matters, and what evaluation prevents us from cheating through time? The answer drives representation choice, model family, baselines, and deployment realism.
+\end{problemsolvinglens}
+
+\section{Opening Dilemma: Time Turns Examples Into Processes}
+
+In a static classification problem, an example is often treated as a fixed object. In a sequential problem, the object unfolds. A waveform is produced over time. Electricity demand evolves hour by hour. A patient-monitoring stream changes as interventions occur. A fraud signal arrives one event at a time. Once time enters the task, the central question becomes immediate:
+
+\begin{center}
+\emph{What did the system know at the decision moment?}
+\end{center}
+
+That question makes sequential modeling different from ordinary tabular prediction in at least three ways:
+\begin{itemize}[leftmargin=*]
+\item order usually matters,
+\item available information may be constrained by the prediction moment,
+\item evaluation can become invalid if future information leaks backward through the split or the feature set.
+\end{itemize}
+
+This is why a strong sequential result is not defined only by model accuracy. It is defined by whether the system used only legitimate information at the right time and still performed well.
+
+Keep two running cases in view throughout this chapter. One is a streaming wake-word detector that must fire within a fraction of a second after hearing a target phrase. The other is a one-hour-ahead electricity-demand forecaster for a campus energy system. One consumes audio and the other consumes numeric measurements, but both are governed by the same practical question: what information was really available at the moment a decision had to be made?
+
+\section[Problem-Solving Technique: Prediction-Time Audit]{Problem-Solving Technique:\linebreak Prediction-Time Audit}
+
+\begin{thinkingtool}
+\textbf{Prediction-time audit.} Before training a sequential model, write down:
+\begin{itemize}[leftmargin=*]
+\item the decision time,
+\item the forecast horizon or response delay that matters,
+\item the past context that is allowed,
+\item any future information that is forbidden,
+\item the latency budget,
+\item the temporal structure the representation must preserve.
+\end{itemize}
+\end{thinkingtool}
+
+This is the chapter's most reusable habit. A forecast, a wake-word detector, a speaker verifier, and an anomaly detector all process sequences, but they do not share the same prediction moment or the same information constraints. The audit forces those constraints into the open before the model family is chosen.
+
+\begin{decisionbox}
+Sequential claims should always answer three questions early: what is known at decision time, how far into the future the system must reason, and which parts of the past are legitimately available. If those answers are vague, the evaluation can become meaningless even when the model looks strong.
+\end{decisionbox}
+
+\begin{practicalnote}
+A compact sequential workflow is: state the decision time and horizon, identify the allowed context and forbidden future information, choose a representation that preserves the relevant time structure, test a chronological baseline, and only then compare model families against the latency budget and drift risks. The audit and the design card are the same procedure at two different levels of detail.
+\end{practicalnote}
+
+\begin{example}[Mini Prediction-Time Audit]
+For the wake-word detector, the decision time is ``right now'' on each incoming buffer, the legal context is only the recent audio already heard, future frames are forbidden, and the latency budget is tight enough that the representation must preserve very local temporal structure.
+
+For the one-hour-ahead demand forecaster, the decision time is the top of the hour when the forecast is issued, the legal context includes past load and weather reports that had already been issued by then, realized future demand is forbidden, and the representation must preserve recent trend, daily rhythm, and calendar effects.
+
+That is already enough to rule out several bad experiments before architecture enters the story.
+\end{example}
+
+\begin{thinkingtool}
+\textbf{Tempting mistake $\rightarrow$ corrected reasoning.} Tempting mistake: ``Use every useful-looking field in the dataset and let the model figure it out.'' Corrected reasoning: ``Use only what would legally and physically exist at the decision moment. If a feature, preprocessing step, or split leaks future structure, the experiment is solving an easier problem than deployment.''
+\end{thinkingtool}
+
+\section{Two Domains, One Audit}
+
+The chapter is easier to teach if the audio and forecasting examples are kept in the same frame rather than treated as unrelated mini-courses. Table~\ref{tab:prediction-time-two-cases} shows why.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{L{2.04cm}L{1.53cm}L{2.04cm}L{1.72cm}L{1.34cm}}
+\toprule
+Case & Decision time & Allowed context & Forbidden future information & Latency budget \\
+\midrule
+Wake-word detector & every incoming frame or short buffer & recent audio buffer only & any frames that arrive after the current decision moment & very small \\
+One-hour-ahead demand forecast & top of each hour & past load, calendar, and issued weather data up to that hour & realized future demand or revised weather not yet available at issue time & modest \\
+\bottomrule
+\end{tabular}
+\caption{Audio and forecasting look different on the surface, but the same audit applies: define the decision moment, legal context, forbidden future information, and timing constraint first.}
+\label{tab:prediction-time-two-cases}
+\end{table}
+
+The prediction-time audit is not a technique specific to audio or time-series forecasting. Any task where an action must be taken at a specific moment, using only the information that legally and physically existed at that moment, is a sequential prediction problem governed by the same audit. The chapter uses audio and demand forecasting as its running cases because they contrast well in latency pressure and signal type, but the discipline applies equally to the domains shown in Table~\ref{tab:prediction-time-breadth}.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\small
+\begin{tabular}{L{2.60cm}L{1.85cm}L{2.07cm}L{1.60cm}L{1.43cm}}
+\toprule
+Domain & Decision moment & Allowed context & Forbidden future & Latency pressure \\
+\midrule
+Medical monitoring (ICU early-warning system) & each vital-sign reading & all prior readings for that patient & any readings that occur after the current sample & tight \\
+Fraud detection (online transaction scoring) & transaction time & prior transactions for that account up to the current event & any future transactions & very tight \\
+Predictive maintenance (sensor anomaly detection) & each sensor cycle & recent sensor history up to the current cycle & future sensor values not yet recorded & modest \\
+Recommendation (next-item prediction) & page load & user's prior interaction history up to that moment & any interactions that occur after page load & tight \\
+\bottomrule
+\end{tabular}
+\caption{The prediction-time audit applies across sequential domains far beyond audio and forecasting. The questions are the same; only the answers change.}
+\label{tab:prediction-time-breadth}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  font=\small,
+  label/.style={align=right, text width=2.5cm},
+  allowed/.style={draw, rounded corners, align=center, minimum width=3.3cm, minimum height=0.95cm, fill=black!4},
+  future/.style={draw, dashed, rounded corners, align=center, minimum width=3.3cm, minimum height=0.95cm},
+  moment/.style={draw, circle, minimum size=0.85cm, inner sep=0pt, fill=black!8},
+  arrow/.style={-Latex, thick}
+]
+\node[label] (wake_label) {Wake-word\\detector};
+\node[allowed, right=0.45cm of wake_label] (wake_past) {Recent audio\\buffer allowed};
+\node[moment, right=0.45cm of wake_past] (wake_now) {Act};
+\node[future, right=0.45cm of wake_now] (wake_future) {Later audio\\forbidden};
+
+\node[label, below=1.25cm of wake_label] (forecast_label) {One-hour-ahead\\forecast};
+\node[allowed, right=0.45cm of forecast_label] (forecast_past) {Past load and\\issued weather allowed};
+\node[moment, right=0.45cm of forecast_past] (forecast_now) {Issue};
+\node[future, right=0.45cm of forecast_now] (forecast_future) {Realized demand and\\revised weather forbidden};
+
+\draw[arrow] (wake_past) -- (wake_now);
+\draw[arrow] (forecast_past) -- (forecast_now);
+\end{tikzpicture}%
+}
+\caption{The same prediction-time boundary governs both running cases. The legal context sits to the left of the decision moment, while information created after that moment belongs to an easier problem than the one the deployed system must actually solve.}
+\label{fig:prediction-time-boundary}
+\end{figure}
+
+This comparison is the real center of the chapter. The wake-word system fails if it silently uses future audio. The forecaster fails if it uses tomorrow's realized demand or a revised weather report that would not have existed when the forecast was issued. In both cases the main danger is the same: the experiment starts solving an easier problem than the real deployment.
+
+\section{Task Shape Before Model Family}
+
+Before talking about sequence architectures, it helps to ask what kind of output the task really needs.
+
+\subsection{Speech Recognition}
+
+Speech recognition maps audio to text. This is not just classification. The output length may differ from the input length, alignments are uncertain, and acoustic evidence must be combined with linguistic structure.
+
+\subsection{Keyword Spotting and Audio Classification}
+
+Keyword spotting asks whether a short target command such as \texttt{stop} or \texttt{wake} appears in an audio clip. More general audio classification may predict labels such as traffic, applause, machinery, or rain. These tasks often depend strongly on robustness to noise, microphone changes, and speaker variation.
+
+\subsection{Speaker Verification}
+
+Speaker verification asks whether the current voice matches a claimed identity or an enrolled reference voice, rather than what is being said. This is useful because it shows that the same signal can support different tasks with different invariances. A speech-recognition system should usually ignore speaker identity. A speaker-verification system must preserve it.
+
+\subsection{Forecasting and Anomaly Detection}
+
+Forecasting predicts future values from information available up to the present. Anomaly or event detection searches for rare failures, abrupt changes, or unusual states in a process. These are not the same task. Forecasting is about expected continuation; anomaly detection is about deviation from expected continuation.
+
+\begin{example}[Why Task Shape Comes First]
+An audio stream from a smart home could support at least three different tasks. It could classify the room scene, detect a wake word, or verify that the current speaker is an authorized user. The same raw signal appears in all three cases, but the relevant invariances, latency demands, and evaluation standards are different.
+\end{example}
+
+\section{Audio as a Representation Problem}
+
+An audio waveform is a sequence of amplitudes sampled over time. That representation is faithful to the signal, but not always to the task. Many audio tasks depend less on raw amplitude and more on how frequency content changes over time.
+
+\subsection{Waveforms and Frequencies}
+
+Pure tones are well described by frequency. Speech and music are not pure tones, but they still contain informative mixtures of frequencies that evolve over time. This is why audio is often represented not only in the time domain but also in a time-frequency domain.
+
+\begin{definition}[Spectrogram]
+A spectrogram is a time-frequency representation showing how much energy a signal contains at different frequencies over successive time windows.
+\end{definition}
+
+One way to build a spectrogram is to take short overlapping windows of the waveform and compute a frequency decomposition within each window. The result is a matrix whose horizontal axis is time, whose vertical axis is frequency, and whose values indicate energy.
+
+Depending on the construction, those values may be magnitude, power, or log-power rather than raw energy.
+
+\begin{prereqbridge}
+You do not need full Fourier-analysis machinery to use the idea of a spectrogram. The practical picture is enough: take a short chunk of sound, ask which frequencies are strong, slide forward a little, and repeat. The result shows how frequency content changes over time.
+\end{prereqbridge}
+
+\subsection{Worked Example: A Tone Change Over Time}
+
+Imagine a two-second clip. In the first second it contains a low tone at $4$ Hz, and in the second second it contains a higher tone at $10$ Hz. If we summarize the whole clip at once, both frequencies appear somewhere, but the timing is lost.
+
+Now suppose we compute short-window frequency summaries. Early windows show strong energy near $4$ Hz. Later windows show strong energy near $10$ Hz. The representation now answers the useful question: not just which frequencies exist, but \emph{when} they are active.
+
+\begin{center}
+\emph{A spectrogram is not the sound itself; it is a task-shaped lens on the sound.}
+\end{center}
+
+\begin{mathlens}
+If the analysis window has duration $T$, then time localization improves as $T$ gets smaller, while frequency resolution improves as $T$ gets larger. In the simplest intuition, short windows catch brief events but smear stable frequencies; long windows separate frequencies more cleanly but blur when they occurred. So window choice is really a task choice: onset detection prefers timing, while tone or harmonic analysis prefers frequency precision.
+\end{mathlens}
+
+\begin{example}[Window Choice Depends on the Decision]
+For the running wake-word case, short windows may preserve the onset of consonants and brief timing cues that matter for fast detection, while longer windows may smear those cues even if they give cleaner frequency estimates. The right representation is therefore tied not only to the signal, but to the timing of the action the system must take.
+\end{example}
+
+\subsection{Time-Frequency Tradeoffs}
+
+Short windows give better time localization but blur frequency precision. Longer windows improve frequency resolution but blur timing. This tradeoff matters because different tasks value timing and frequency detail differently. A transient command and a slowly changing tone are not equally well served by the same window.
+
+\begin{advancednote}
+The short-time Fourier transform can be written schematically as
+\[
+S(t,f) = \left| \sum_n x[n]\,w[n-t]\,e^{-i2\pi fn} \right|^2,
+\]
+where $x[n]$ is the waveform, $w$ is a local window, and $f$ is a frequency or frequency-bin variable. The key idea is not the formula itself, but the fact that local frequency analysis depends on both a signal and a windowing choice.
+\end{advancednote}
+
+\begin{mathlens}
+If a window has length $L$ and the step size is $s<L$, then adjacent windows overlap by $L-s$ samples. For example,
+\begin{align*}
+W_t &= (y_{t-L+1},\ldots,y_t), \\
+W_{t+1} &= (y_{t-L+1+s},\ldots,y_{t+1}),
+\end{align*}
+so the overlap fraction is \((L-s)/L\). If a random split places one overlapping window in train and the next in test, the test example already contains much of the same raw signal. That is why overlapping windows from one continuous segment should usually stay in the same temporal block or group.
+\end{mathlens}
+
+\subsection{Helpful but Incomplete}
+
+Spectrograms are attractive because they let audio benefit from architectural ideas developed for images. But they also hide structure. Phase information is often compressed or ignored. Windowing can smear sharp events. Reverberation and background noise can distort the display. As elsewhere in the book, the representation is never neutral.
+
+\section{Time Series as Evolving Process}
+
+Audio is one kind of sequence. Forecasting and monitoring create another. Here the goal is often to predict future values, detect events, or classify temporal patterns from evolving measurements.
+
+\subsection{Trend, Seasonality, Lagged Dependence, and Regime Change}
+
+Several temporal structures appear repeatedly:
+\begin{itemize}[leftmargin=*]
+\item \textbf{trend}: long-term upward or downward movement,
+\item \textbf{seasonality}: recurring cycles such as daily, weekly, or yearly patterns,
+\item \textbf{lagged dependence}: present values that depend on recent past values,
+\item \textbf{regime change}: a shift in how the process behaves.
+\end{itemize}
+
+These are not only descriptive words. They affect feature design, baseline choice, and split logic. A forecasting model that ignores seasonality may look unstable. A model that cannot survive regime change may look strong in the lab and fail in deployment.
+Forecasting texts treat trend, seasonality, horizon, and structural change as core parts of the problem definition rather than as afterthoughts \citep{hyndman2021}.
+
+\begin{definition}[Forecasting]
+Forecasting is the task of predicting future values of a sequence from information available up to the present time.
+\end{definition}
+
+\subsection{Worked Example: Lag Features by Hand}
+
+Suppose we want to predict electricity demand one hour ahead. A simple forecaster might use the most recent three observations:
+\[
+x_t =
+\begin{bmatrix}
+y_{t-2} \\
+y_{t-1} \\
+y_t
+\end{bmatrix}.
+\]
+Let
+\[
+y_{t-2}=98,\qquad y_{t-1}=101,\qquad y_t=103.
+\]
+Suppose a linear forecasting model is
+\[
+\hat{y}_{t+1} = 0.2y_{t-2} + 0.3y_{t-1} + 0.5y_t.
+\]
+Then
+\[
+\hat{y}_{t+1} = 0.2(98) + 0.3(101) + 0.5(103) = 19.6 + 30.3 + 51.5 = 101.4.
+\]
+
+The example is simple on purpose. It shows that sequential prediction begins by deciding what past context matters and how it should enter the prediction. More advanced models learn richer context automatically, but this conditioning logic remains central.
+
+\subsection{Irregular Sampling and Missingness as Signal}
+
+Many real sequential problems are not sampled on a neat fixed grid. Clinical measurements arrive at uneven times. User events occur in bursts and then disappear for hours. Sensors drop readings. Support messages appear only when a student decides to write. In such settings, the timestamp pattern is part of the representation, not just metadata around the representation.
+
+This matters because missingness is often informative. A missing sensor value may indicate device failure. A long gap since the last event may signal inactivity, recovery, or disengagement. A support system that has not received follow-up messages for several days may be seeing a different situation from one that receives repeated messages within an hour. Treating every gap as a nuisance to be smoothed away can remove exactly the structure the model needs.
+
+\begin{decisionbox}
+Before filling missing values or resampling to a regular grid, ask whether the absence itself carries signal. If the answer may be yes, preserve time gaps, missingness flags, or event counts explicitly instead of pretending the process was evenly observed all along.
+\end{decisionbox}
+
+A practical workflow is to separate three questions:
+\begin{itemize}[leftmargin=*]
+\item is the process truly continuous but only observed intermittently?
+\item is the missing value a measurement failure?
+\item is the missing value itself a meaningful event, such as ``no message arrived'' or ``no transaction occurred''?
+\end{itemize}
+
+Different answers lead to different designs. Sometimes resampling to hourly or daily bins is fine. Sometimes the right move is to keep a feature for time since last observation. Sometimes the right representation is event based rather than grid based. The core modeling habit is to stop treating timestamps and gaps as bookkeeping and start treating them as part of the signal.
+
+\subsection{Horizon Is Part of the Task Definition}
+
+Predicting one step ahead is not the same as predicting a day, a week, or a month ahead. The relevant context, the uncertainty, and the operational meaning all change with the horizon.
+
+\begin{center}
+\emph{Horizon is part of the task definition, not a detail added after modeling.}
+\end{center}
+
+\begin{example}[One-Hour-Ahead and Day-Ahead Are Different Problems]
+For the campus energy system, a one-hour-ahead forecast can rely heavily on the most recent load values and near-term conditions. A day-ahead forecast may depend more on calendar effects, planned building usage, and weather forecasts issued much earlier. Calling both tasks ``forecasting'' is true but incomplete. They are different operational decisions with different legal context and different uncertainty.
+\end{example}
+
+\section{Sequence Models as Memory Choices}
+
+The purpose of a sequential model is not merely to read one item after another. It is to preserve the forms of memory that matter for the task.
+
+\subsection{Hidden Markov Models and Structured State}
+
+Earlier sequence models such as hidden Markov models treated the system as evolving through hidden states that generate observations. These models remain conceptually useful because they force us to think about latent state, transitions, and uncertainty explicitly \citep{rabiner1989}.
+
+\subsection{Recurrent Models and LSTMs}
+
+Recurrent neural networks process sequences step by step, updating a hidden state that summarizes past context. LSTMs and related gated models were influential because they made it easier to retain useful information across longer spans than simple recurrent networks could manage reliably.
+
+\subsection{Transformers and Flexible Context Access}
+
+Transformers matter in sequential work for the same broad reason they matter in language: they allow more flexible access to distant context than a purely recurrent hidden state. When enough data and compute are available, that flexibility can be valuable for long-range dependencies \citep{vaswani2017}.
+
+\begin{example}[A Toy Memory Contrast]
+Consider a toy task: output \texttt{1} at the current time step only if the tone heard \emph{eight} steps earlier matches the tone heard now; otherwise output \texttt{0}. A short-window model that only sees the last three steps cannot solve this task for the right reason because the decisive information lies outside its memory. A recurrent model may solve it if its hidden state preserves the earlier tone reliably. A transformer-style model can compare the current step directly with the earlier relevant step more explicitly. The important lesson is not that one architecture is always better. It is that the task is really a question about memory access.
+\end{example}
+
+\begin{mathlens}
+Suppose a predictor only retains the last $m$ observations, so its state at time $t$ is a function of $(y_{t-m+1},\ldots,y_t)$. If the correct output at time $t+1$ depends on $y_{t-h}$ with $h>m$, then two sequences that match on the last $m$ steps but differ at $y_{t-h}$ produce the same state but may require different outputs. No model with only $m$-step memory can solve that task perfectly in all cases. This is the formal reason horizon and memory length have to be matched to the task.
+\end{mathlens}
+
+\begin{example}[Which Past Matters?]
+For keyword spotting, the last second of audio may matter most. For electricity demand, the same hour on previous days may matter strongly. For clinical monitoring, sudden short-term changes may matter more than long-run averages. Different tasks reward different notions of memory.
+\end{example}
+
+\begin{center}
+\emph{Sequence architectures differ mainly in how they represent and access memory.}
+\end{center}
+
+\section{Evaluation That Respects Time}
+
+This is the chapter's emotional center. Time is one of the easiest ways to fool yourself experimentally.
+
+\subsection{Chronological Splits}
+
+Forecasting and many monitoring tasks require training on earlier periods and testing on later ones. Random splits can create unrealistic settings in which information from future regimes effectively leaks into the training distribution \citep{roberts2017}.
+
+\begin{definition}[Chronological Split]
+A chronological split separates training and testing by time order so that evaluation uses only future observations relative to the training period.
+\end{definition}
+
+\subsection{Why Random Splits Can Mislead}
+
+Suppose a time series is converted into overlapping windows and then randomly split. Very similar local histories may appear in both train and test sets. The test set becomes easier than real deployment because the model sees nearly the same recent patterns during training. If the process later changes regime, the random split may hide the real difficulty of future prediction.
+
+\subsection{A Temporal Leakage Taxonomy}
+
+Students often learn the warning ``do not use the future'' and still miss how many different ways the future can sneak in. A more useful habit is to name the leakage pattern explicitly, because different patterns require different fixes.
+
+Common temporal leakage patterns include:
+\begin{itemize}[leftmargin=*]
+\item \textbf{future-feature leakage}: a predictor uses information created after the decision moment, such as tomorrow's realized demand or a laboratory value measured after triage;
+\item \textbf{window-overlap leakage}: train and test windows share nearly the same recent history, making the test set much easier than the true future problem;
+\item \textbf{preprocessing leakage}: normalization, imputation, seasonal adjustment, or feature construction is fit using future periods and then applied backward into training;
+\item \textbf{label-definition leakage}: the target itself is defined using future information in a way that quietly contaminates features or split logic;
+\item \textbf{entity or source carryover}: the split mixes recordings, devices, speakers, patients, or sensors across time so heavily that the model is tested on near-duplicates of what it already saw.
+\end{itemize}
+
+These are not all the same mistake. Future-feature leakage breaks the prediction-time boundary directly. Window-overlap leakage creates an unrealistically easy interpolation problem. Preprocessing leakage often looks harmless because it happens before the model is trained, yet it can still let future structure shape the representation. Label-definition leakage is especially dangerous because it can make the whole experiment answer a different question from the deployment task.
+
+\begin{decisionbox}
+When you suspect leakage, do not stop at ``the split seems wrong.'' Ask which leakage family is present, what information crossed the boundary, and whether the fix belongs in the split, the feature pipeline, the label definition, or the grouping logic.
+\end{decisionbox}
+
+\subsection{Available Information at Prediction Time}
+
+Chronology alone is not enough. The feature set itself must be realistic. A feature derived from tomorrow's average demand is invalid if the goal is to predict tomorrow before it happens. A clinical laboratory value timestamped after triage is illegal for a triage-time prediction. In audio, future frames may be acceptable for offline transcription but forbidden for a low-latency streaming detector.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{2.61cm}L{1.35cm}L{5.99cm}}
+\toprule
+Feature example & Legal? & Why \\
+\midrule
+Past load at issue time & Yes & It existed when the forecast was issued and can be used without looking ahead \\
+Issued weather forecast report & Yes & The report was already published at decision time \\
+Realized future demand & No & It is the target the model is supposed to predict, not an input available beforehand \\
+Revised weather bulletin posted later & No & The later revision would not have been available when the forecast was made \\
+Recent audio buffer for wake-word detection & Yes & It is part of the current signal at the decision moment \\
+Audio frames that arrive after the trigger point & No & They cross the prediction-time boundary \\
+\bottomrule
+\end{tabular}
+\caption{A legal-vs-illegal feature table makes the prediction-time boundary concrete across audio and forecasting.}
+\label{tab:legal-vs-illegal-features}
+\end{table}
+
+\begin{failurebox}
+Sequential leakage does not always look like copying answers. It often appears as future-adjacent windows, mixed regimes, illegal timestamps, or features that would not exist at the real decision point. The result can still look impressive while meaning very little.
+\end{failurebox}
+
+\begin{example}[Real-World Callout: Leakage Hides in Structure]
+Roberts et al.\ argue that cross-validation for temporally, spatially, or otherwise structured data must respect the real dependency structure, because ordinary random splits can turn a hard generalization problem into an easier interpolation problem \citep{roberts2017}. Bernett et al.\ make a closely related point in biological machine learning: leakage often enters through preprocessing, grouping mistakes, or shared entities that quietly connect train and test data even when nobody intended to cheat \citep{bernett2024}. The practical lesson for sequential modeling is blunt: if the split ignores how examples are connected through time, source, or measurement process, the reported result may answer the wrong question.
+\end{example}
+
+\subsection{Worked Example: A Split That Solves the Wrong Problem}
+
+Suppose the campus demand forecaster is trained on overlapping windows and evaluated in two ways:
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{6.9cm}c}
+\toprule
+Evaluation design & Mean absolute error \\
+\midrule
+Random split of overlapping windows from the same semester & 2.1 \\
+Chronological split with the next month held out & 5.8 \\
+Chronological split with a later semester held out & 7.0 \\
+\bottomrule
+\end{tabular}
+\caption{A sequential model can look much better under a random split than under the deployment-faithful chronological split that actually matters.}
+\label{tab:forecasting-split-leakage}
+\end{table}
+
+The random split looks best because nearby windows share almost the same recent history and regime. The model is effectively tested on patterns that are only slightly shifted versions of what it already saw during training. The chronological split is harder because it asks the real question: can the system predict later demand under changed conditions without borrowing information from the future?
+
+The same logic appears in audio. A wake-word detector evaluated with the same speakers, rooms, and devices mixed across train and test may look strong for the wrong reason. If deployment requires new speakers or new microphones, the honest split should separate those conditions too. The central lesson is not ``always use one specific split.'' It is ``use the split that matches the real prediction story.''
+
+\begin{evidencebox}
+Evidence for a sequential model should answer at least these questions:
+\begin{itemize}[leftmargin=*]
+\item Was the split chronological or otherwise faithful to deployment?
+\item Were all features available at the decision moment?
+\item Does the model beat a realistic naive baseline?
+\item What happens under noise, latency limits, or regime shift?
+\end{itemize}
+\end{evidencebox}
+
+\subsection{Backtesting Regimes and Horizon-Specific Claims}
+
+Chronological evaluation still leaves an important choice open: how should the model be rolled forward through time during evaluation? That choice is the backtesting regime, and it should mirror how the system will actually be maintained.
+
+In practice, model selection often uses rolling or walk-forward backtesting rather than a single chronological cut, especially when the deployed system will be retrained repeatedly.
+
+Three common regimes appear often:
+\begin{itemize}[leftmargin=*]
+\item \textbf{single holdout}: train on an early block and test on one later block; useful for a one-time launch check but weak if performance varies over time;
+\item \textbf{expanding-window backtest}: train on an initial period, test on the next block, then expand the training history and repeat; useful when the real system will keep accumulating data;
+\item \textbf{sliding-window backtest}: always train on the most recent fixed window and test on the next block; useful when old data becomes stale and retraining emphasizes recent behavior.
+\end{itemize}
+
+None of these is universally best. The right regime depends on the deployment cadence. If the real forecasting service retrains every week on the latest semester of data, then a one-shot historical split is not the most faithful evaluation. If the real system is updated rarely, an expanding-window simulation may overstate adaptation. Backtesting is therefore part of the operational claim, not just part of the statistical protocol.
+
+Horizon belongs in the same sentence. A one-hour-ahead model and a day-ahead model may need different baselines, different context windows, and different retraining schedules even when they use the same raw signal. ``This model works for forecasting'' is too broad a claim. A scientifically honest sentence is closer to: ``under weekly expanding-window retraining, the model improves one-hour-ahead demand forecasts, but the gain shrinks sharply at the 24-hour horizon.'' That is a usable operational claim.
+
+\begin{decisionbox}
+Choose the backtesting regime by asking how the deployed system will actually be refreshed. Then state the horizon in the claim itself, because a win at one horizon does not automatically transfer to another.
+\end{decisionbox}
+
+\section{Naive Baselines as Honesty Checks}
+
+Sequential tasks often have deceptively strong simple baselines. In forecasting, predicting that the next value equals the current value can be hard to beat on stable series. In seasonal data, repeating the value from the same time yesterday or last week may be stronger still.
+
+\begin{center}
+\emph{In sequential tasks, the first baseline is often not weak at all. It is a realism check.}
+\end{center}
+
+A complicated sequential model that cannot beat a naive baseline under an honest split is not a near-miss. It is a warning sign that the representation, split logic, or claim may be wrong.
+
+\section{Deployment Realism: Noise, Latency, and Drift}
+
+A sequential system is not useful just because it is accurate offline. It must also act in time, survive noise, and remain relevant as the process changes.
+
+\subsection{Noise and Channel Variation}
+
+Audio systems must cope with microphone differences, compression artifacts, room acoustics, overlap from other speakers, and background noise. Sensor systems must cope with missing readings, calibration changes, and hardware variation. Robustness is often the real difficulty.
+
+\subsection{Latency}
+
+Some systems can use the whole sequence before deciding. Others must act online. A wake-word detector cannot wait until the conversation ends. A fraud detector cannot wait until tomorrow. Latency is therefore part of the modeling problem, not just a later optimization concern.
+
+\begin{example}[Offline Accuracy Can Hide an Illegal Delay]
+Suppose a wake-word system achieves excellent accuracy by using one full second of future audio after the target phrase ends. That may be acceptable for offline transcription, but it is not acceptable for a device that must wake immediately while the user is still speaking. The model may be statistically impressive and operationally invalid at the same time.
+\end{example}
+
+\subsection{Concept Drift}
+
+Processes change. Speakers change microphones. Consumption patterns shift across seasons. Traffic changes after roadwork. Financial behavior changes across market regimes. A model that was sound yesterday may become stale even if its training procedure was technically correct at the time.
+
+For the running demand-forecast case, drift may come from new building schedules, extreme weather, or policy changes that alter campus energy usage. For the wake-word case, drift may come from microphone replacements, firmware updates, background-noise shifts, or changing speaking habits. Sequential systems therefore need not only a one-time evaluation, but a plan for noticing when the old prediction-time assumptions stop matching the new world.
+
+\begin{advancednote}
+Many sequential deployments are partly monitoring problems. The system must detect drift, report it, and possibly trigger retraining or fallback behavior over time. This connects naturally to the later chapters on experiments, reliability, and end-to-end systems.
+\end{advancednote}
+
+\section{Chapter Artifact: A Sequential Design Card}
+
+By the end of this chapter, the reader should be able to write down not only which sequence model they want to use, but what was truly available at decision time and what evaluation would make the claim honest.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{3.25cm}L{6.98cm}}
+\toprule
+Card field & What must be written clearly \\
+\midrule
+Seven-question focus & Questions 1, 3, 4, 6, and 7: what decision moment matters, what information is really available then, what sequential representation is legal, what evaluation is honest through time, and how latency shapes action \\
+Decision time & The moment the system must act or emit a prediction \\
+Horizon & How far into the future the prediction or detection target lies \\
+Allowed context window & What past observations, frames, or tokens are legitimately available \\
+Forbidden future information & What timestamps, summaries, or future windows must never enter the model \\
+Timestamp and missingness handling & Whether the stream is regular or irregular, and whether gaps or missing values carry signal that must be represented explicitly \\
+Task type & Recognition, keyword spotting, speaker verification, forecasting, anomaly detection, or another sequence task \\
+Key invariances & What noise, channel variation, or temporal variation should be ignored \\
+Baseline family & Persistence, seasonal repeat, simple lag model, or another realism-check baseline \\
+Split and backtesting logic & Chronological holdout, grouped-by-source, expanding-window, sliding-window, streaming, or another deployment-faithful evaluation design \\
+Latency budget & How quickly the system must respond \\
+Operating mode & Whether the system is offline with full-sequence access or streaming with only partial context \\
+Noise and drift risks & What channel variation or process change is likely in deployment \\
+\bottomrule
+\end{tabular}
+\caption{A sequential design card turns prediction-time realism into a concrete protocol before a sequential-model claim is made.}
+\label{tab:sequential-design-card}
+\end{table}
+
+\begin{thinkingtool}
+\textbf{Sequential design card.} Before reporting results, write down the decision time, horizon, allowed context, forbidden future information, timestamp and missingness handling, baseline family, split and backtesting logic, latency budget, operating mode, and likely drift risks.
+\end{thinkingtool}
+
+\begin{example}[Filled Sequential Design Card]
+For a wake-word detector, the card might read as follows: decision time is every incoming audio frame; horizon is immediate detection within a fraction of a second; allowed context is the recent audio buffer only; forbidden future information is any audio that arrives after the decision moment; timestamp and missingness handling should treat dropped or clipped frames as explicit quality signals rather than pretending the stream was complete; task type is keyword spotting; key invariances include speaker identity and mild background noise but not arbitrary microphone failure; the baseline family may include a simple spectral classifier over short windows; split and backtesting logic should separate speakers, devices, and recording sessions, then replay held-out sessions in streaming order so the evaluation matches the deployed trigger setting; latency budget is very small because delayed wake-word detection is unusable; operating mode is streaming rather than offline full-sequence scoring; major risks are room acoustics, new microphones, household noise, and gradual drift in speaking style.
+\end{example}
+
+\begin{example}[Filled Forecast Design Card]
+For the one-hour-ahead campus demand forecaster, the card might read as follows: decision time is the top of each hour; horizon is one hour ahead; allowed context is past load, calendar, and weather data that were already issued by that hour; forbidden future information is realized future demand or revised weather posted later; timestamp and missingness handling should preserve gaps, outages, and imputed values explicitly; task type is forecasting; key invariances include scale shifts and seasonal repetition but not arbitrary future regime changes; the baseline family should include persistence and seasonal-repeat checks; split and backtesting logic should use chronological holdout plus expanding-window or sliding-window backtests; latency budget is modest because the forecast can be issued on a schedule; operating mode is offline batch scoring with periodic refresh; major risks are holidays, extreme weather, building schedule changes, and policy shifts.
+\end{example}
+
+\section{Common Mistakes in Sequential Modeling}
+
+The mistakes in this chapter are surface forms of one deeper error:
+
+\begin{center}
+\emph{pretending time does not change what counts as a valid claim.}
+\end{center}
+
+\begin{mistakebox}
+\item \textbf{Randomly splitting a time series.} Random windows often make the problem look easier than real deployment.
+\item \textbf{Ignoring the forecast horizon.} One-step and multi-step forecasting are different tasks.
+\item \textbf{Using features from the future.} Even subtle timestamp mistakes can invalidate an experiment.
+\item \textbf{Confusing representation with reality.} A spectrogram or lag vector is a view, not the whole process.
+\item \textbf{Forgetting deployment constraints.} Accuracy offline does not help if the model is too slow, too noise-sensitive, or too brittle under drift.
+\end{mistakebox}
+
+\section{Looking Ahead}
+
+This chapter treated sequences as processes, so evaluation had to respect prediction time. The next chapter turns to experiments themselves, because leakage, baselines, and failure analysis decide whether a result means anything.
+
+\begin{chaptersummary}
+\item Sequential modeling begins by asking what was known at the decision moment rather than by choosing an architecture by habit.
+\item A prediction-time audit clarifies horizon, allowed context, forbidden future information, latency, and temporal structure before modeling begins.
+\item Spectrograms are useful because they expose time-frequency structure, but they remain task-shaped lenses rather than neutral reality.
+\item Forecasting depends on lagged context, trend, seasonality, horizon, and regime change.
+\item Sequence model families differ mainly in how they represent and access memory.
+\item Chronological evaluation and realistic feature timing are essential for honest sequential experiments.
+\item Naive baselines, noise robustness, latency constraints, and drift handling are realism checks, not optional extras.
+\item The prediction-time audit is not specific to audio or forecasting: any sequential decision system must define what information existed at the decision moment, making this discipline applicable across medical monitoring, fraud detection, maintenance, recommendation, and many other domains.
+\end{chaptersummary}
+
+\begin{studyquestions}
+\item Why should a sequential model be judged partly by what information was available at prediction time?
+\item Why is a spectrogram best understood as a task-shaped lens rather than as the sound itself?
+\item Why is forecast horizon part of the task definition?
+\item How do sequence architectures differ as memory choices rather than as brand names?
+\item Why can random splits be especially misleading for time-series tasks?
+\item Why are naive baselines unusually important in sequential problems?
+\item Why can an offline sequential result be statistically strong but operationally invalid?
+\end{studyquestions}
+
+\begin{exercises}
+\item Write a prediction-time audit for a wake-word detector and for a day-ahead electricity forecast. What differs?
+\item Explain in words why a short analysis window gives different information from a long analysis window in a spectrogram.
+\item Construct a tiny forecasting example with three lag features and compute one prediction by hand.
+\item Give one example of a task where speaker identity should be preserved and one where it should be ignored.
+\item Describe a realistic form of leakage that could occur in a hospital time-series prediction system.
+\item Explain why a model with strong clean-audio accuracy might still fail under realistic deployment noise.
+\item For a one-hour-ahead demand forecast, write one illegal future feature and one legal feature that might look superficially similar. Explain the difference in timing.
+\item Use Table~\ref{tab:sequential-design-card} to sketch a one-page sequential design card for a streaming or forecasting task of your choice. If you are carrying one case through the book, state what changed in the earlier framing and evaluation artifacts once decision time, legal context, and latency became central.
+\end{exercises}
+
+\begin{challengeexercises}
+\item A forecasting model performs much better under a random split than under a chronological split. Give three technically plausible explanations, and state what additional experiment would test each one.
+\item Explain carefully why the same audio representation might be useful for keyword spotting but insufficient for speaker verification, or vice versa.
+\item A lab reports excellent anomaly-detection performance on a rare-event dataset. Describe an evaluation protocol that would convince you the result is real rather than an artifact of leakage, class imbalance, or unstable labeling.
+\item Design a sequential design card for a streaming medical alert system and explain which fields are hardest to specify honestly.
+\end{challengeexercises}

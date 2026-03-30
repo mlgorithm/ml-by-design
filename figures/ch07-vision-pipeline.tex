@@ -1,0 +1,103 @@
+\definecolor{auditcolor}{rgb}{0.15,0.35,0.75}
+\definecolor{taskcolor}{rgb}{0.75,0.25,0.15}
+\definecolor{modelcolor}{rgb}{0.20,0.60,0.20}
+\definecolor{evalcolor}{rgb}{0.60,0.15,0.65}
+
+\begin{tikzpicture}[
+    x=1cm, y=1cm,
+    font=\small,
+    %% Shared box styles – 3.2cm wide, 4.5cm column spacing
+    pbox/.style={draw, rounded corners=3pt,
+                 minimum width=3.2cm, minimum height=1.10cm,
+                 align=center, font=\small},
+    audit/.style={pbox, fill=auditcolor!15, draw=auditcolor},
+    task/.style ={pbox, fill=taskcolor!15,  draw=taskcolor},
+    model/.style={pbox, fill=modelcolor!15, draw=modelcolor},
+    eval/.style ={pbox, fill=evalcolor!15,  draw=evalcolor},
+    %% Annotation note style – centred so text stays within column
+    note/.style={align=left, font=\footnotesize, text width=3.0cm},
+    arr/.style={-{Stealth[length=3mm]}, thick},
+    fbk/.style={-{Stealth[length=2.5mm]}, dashed, gray!70, thick},
+]
+
+%% ── Column x-centres: 4.5 cm apart ──────────────────────────────────────
+%%    audit=1.6   task=6.1   model=10.6   eval=15.1
+%% ── Row y-centres ────────────────────────────────────────────────────────
+%%    phase=10.5  input=9.4  row1=7.85  row2=6.05  robustness=4.2  notes=2.3
+
+%% ── Phase labels ──────────────────────────────────────────────────────────
+\node[font=\footnotesize\bfseries, auditcolor] at ( 1.6,10.5) {DESIGN};
+\node[font=\footnotesize\bfseries, taskcolor]  at ( 6.1,10.5) {SPECIFICATION};
+\node[font=\footnotesize\bfseries, modelcolor] at (10.6,10.5) {IMPLEMENTATION};
+\node[font=\footnotesize\bfseries, evalcolor]  at (15.1,10.5) {VALIDATION};
+
+%% ── Input node ──────────────────────────────────────────────────────────
+\node[pbox, fill=gray!12, draw=gray!60] (input) at (1.6,9.4)
+    {Raw image\\dashboard camera};
+
+%% ── Row 1 boxes ──────────────────────────────────────────────────────────
+\node[audit] (inv)  at ( 1.6,7.85) {Invariance\\audit};
+\node[task]  (tdef) at ( 6.1,7.85) {Task\\formulation};
+\node[model] (arch) at (10.6,7.85) {Architecture\\choice};
+\node[eval]  (evl)  at (15.1,7.85) {Evaluation\\strategy};
+
+%% ── Row 2 boxes ──────────────────────────────────────────────────────────
+\node[audit] (nui)  at ( 1.6,6.05) {Nuisance vs.\\signal};
+\node[task]  (out)  at ( 6.1,6.05) {Output\\structure};
+\node[model] (aug)  at (10.6,6.05) {Augmentation\\policy};
+\node[eval]  (str)  at (15.1,6.05) {Stress\\testing};
+
+%% ── Main horizontal arrows (row 1) ───────────────────────────────────────
+\draw[arr] (input) -- (inv);
+\draw[arr] (inv.east)  -- (tdef.west);
+\draw[arr] (tdef.east) -- (arch.west);
+\draw[arr] (arch.east) -- (evl.west);
+
+%% ── Vertical connections ──────────────────────────────────────────────────
+\draw[arr] (inv.south)  -- (nui.north);
+\draw[arr] (tdef.south) -- (out.north);
+\draw[arr] (arch.south) -- (aug.north);
+\draw[arr] (evl.south)  -- (str.north);
+
+%% ── Robustness box: sits directly below row 2, above the notes ───────────
+\node[draw=evalcolor, rounded corners=4pt, fill=evalcolor!8, align=center,
+      minimum width=15.5cm, minimum height=1.10cm, font=\small] (rob) at (8.35,4.2)
+    {\textbf{Shortcut Learning \& Robustness Analysis}\\[2pt]
+     \footnotesize Background cues \ $\cdot$\ Camera artefacts
+     \ $\cdot$\ Crossing paint \ $\cdot$\ Annotation bias};
+
+%% ── Connections to robustness box (short, clear descent) ────────────────
+\draw[arr] (out.south) to[out=270,in=120] (rob.north west);
+\draw[arr] (aug.south) to[out=270,in=90]  (rob.north);
+\draw[arr] (str.south) to[out=270,in=60]  (rob.north east);
+
+%% ── Feedback loops ───────────────────────────────────────────────────────
+\draw[fbk] (rob.west) to[out=180,in=270] (nui.south);
+\draw[fbk] (str.south east) to[out=315,in=0] (aug.east);
+
+%% ── Annotation notes: below robustness box, out of arrow paths ───────────
+\node[note, auditcolor] at (1.6,2.3)
+    {\textbf{Ignore:}\\
+     small translations,\\
+     lighting shifts,\\
+     mild blur};
+
+\node[note, taskcolor] at (6.1,2.3)
+    {\textbf{Output:}\\
+     classification,\\
+     detection with boxes,\\
+     or segmentation};
+
+\node[note, modelcolor] at (10.6,2.3)
+    {\textbf{Valid transforms:}\\
+     spatial crops,\\
+     color jitter,\\
+     weather noise};
+
+\node[note, evalcolor] at (15.1,2.3)
+    {\textbf{Critical slices:}\\
+     night conditions,\\
+     new cameras,\\
+     edge cases};
+
+\end{tikzpicture}
