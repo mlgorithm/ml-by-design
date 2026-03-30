@@ -9,7 +9,7 @@
 \item Produce a minimum credible neural training report before making a serious model claim.
 \end{learninggoals}
 
-The previous chapter broadened our idea of structure by introducing branching rules, local geometry, and unlabeled organization. Neural networks broaden it again, but in a different way. Instead of depending so heavily on manually chosen splits, distances, or handcrafted interactions, neural models learn internal representations directly through optimization. Standard references such as \citet{lecun2015} and \citet{goodfellow2016} treat this layered view as the central idea of modern deep learning.
+The previous chapter broadened our idea of structure by introducing branching rules, local geometry, and unlabeled organization. Neural networks broaden it again, but in a different way. Instead of depending so heavily on manually chosen splits, distances, or handcrafted interactions, neural models learn internal representations directly through optimization. Standard references such as \citet{lecun2015} and \citet{goodfellow2016} treat this layered view as the central idea of modern deep learning. This chapter should therefore be read as the point where structure diagnosis turns into learned structure rather than into one more hand-designed model family.
 
 The chapter should therefore answer one question clearly:
 
@@ -21,7 +21,7 @@ The chapter should therefore answer one question clearly:
 This chapter addresses a different modeling dilemma: when hand-engineered structure stops being enough, how can a model learn the intermediate features it needs? Neural networks matter here not as a catalog of architectures, but as a mechanism for learned representation through optimization.
 \end{problemsolvinglens}
 
-By the end of the chapter, the reader should be able to produce a minimum credible neural training report before making a serious model claim.
+By the end of the chapter, the reader should be able to produce a minimum credible neural training report before making a serious model claim. The chapter's job is to make that report feel like the natural endpoint of one coherent training story rather than a checklist added afterward.
 
 \begin{thinkingtool}
 \textbf{Artifact preview: minimum credible neural training report.} Keep six reporting commitments visible while reading: the baseline to beat, the input representation and output type, the loss, the optimization setup, the stopping rule, and the evidence that separates optimization failure from generalization failure.
@@ -45,7 +45,7 @@ That is when learned structure becomes the right move. The issue is not merely t
 \end{decisionbox}
 
 \begin{practicalnote}
-Workflow sketch: start with the strongest simple baseline, decide what structure it is missing, build the smallest network that could plausibly learn that structure, train with a validation split while watching for optimization versus generalization failure, and then report the result in a minimum credible training report.
+Workflow sketch: start with the strongest simple baseline, decide what structure it is missing, build the smallest network that could plausibly learn that structure, train with a validation split while watching for optimization versus generalization failure, and then report the result in a minimum credible training report. The rest of the chapter follows that order: representation, forward pass, loss, optimization, debugging, generalization, and then reporting.
 \end{practicalnote}
 
 This does not mean neural networks are always the best choice. On small tabular datasets, a linear model or tree ensemble may still be stronger, easier to debug, and easier to justify. The important shift is conceptual: neural networks are most valuable when the main modeling problem is that the useful internal features are unknown.
@@ -58,7 +58,7 @@ The conceptual heart of the chapter is simple:
 \emph{raw input $\rightarrow$ learned intermediate features $\rightarrow$ final score or probability}
 \end{center}
 
-A hidden layer is not extra decoration. It is a learned representation stage.
+A hidden layer is not extra decoration. It is a learned representation stage. Everything else in the chapter explains how that pipeline is computed, corrected, stabilized, and judged.
 
 \begin{figure}[t]
 \centering
@@ -160,7 +160,7 @@ Substituting the first expression into the second gives
 \[
 y = W_2 W_1 x + (W_2 b_1 + b_2).
 \]
-This is still just another affine transformation of $x$. No matter how many such layers are stacked, without nonlinearity the whole network is equivalent to one larger linear model.
+This is still just another affine transformation of $x$. No matter how many such layers are stacked, without nonlinearity the whole network is equivalent to one larger affine model.
 
 \begin{figure}[t]
 \centering
@@ -204,14 +204,14 @@ This is why activation functions matter pedagogically. Their job is not to creat
 \definecolor{c6reluGray}{RGB}{60,60,60}
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[x=1.2cm, y=1.9cm, font=\small]
-%% Panel 1: sigmoid  — scope origin at x=0
+%% Panel 1: sigmoid - scope origin at x=0
 \begin{scope}[xshift=0cm]
   \draw[->,black!70] (-2.5,0) -- (2.7,0) node[right] {$z$};
   \draw[->,black!70] (0,-0.1) -- (0,1.25) node[above] {$a$};
   \draw[thick,c6sigBlue,domain=-2.3:2.3,samples=100] plot (\x,{1/(1+exp(-\x))});
   \node[c6sigBlue, font=\small\bfseries] at (0.0,1.08) {sigmoid};
 \end{scope}
-%% Panel 2: tanh — shifted by 6.5cm (panel width ≈ 5.1 units × 1.2cm = 6.1cm, gap 0.4cm)
+%% Panel 2: tanh - shifted by 6.5cm (panel width approx. 5.1 units x 1.2cm = 6.1cm, gap 0.4cm)
 \begin{scope}[xshift=6.5cm]
   \draw[->,black!70] (-2.5,0) -- (2.7,0) node[right] {$z$};
   \draw[->,black!70] (0,-1.15) -- (0,1.25) node[above] {$a$};
@@ -219,7 +219,7 @@ This is why activation functions matter pedagogically. Their job is not to creat
     plot (\x,{(exp(\x)-exp(-\x))/(exp(\x)+exp(-\x))});
   \node[c6tanhRed, font=\small\bfseries] at (0.0,1.08) {$\tanh$};
 \end{scope}
-%% Panel 3: ReLU — shifted by 13.0cm
+%% Panel 3: ReLU - shifted by 13.0cm
 \begin{scope}[xshift=13.0cm]
   \draw[->,black!70] (-2.5,0) -- (2.7,0) node[right] {$z$};
   \draw[->,black!70] (0,-0.1) -- (0,2.5) node[above] {$a$};
@@ -283,39 +283,60 @@ If the final layer uses a sigmoid to convert that score to a probability, then
 \centering
 \definecolor{c6netBlue}{RGB}{56,103,170}
 \definecolor{c6netGreen}{RGB}{26,112,64}
+\definecolor{c6netOrange}{RGB}{176,110,34}
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small]
-%% Input nodes
-\node[draw=c6netBlue, fill=c6netBlue!12, circle, minimum size=0.9cm, thick]
-  (x1) at (0, 1.8) {$x_1$};
-\node[draw=c6netBlue, fill=c6netBlue!12, circle, minimum size=0.9cm, thick]
-  (x2) at (0,-0.4) {$x_2$};
-%% Hidden nodes
-\node[draw=c6netGreen, fill=c6netGreen!12, circle, minimum size=0.9cm, thick]
-  (h1) at (4.0, 2.4) {$h_1$};
-\node[draw=c6netGreen, fill=c6netGreen!12, circle, minimum size=0.9cm, thick]
-  (h2) at (4.0,-1.0) {$h_2$};
-%% Output node
-\node[draw=c6netBlue, fill=c6netBlue!12, circle, minimum size=0.9cm, thick]
-  (out) at (8.0, 0.7) {$s$};
-%% Edges with labels placed away from crossings:
-%% x1->h1 (short, near top): label near x1 end
-\draw[-Latex, thick, black!60] (x1) -- node[above, pos=0.25, font=\footnotesize] {$1.5$} (h1);
-%% x2->h1 (crossing): label near h1 end to separate from x1->h2 label
-\draw[-Latex, thick, black!60] (x2) -- node[above, pos=0.80, font=\footnotesize] {$0.5$} (h1);
-%% x1->h2 (crossing): label near x1 end to separate from x2->h1 label
-\draw[-Latex, thick, black!60] (x1) -- node[below, pos=0.20, font=\footnotesize] {$0.5$} (h2);
-%% x2->h2 (short, near bottom): label near x2 end
-\draw[-Latex, thick, black!60] (x2) -- node[below, pos=0.25, font=\footnotesize] {$1.5$} (h2);
-%% h1->out and h2->out
-\draw[-Latex, thick, black!60] (h1) -- node[above, pos=0.4,  font=\footnotesize] {$1.2$} (out);
-\draw[-Latex, thick, black!60] (h2) -- node[below, pos=0.4,  font=\footnotesize] {$0.8$} (out);
-%% Annotations outside the network
-\node[c6netGreen, font=\footnotesize, align=center] at (4.0, 3.6) {ReLU\\hidden units};
-\node[black!55, font=\footnotesize] at (9.4, 0.7) {$\hat{p}=\sigma(s)$};
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  font=\small,
+  card/.style={draw, rounded corners=4pt, thick, align=center, minimum height=1.45cm, inner sep=7pt},
+  input/.style={card, draw=c6netBlue, fill=c6netBlue!10, text width=2.5cm},
+  hidden/.style={card, draw=c6netGreen, fill=c6netGreen!10, text width=4.1cm},
+  output/.style={card, draw=c6netOrange, fill=c6netOrange!12, text width=4.0cm},
+  stage/.style={font=\footnotesize\bfseries, black!70},
+  w/.style={font=\footnotesize, fill=white, inner sep=1.5pt}
+]
+%% Stage titles
+\node[stage] at (0.0, 4.15) {Inputs};
+\node[stage] at (5.1, 4.15) {Hidden features};
+\node[stage] at (10.4, 4.15) {Output};
+
+%% Input cards
+\node[input] (x1) at (0.0, 2.25) {$x_1$\\suspicious link\\\textbf{0.80}};
+\node[input] (x2) at (0.0,-0.55) {$x_2$\\urgent language\\\textbf{0.60}};
+
+%% Hidden cards
+\node[hidden] (h1) at (5.1, 2.75)
+  {$h_1=\mathrm{ReLU}(1.5x_1+0.5x_2-1.0)$\\link-heavy feature\\\textbf{$h_1=0.50$}};
+\node[hidden] (h2) at (5.1,-1.05)
+  {$h_2=\mathrm{ReLU}(0.5x_1+1.5x_2-1.0)$\\urgency-heavy feature\\\textbf{$h_2=0.30$}};
+
+%% Output cards
+\node[output] (score) at (10.5, 1.55)
+  {spam score\\$s=1.2h_1+0.8h_2-0.4$\\\textbf{$s=0.44$}};
+\node[output] (prob) at (10.5,-1.45)
+  {spam probability\\$\hat{p}=\sigma(s)$\\\textbf{$\hat{p}\approx 0.61$}};
+
+%% Connections from inputs to hidden layer
+\draw[-Latex, thick, black!60] (x1.east) -- node[w, above, pos=0.33] {$1.5$} (h1.west);
+\draw[-Latex, thick, black!60] (x2.east) to[out=15, in=200]
+  node[w, above, pos=0.62] {$0.5$} (h1.west);
+\draw[-Latex, thick, black!60] (x1.east) to[out=-15, in=160]
+  node[w, below, pos=0.38] {$0.5$} (h2.west);
+\draw[-Latex, thick, black!60] (x2.east) -- node[w, below, pos=0.33] {$1.5$} (h2.west);
+
+%% Connections from hidden layer to output
+\draw[-Latex, thick, black!60] (h1.east) -- node[w, above, pos=0.45] {$1.2$} (score.west);
+\draw[-Latex, thick, black!60] (h2.east) to[out=12, in=200]
+  node[w, above, pos=0.55] {$0.8$} (score.west);
+\draw[-Latex, thick, black!60] (score.south) -- node[right, font=\footnotesize] {sigmoid} (prob.north);
+
+%% Bottom note
+\node[font=\footnotesize, text=black!60, align=center] at (5.25,-3.15)
+  {All displayed values match the hand-worked forward pass above.};
 \end{tikzpicture}%
 }
-\caption{The hand-worked network as a diagram. Drawing the units makes the later forward and backward calculations much easier to track.}
+\caption{The worked spam-classification network with the actual numbers from the forward pass. Inputs, hidden-feature formulas, output score, and final sigmoid probability are kept visually separate so the computation is easier to follow.}
 \label{fig:forward-pass-network}
 \end{figure}
 
@@ -342,13 +363,13 @@ A sigmoid or softmax output is a model score, not yet an action. If the model wi
 
 \begin{codeexample}[caption={From scratch: a complete forward pass with numerical values}]
 # Network: 2 inputs, 2 hidden units (ReLU), 1 output (sigmoid)
-# Input: attendance fraction and missed-assignment fraction
-x1 = 0.92   # attendance rate (high is good)
-x2 = 0.10   # missed-assignment fraction (low is good)
+# Input: suspicious-link signal and urgent-language signal
+x1 = 0.8    # suspicious-link signal
+x2 = 0.6    # urgent-language signal
 
 # Hidden layer weights and biases (hardcoded for illustration)
-w11, w12, b1 = 1.4, -0.8, -0.5   # weights into hidden unit 1
-w21, w22, b2 = 0.6,  1.2, -0.4   # weights into hidden unit 2
+w11, w12, b1 = 1.5, 0.5, -1.0    # weights into hidden unit 1
+w21, w22, b2 = 0.5, 1.5, -1.0    # weights into hidden unit 2
 
 # Forward pass: hidden unit 1
 z1 = w11 * x1 + w12 * x2 + b1    # linear combination
@@ -363,13 +384,13 @@ h2 = max(0.0, z2)                 # ReLU activation
 print("hidden unit 2 post-ReLU:   ", round(h2, 4))
 
 # Output layer: combine hidden activations into a single score
-v1, v2, b_out = 1.1, 0.9, -0.3   # output-layer weights and bias
+v1, v2, b_out = 1.2, 0.8, -0.4   # output-layer weights and bias
 s = v1 * h1 + v2 * h2 + b_out    # pre-sigmoid output score
 print("output score (pre-sigmoid): ", round(s, 4))
 
 # Sigmoid squashes the score into a probability
 import math
-p = 1.0 / (1.0 + math.exp(-s))   # sigmoid: P(at-risk = 1)
+p = 1.0 / (1.0 + math.exp(-s))   # sigmoid probability for class 1
 print("predicted probability:      ", round(p, 4))
 \end{codeexample}
 
@@ -389,11 +410,11 @@ while
 \[
 h_2 = \mathrm{ReLU}(0.5(0.2) + 1.5(0.7) - 1.0) = \mathrm{ReLU}(0.15)=0.15.
 \]
-One hidden unit is now shut off entirely. This will matter again when we discuss backpropagation.
+One hidden unit is now shut off entirely. This will matter again when we discuss backpropagation. Keeping one small network alive across several sections is deliberate: the goal is to make the later training story feel like continuation, not topic-switching.
 
 \section{Loss as the Teaching Signal}
 
-Once the network outputs a score or probability, what tells it how to improve? The answer is the loss.
+Once the network outputs a score or probability, what tells it how to improve? The answer is the loss. The same worked network now stops being only a predictor and becomes an object that can be corrected.
 
 \begin{thinkingtool}
 \textbf{Metrics judge; losses teach.} Evaluation metrics tell us what claim we can make. Training losses tell the optimizer how to correct the model.
@@ -496,9 +517,9 @@ So only differences between logits matter, not their absolute level. This is why
 \toprule
 Class & Logit & Softmax prob. & If this is true class \\
 \midrule
-Class 1 & $1.4$ & $0.64$ & loss contribution $-\log(0.64)\approx 0.45$ \\
-Class 2 & $0.5$ & $0.26$ & larger loss if true \\
-Class 3 & $-0.7$ & $0.10$ & much larger loss if true \\
+Class 1 & $1.4$ & $0.654$ & loss contribution $-\log(0.654)\approx 0.425$ \\
+Class 2 & $0.5$ & $0.266$ & larger loss if true \\
+Class 3 & $-0.7$ & $0.080$ & much larger loss if true \\
 \bottomrule
 \end{tabular}
 \caption{For multiclass problems, logits are not yet probabilities. Softmax turns them into a normalized distribution, and cross-entropy trains the model to place mass on the correct class.}
@@ -539,15 +560,39 @@ w_{\text{new}} = w - \eta \frac{dL}{dw}
 \begin{figure}[t]
 \centering
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1.1cm,y=1.1cm,font=\small]
+\definecolor{c6contOuter}{RGB}{220,233,251}
+\definecolor{c6contMid}{RGB}{170,200,240}
+\definecolor{c6contInner}{RGB}{120,165,220}
+\definecolor{c6contCore}{RGB}{56,103,170}
+\definecolor{c6stepBlue}{RGB}{30,80,160}
+\begin{tikzpicture}[x=1.8cm,y=1.8cm,font=\small]
+%% Filled contour rings (outer to inner)
+\fill[c6contOuter]  (0,0) ellipse ({1.5*2.6} and {2.6});
+\fill[c6contMid]    (0,0) ellipse ({1.5*2.0} and {2.0});
+\fill[c6contInner]  (0,0) ellipse ({1.5*1.4} and {1.4});
+\fill[c6contCore!30](0,0) ellipse ({1.5*0.8} and {0.8});
+\fill[white]         (0,0) ellipse ({1.5*0.35} and {0.35});
+%% Contour outlines
 \foreach \r in {0.8,1.4,2.0,2.6}
-  \draw[gray!55] (0,0) ellipse ({1.5*\r} and {\r});
-\draw[-Latex, thick, blue] (-2.4,1.6) -- (-1.5,1.0);
-\draw[-Latex, thick, blue] (-1.5,1.0) -- (-0.8,0.5);
-\draw[-Latex, thick, blue] (-0.8,0.5) -- (-0.25,0.18);
-\filldraw (0,0) circle (2pt);
-\node at (0.4,-0.5) {minimum};
-\node at (-2.0,2.1) {follow the local slope};
+  \draw[white, line width=0.6pt] (0,0) ellipse ({1.5*\r} and {\r});
+%% Gradient descent path
+\filldraw[fill=white, draw=c6stepBlue, thick] (-2.4,1.6) circle (3pt);
+\draw[-Latex, c6stepBlue, thick, line width=1.2pt] (-2.4,1.6) -- (-1.5,1.0);
+\draw[-Latex, c6stepBlue, thick, line width=1.2pt] (-1.5,1.0) -- (-0.8,0.5);
+\draw[-Latex, c6stepBlue, thick, line width=1.2pt] (-0.8,0.5) -- (-0.25,0.18);
+\filldraw[c6stepBlue] (-1.5,1.0) circle (2pt);
+\filldraw[c6stepBlue] (-0.8,0.5) circle (2pt);
+%% Minimum marker
+\filldraw[fill=white, draw=black, thick] (0,0) circle (2.5pt);
+\node[font=\small\bfseries, black!70] at (0.0,-0.55) {minimum};
+%% Labels
+\node[font=\footnotesize, c6stepBlue, anchor=south] at (-2.4,1.85) {start};
+\node[font=\small, black!60, anchor=south west] at (-2.8,2.8) {follow the local slope};
+%% Loss level labels - right side, stacked vertically
+\node[font=\footnotesize, black!50, anchor=west] at (4.2, 1.0) {\textit{higher loss}};
+\draw[->, thin, black!40] (4.1, 1.0) -- (3.4, 1.0);
+\node[font=\footnotesize, black!50, anchor=west] at (4.2,-1.0) {\textit{lower loss}};
+\draw[->, thin, black!40] (4.1,-1.0) -- (1.6,-0.55);
 \end{tikzpicture}%
 }
 \caption{Gradient descent is repeated local correction, not global magic. Each update uses nearby slope information to move toward lower loss.}
@@ -563,6 +608,8 @@ The operational pipeline of training is then:
 \item check validation behavior.
 \end{itemize}
 
+Every later training detail in the chapter---learning rate, AdamW, mini-batches, batch normalization, and regularization---modifies this loop rather than replacing it.
+
 \begin{codeexample}[caption={A generic neural training loop}]
 initialize parameters
 for epoch in range(num_epochs):
@@ -577,22 +624,33 @@ for epoch in range(num_epochs):
 \begin{figure}[t]
 \centering
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[font=\small, box/.style={draw, rounded corners, align=center, minimum width=2.2cm, minimum height=0.8cm}]
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  font=\small,
+  box/.style={draw, rounded corners, align=center, minimum width=2.35cm, minimum height=0.85cm},
+  note/.style={font=\footnotesize, text=black!70}
+]
 \node[box] (data) at (0,0) {load batch};
-\node[box] (forward) at (3.0,0) {forward pass};
-\node[box] (loss) at (6.0,0) {compute loss};
-\node[box] (backward) at (9.0,0) {backward pass};
-\node[box] (update) at (12.0,0) {update weights};
-\node[box] (validate) at (6.0,-1.8) {validation check};
+\node[box] (forward) at (3.1,0) {forward pass};
+\node[box] (loss) at (6.2,0) {compute loss};
+\node[box] (backward) at (9.3,0) {backward pass};
+\node[box] (update) at (12.4,0) {update weights};
+\node[box] (validate) at (6.2,-2.25) {validation check};
+
 \draw[-Latex, thick] (data) -- (forward);
 \draw[-Latex, thick] (forward) -- (loss);
 \draw[-Latex, thick] (loss) -- (backward);
 \draw[-Latex, thick] (backward) -- (update);
-\draw[-Latex, thick] (update.south) |- (validate.east);
-\draw[-Latex, thick] (validate.west) -| (data.south);
+
+\draw[-Latex, thick] (update.south) |- node[pos=0.22, right, note] {after last batch} (validate.east);
+\draw[-Latex, thick] (validate.west) -| node[pos=0.22, below, note] {start next epoch} (data.south);
+
+\draw[rounded corners=6pt, dashed, black!35] (-1.35,0.95) rectangle (13.75,-0.95);
+\node[note] at (6.2,1.35) {repeat across training batches inside one epoch};
 \end{tikzpicture}%
 }
-\caption{The training loop is short, but each stage has a distinct role. Students should be able to explain what changes during the forward pass, backward pass, and update step.}
+\caption{The training loop is short, but each stage has a distinct role. Batch updates repeat inside an epoch, and validation is checked after the training batches for that epoch. Students should be able to explain what changes during the forward pass, backward pass, and update step.}
 \label{fig:training-loop-flow}
 \end{figure}
 
@@ -602,27 +660,62 @@ The learning rate controls step size. If it is too small, training can become pa
 
 \begin{figure}[t]
 \centering
+\definecolor{c6lrSlow}{RGB}{56,103,170}
+\definecolor{c6lrGood}{RGB}{26,112,64}
+\definecolor{c6lrFast}{RGB}{180,40,40}
+\definecolor{c6lrSlowBg}{RGB}{220,233,251}
+\definecolor{c6lrGoodBg}{RGB}{210,238,220}
+\definecolor{c6lrFastBg}{RGB}{254,216,216}
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1.2cm,y=1.4cm,font=\small]
-\draw[->] (-3.2,0) -- (3.2,0) node[right] {parameter value};
-\draw[->] (0,0) -- (0,4.2) node[above] {loss};
-\draw[thick,domain=-2.8:2.8,samples=80] plot (\x,{0.35*\x*\x + 0.3});
-\filldraw (-2.2,2.0) circle (1.8pt);
-\filldraw (-1.6,1.2) circle (1.8pt);
-\filldraw (-1.1,0.72) circle (1.8pt);
-\draw[-Latex, blue, thick] (-2.2,2.0) -- (-1.6,1.2);
-\draw[-Latex, blue, thick] (-1.6,1.2) -- (-1.1,0.72);
-\filldraw (2.2,2.0) circle (1.8pt);
-\filldraw (0.2,0.31) circle (1.8pt);
-\draw[-Latex, green!60!black, thick] (2.2,2.0) -- (0.2,0.31);
-\filldraw (-2.2,2.0) circle (1.8pt);
-\filldraw (1.4,0.99) circle (1.8pt);
-\filldraw (-1.8,1.43) circle (1.8pt);
-\draw[-Latex, red, thick] (-2.2,2.0) -- (1.4,0.99);
-\draw[-Latex, red, thick] (1.4,0.99) -- (-1.8,1.43);
-\node[blue] at (-2.2,3.5) {too small};
-\node[green!60!black] at (1.7,3.4) {good};
-\node[red] at (0.8,2.6) {too large};
+\begin{tikzpicture}[x=1.4cm,y=3.0cm,font=\small,
+  panel/.style={rounded corners=4pt}]
+%% ── Panel A: too small ──────────────────────────────────────
+\begin{scope}
+  \fill[c6lrSlowBg, panel] (-3.4,-0.5) rectangle (3.4,4.4);
+  \node[c6lrSlow, font=\small\bfseries] at (0,4.0) {too small};
+  \draw[->,black!60] (-3.0,0) -- (3.0,0);
+  \draw[->,black!60] (0,0) -- (0,3.6) node[above right, font=\footnotesize, black!50] {loss};
+  \draw[black!40, thick, domain=-2.6:2.6, samples=60] plot (\x,{0.4*\x*\x + 0.3});
+  %% Tiny steps barely moving
+  \filldraw[fill=white, draw=c6lrSlow, thick] (-2.0,1.9) circle (2.5pt);
+  \filldraw[c6lrSlow] (-1.6,1.32) circle (2pt);
+  \filldraw[c6lrSlow] (-1.3,0.98) circle (2pt);
+  \filldraw[c6lrSlow] (-1.05,0.74) circle (2pt);
+  \draw[-Latex, c6lrSlow, thick, line width=1.1pt] (-2.0,1.9) -- (-1.6,1.32);
+  \draw[-Latex, c6lrSlow, thick, line width=1.1pt] (-1.6,1.32) -- (-1.3,0.98);
+  \draw[-Latex, c6lrSlow, thick, line width=1.1pt] (-1.3,0.98) -- (-1.05,0.74);
+  \node[font=\footnotesize, c6lrSlow] at (1.5,2.4) {slow progress};
+\end{scope}
+%% ── Panel B: good ───────────────────────────────────────────
+\begin{scope}[xshift=7.5cm]
+  \fill[c6lrGoodBg, panel] (-3.4,-0.5) rectangle (3.4,4.4);
+  \node[c6lrGood, font=\small\bfseries] at (0,4.0) {good};
+  \draw[->,black!60] (-3.0,0) -- (3.0,0);
+  \draw[->,black!60] (0,0) -- (0,3.6) node[above right, font=\footnotesize, black!50] {loss};
+  \draw[black!40, thick, domain=-2.6:2.6, samples=60] plot (\x,{0.4*\x*\x + 0.3});
+  %% Smooth convergence
+  \filldraw[fill=white, draw=c6lrGood, thick] (-2.0,1.9) circle (2.5pt);
+  \filldraw[c6lrGood] (-0.8,0.56) circle (2pt);
+  \filldraw[c6lrGood] (-0.15,0.31) circle (2pt);
+  \draw[-Latex, c6lrGood, thick, line width=1.1pt] (-2.0,1.9) -- (-0.8,0.56);
+  \draw[-Latex, c6lrGood, thick, line width=1.1pt] (-0.8,0.56) -- (-0.15,0.31);
+  \node[font=\footnotesize, c6lrGood] at (1.5,2.4) {steady descent};
+\end{scope}
+%% ── Panel C: too large ──────────────────────────────────────
+\begin{scope}[xshift=15cm]
+  \fill[c6lrFastBg, panel] (-3.4,-0.5) rectangle (3.4,4.4);
+  \node[c6lrFast, font=\small\bfseries] at (0,4.0) {too large};
+  \draw[->,black!60] (-3.0,0) -- (3.0,0);
+  \draw[->,black!60] (0,0) -- (0,3.6) node[above right, font=\footnotesize, black!50] {loss};
+  \draw[black!40, thick, domain=-2.6:2.6, samples=60] plot (\x,{0.4*\x*\x + 0.3});
+  %% Overshooting, bouncing
+  \filldraw[fill=white, draw=c6lrFast, thick] (-2.0,1.9) circle (2.5pt);
+  \filldraw[c6lrFast] (1.6,1.32) circle (2pt);
+  \filldraw[c6lrFast] (-1.4,1.08) circle (2pt);
+  \draw[-Latex, c6lrFast, thick, line width=1.1pt] (-2.0,1.9) -- (1.6,1.32);
+  \draw[-Latex, c6lrFast, thick, line width=1.1pt] (1.6,1.32) -- (-1.4,1.08);
+  \node[font=\footnotesize, c6lrFast] at (1.5,2.4) {overshoots};
+\end{scope}
 \end{tikzpicture}%
 }
 \caption{Step size is part of the training design. Too small wastes computation, while too large can bounce across good regions instead of settling into them.}
@@ -689,7 +782,7 @@ Both & High & High & Fix optimization first, then assess generalization \\
 \label{tab:opt-vs-gen-failure}
 \end{table}
 
-This distinction is foundational for debugging. Students who do not draw it clearly will add dropout when they should be fixing the output layer, or increase model capacity when they should be adding regularization. Both changes are reasonable in isolation; neither is helpful when the wrong diagnosis drives it.
+This distinction is foundational for debugging. Students who do not draw it clearly will add dropout when they should be fixing the output layer, or increase model capacity when they should be adding regularization. Both changes are reasonable in isolation; neither is helpful when the wrong diagnosis drives it. The first debugging reflex in this chapter should therefore be diagnostic, not architectural.
 
 The cleanest diagnostic procedure is to first establish whether the model can overfit a very small dataset. Take a batch of ten to twenty training examples and train the model until training loss is very low. If the model cannot overfit even ten examples, the problem is optimization. If it can overfit ten examples but not generalize on the full dataset, the problem is generalization. The separation is not always perfect, but the small-batch overfit test is the fastest way to decide which problem to solve first.
 
@@ -768,6 +861,10 @@ where \(\mu_B\) and \(\sigma_B^2\) are the batch mean and variance, and \(\gamma
 \begin{example}[What Batch Normalization Fixes, and What It Does Not]
 If hidden activations are drifting in scale from batch to batch, batch normalization can make training smoother and less sensitive to the exact learning rate. For a mini-batch with activations \(2,4,6\), the layer first recenters them around zero before the learned rescaling step. The next layer therefore reacts to relative variation rather than raw drift in magnitude. But batch normalization still does not fix a wrong objective, a poor label set, or a model that lacks the capacity to learn the task in the first place.
 \end{example}
+
+\begin{practicalnote}
+Batch normalization stabilizes the signal within a layer. A complementary technique called a \emph{residual connection} (or skip connection) helps the signal flow between layers. The idea is simple: instead of computing $h = f(x)$, the layer computes $h = f(x) + x$, adding the input directly to the output. If the transformation $f$ is unhelpful, the gradient can flow through the identity branch unchanged, so deep networks become much easier to train. Residual connections are a key design principle behind ResNets in vision and many transformer blocks in language.
+\end{practicalnote}
 
 \subsection{Debugging a Broken Training Run}
 
@@ -862,7 +959,7 @@ Conceptually, backpropagation solves one clear problem: when the network makes a
   (h.south) .. controls (4.6,0.0) and (3.8,0.0) .. (z.south);
 \node[c6bwdRed, font=\footnotesize] at (4.6, -0.3) {$\tfrac{dL}{dz}$};
 
-%% From z back to inputs — route below to avoid "input gradients" label
+%% From z back to inputs - route below to avoid "input gradients" label
 \draw[-Latex, thick, c6bwdRed, dashed]
   (z.west) .. controls (2.0,1.2) and (0.8,1.2) .. (x1.south);
 \draw[-Latex, thick, c6bwdRed, dashed]
@@ -990,7 +1087,7 @@ In real implementations, these gradient calculations are handled by automatic di
 # h1, h2: hidden unit activations (post-ReLU)
 # v1, v2, b_out: output-layer weights and bias
 # s: output score (pre-sigmoid);  p: predicted probability
-# y: true label (1 = student is at risk)
+# y: true label (1 = positive class)
 y = 1
 
 # --- Binary cross-entropy loss (single example) ---
@@ -1032,24 +1129,48 @@ print("updated w11:                ", round(new_w11, 4))
 
 \begin{figure}[t]
 \centering
+\definecolor{c6fwdBlue}{RGB}{56,103,170}
+\definecolor{c6bwdRed}{RGB}{180,40,40}
+\definecolor{c6fwdBg}{RGB}{220,233,251}
+\definecolor{c6bwdBg}{RGB}{254,230,230}
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[font=\small,
-  fwdarrow/.style={-Latex, thick},
-  bwdarrow/.style={-Latex, thick, dashed},
-  box/.style={draw, rounded corners, align=center, minimum width=2.2cm, minimum height=0.9cm, fill=black!4}]
-% Boxes (left to right: input weight, hidden unit, output unit, loss)
-\node[box] (w)   at (0.0, 0) {input\\weight $w_{11}$};
-\node[box] (h)   at (3.2, 0) {hidden\\unit $h_1$};
-\node[box] (out) at (6.4, 0) {output\\unit $s$};
-\node[box] (L)   at (9.6, 0) {loss\\$\mathcal{L}$};
-% Forward arrows (left to right)
-\draw[fwdarrow] (w)   -- node[above] {\tiny forward} (h);
-\draw[fwdarrow] (h)   -- node[above] {\tiny forward} (out);
-\draw[fwdarrow] (out) -- node[above] {\tiny forward} (L);
-% Backward gradient arrows (right to left, below the nodes)
-\draw[bwdarrow] (L.south)   to[bend right=30] node[below] {\tiny $\frac{d\mathcal{L}}{ds}=\hat{p}-y$}     (out.south);
-\draw[bwdarrow] (out.south) to[bend right=30] node[below] {\tiny $\frac{d\mathcal{L}}{dh_1}$}             (h.south);
-\draw[bwdarrow] (h.south)   to[bend right=30] node[below] {\tiny $\frac{d\mathcal{L}}{dw_{11}}$}          (w.south);
+  fwdarrow/.style={-Latex, thick, c6fwdBlue},
+  bwdarrow/.style={-Latex, thick, c6bwdRed},
+  box/.style={draw, rounded corners=4pt, align=center, minimum width=2.6cm,
+              minimum height=1.1cm, fill=c6fwdBg, draw=c6fwdBlue!60,
+              font=\small}]
+%% ── Boxes (left to right) ───────────────────────────────────
+\node[box] (w)   at (0.0, 0) {input weight\\$w_{11}$};
+\node[box] (h)   at (4.0, 0) {hidden unit\\$h_1$};
+\node[box] (out) at (8.0, 0) {output unit\\$s$};
+\node[box, fill=c6bwdBg, draw=c6bwdRed!50] (L) at (12.0, 0) {loss\\$\mathcal{L}$};
+%% ── Forward arrows (top, left to right) ─────────────────────
+\draw[fwdarrow] (w.east)   -- node[above, font=\footnotesize, c6fwdBlue] {forward} (h.west);
+\draw[fwdarrow] (h.east)   -- node[above, font=\footnotesize, c6fwdBlue] {forward} (out.west);
+\draw[fwdarrow] (out.east) -- node[above, font=\footnotesize, c6fwdBlue] {forward} (L.west);
+%% ── Backward gradient arrows (staggered depths) ────────────
+%% Loss → output (shallowest, y = -1.2)
+\draw[c6bwdRed, thick] (L.south) -- ++(0,-0.65) coordinate (bL1);
+\draw[bwdarrow] (bL1) -- node[below, font=\footnotesize, c6bwdRed]
+    {$\dfrac{\partial\mathcal{L}}{\partial s}=\hat{p}-y$}
+    (bL1 -| out.south) coordinate (bO1);
+\draw[c6bwdRed, thick, -Latex] (bO1) -- (out.south);
+%% Output → hidden (middle, y = -2.0)
+\draw[c6bwdRed, thick] ([xshift=-2pt]out.south) -- ++(0,-1.45) coordinate (bO2);
+\draw[bwdarrow] (bO2) -- node[below, font=\footnotesize, c6bwdRed]
+    {$\dfrac{\partial\mathcal{L}}{\partial h_1}$}
+    (bO2 -| h.south) coordinate (bH1);
+\draw[c6bwdRed, thick, -Latex] (bH1) -- ([xshift=2pt]h.south);
+%% Hidden → input weight (deepest, y = -2.8)
+\draw[c6bwdRed, thick] ([xshift=-2pt]h.south) -- ++(0,-2.25) coordinate (bH2);
+\draw[bwdarrow] (bH2) -- node[below, font=\footnotesize, c6bwdRed]
+    {$\dfrac{\partial\mathcal{L}}{\partial w_{11}}$}
+    (bH2 -| w.south) coordinate (bW1);
+\draw[c6bwdRed, thick, -Latex] (bW1) -- ([xshift=2pt]w.south);
+%% ── Row labels ──────────────────────────────────────────────
+\node[font=\footnotesize\bfseries, c6fwdBlue] at (6.0, 1.3) {forward pass};
+\node[font=\footnotesize\bfseries, c6bwdRed]  at (6.0,-4.0) {backward pass (gradient flow)};
 \end{tikzpicture}%
 }
 \caption{Backpropagation is credit assignment flowing backward through the network. Each arrow carries the gradient signal that tells one weight how much to adjust.}
@@ -1062,7 +1183,7 @@ Neural networks are flexible enough to fit very complicated patterns. That flexi
 
 The Chapter 3 question returns in sharper form: are we reducing training loss in a way that helps on unseen data, or are we merely fitting noise more effectively?
 
-The best way to understand regularization in this chapter is not as a list of tricks. It is as a bias toward less brittle learned representations.
+The best way to understand regularization in this chapter is not as a list of tricks. It is as a bias toward less brittle learned representations. These tools matter after the model can learn; they are not substitutes for fixing a broken optimization setup.
 
 \subsection{Weight Decay, Early Stopping, Dropout, and Augmentation}
 
@@ -1163,7 +1284,7 @@ The operational summary is that model size should be chosen in conversation with
 
 \section{Chapter Artifact: A Minimum Credible Neural Training Report}
 
-Real neural training involves more than equations on a board. Several practical choices strongly affect outcomes. By the end of this chapter, a reader should be able to produce a minimum credible training report before making a serious neural-network claim. This is the document that keeps flexible neural models tied back to baselines and evidence instead of hype.
+Real neural training involves more than equations on a board. Several practical choices strongly affect outcomes. By the end of this chapter, a reader should be able to produce a minimum credible training report before making a serious neural-network claim. This is the document that keeps flexible neural models tied back to baselines and evidence instead of hype. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, and the structure diagnosis sheet justified leaving it. This report justifies the learned-model claim itself.
 
 \begin{table}[t]
 \centering
@@ -1178,7 +1299,8 @@ Data split & train / validation / test sizes and how they were chosen \\
 Preprocessing & normalization, tokenization, resizing, augmentation, or other transforms \\
 Architecture & model family, hidden sizes, depth, and output layer \\
 Loss and metric & training objective plus the main evaluation metric \\
-Decision rule & the threshold, ranking rule, or calibration step used to turn scores into actions \\
+Decision rule & the threshold or ranking rule used to turn scores into actions \\
+Calibration & whether probabilities were calibrated before interpretation, and by what method \\
 Optimizer & SGD, Adam, AdamW, or another method, with justification if possible \\
 Learning rate and batch size & the main optimization controls \\
 Stopping rule & fixed epochs, early stopping, or another criterion \\
@@ -1228,31 +1350,28 @@ An image classifier does not begin with hand-coded edge counters written by the 
                text=c6repBlue},
   arr/.style={-Latex, thick, black!55}
 ]
-%% Three rows: Vision / Language / Audio
-%% Box centres at x = 1.5, 5.2, 8.9  (gap 3.7 cm >> min-width 2.8 cm + text overflow)
-%% Rows separated by 2.6 cm so titles never touch the boxes above
-
+%% Three rows: Vision / Language / Audio - compact layout
 %% ---- Vision (top row) ----
-\node[font=\small\bfseries, black!70] at (5.2, 1.9) {Vision};
-\node[rbox] (v1) at (1.5, 0.7) {pixels};
-\node[rbox] (v2) at (5.2, 0.7) {edges / textures};
-\node[rbox] (v3) at (8.9, 0.7) {parts / object cues};
+\node[font=\small\bfseries, black!70, anchor=east] at (-0.2, 0) {Vision};
+\node[rbox] (v1) at (1.5, 0) {pixels};
+\node[rbox] (v2) at (5.2, 0) {edges / textures};
+\node[rbox] (v3) at (8.9, 0) {parts / object cues};
 \draw[arr] (v1) -- (v2);
 \draw[arr] (v2) -- (v3);
 
 %% ---- Language (middle row) ----
-\node[font=\small\bfseries, black!70] at (5.2,-1.5) {Language};
-\node[rbox] (l1) at (1.5,-2.7) {tokens};
-\node[rbox] (l2) at (5.2,-2.7) {local phrase cues};
-\node[rbox] (l3) at (8.9,-2.7) {contextual meaning};
+\node[font=\small\bfseries, black!70, anchor=east] at (-0.2,-1.6) {Language};
+\node[rbox] (l1) at (1.5,-1.6) {tokens};
+\node[rbox] (l2) at (5.2,-1.6) {local phrase cues};
+\node[rbox] (l3) at (8.9,-1.6) {contextual meaning};
 \draw[arr] (l1) -- (l2);
 \draw[arr] (l2) -- (l3);
 
 %% ---- Audio (bottom row) ----
-\node[font=\small\bfseries, black!70] at (5.2,-4.9) {Audio};
-\node[rbox] (a1) at (1.5,-6.1) {waveform / spectrum};
-\node[rbox] (a2) at (5.2,-6.1) {local frequency cues};
-\node[rbox] (a3) at (8.9,-6.1) {rhythm / context};
+\node[font=\small\bfseries, black!70, anchor=east] at (-0.2,-3.2) {Audio};
+\node[rbox] (a1) at (1.5,-3.2) {waveform / spectrum};
+\node[rbox] (a2) at (5.2,-3.2) {local frequency cues};
+\node[rbox] (a3) at (8.9,-3.2) {rhythm / context};
 \draw[arr] (a1) -- (a2);
 \draw[arr] (a2) -- (a3);
 \end{tikzpicture}%
@@ -1263,7 +1382,7 @@ An image classifier does not begin with hand-coded edge counters written by the 
 
 This is the culmination of the chapter. Optimization is not only fitting a final boundary. It is teaching the model which internal coordinates make the task easier.
 
-This is also the bridge to the next chapter. Once representation learning becomes strong enough, we can pretrain models on broad data and reuse those learned spaces across many downstream tasks. That is the foundation-model story in one sentence.
+This is also the bridge to the next chapter. This chapter learned features for one task through one training loop. The next chapter asks when those learned spaces become reusable assets across tasks, domains, and label budgets. Once representation learning becomes strong enough, we can pretrain models on broad data and reuse those learned spaces across many downstream tasks. That is the foundation-model story in one sentence.
 
 \section{Common Mistakes with Neural Networks}
 

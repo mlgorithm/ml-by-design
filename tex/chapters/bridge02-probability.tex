@@ -11,7 +11,7 @@
 \end{learninggoals}
 
 \begin{prereqbridge}
-Use this chapter as just-in-time review: read it now if probability or training-signal notation feels thin, or return when later chapters start leaning on loss, calibration, and gradients. This chapter assumes comfort with fractions, ratios, and the idea of an average. Familiarity with logarithms is helpful; they are introduced with worked examples. Calculus (derivatives) appears only in the gradient section and is explained from scratch. Students who have taken probability theory before should read the chapter anyway: the AI-specific vocabulary (loss, empirical risk, gradient as credit signal) differs from the standard probability course framing.
+Use this chapter as just-in-time review: read it now if probability or training-signal notation feels thin, or return when later chapters start leaning on loss, calibration, and gradients. This chapter assumes comfort with fractions, ratios, and the idea of an average. Familiarity with logarithms is helpful; they are introduced with worked examples. Calculus (derivatives) appears only in a few short derivations, especially the gradient section, and is explained from scratch when it appears. Students who have taken probability theory before should read the chapter anyway: the AI-specific vocabulary (loss, empirical risk, gradient as credit signal) differs from the standard probability course framing.
 \end{prereqbridge}
 
 Many students meet probability and optimization in fragments. One course teaches conditional probability. Another introduces derivatives. A machine-learning lecture suddenly writes down log loss, empirical risk, and gradient descent as if the connection were obvious. This chapter slows that chain down.
@@ -109,11 +109,11 @@ That question cannot be answered from the probability alone. It depends on:
 A medical triage team and a marketing team both receive a model score of $0.35$. The medical team decides to escalate because missing a true case has a severe consequence and resources are available. The marketing team decides not to act because their cost-per-contact is high relative to the expected value of conversion at $35\%$ likelihood. Same probability, different correct action. The model output did not contain the action. The action required a cost structure on top of the probability.
 \end{example}
 
-Bayes-optimal decisions formalize this idea. Under a simple binary setup with costs $C_{FP}$ (cost of a false positive) and $C_{FN}$ (cost of a false negative), the optimal threshold $\tau$ satisfies
+Bayes-optimal decisions formalize this idea. In the simplest binary setup, suppose the model score is already the calibrated posterior probability of the positive class, correct decisions carry no extra utility beyond avoiding mistakes, and the relevant costs are $C_{FP}$ (cost of a false positive) and $C_{FN}$ (cost of a false negative). Then the optimal threshold $\tau$ satisfies
 \[
 \tau = \frac{C_{FP}}{C_{FP} + C_{FN}}.
 \]
-If false negatives are nine times more costly than false positives, the optimal threshold is $0.1$, not $0.5$. The default threshold of $0.5$ encodes an implicit equal-cost assumption that is often wrong in practice.
+If false negatives are nine times more costly than false positives, the optimal threshold is $0.1$, not $0.5$. The default threshold of $0.5$ therefore encodes an implicit equal-cost assumption that is often wrong in practice. Base-rate changes still matter, but they matter through the calibrated posterior probabilities the threshold is applied to.
 
 \begin{thinkingtool}
 \textbf{Separate three questions.} Does the model output an honest probability? What are the costs of each kind of mistake? What is the current base rate? Only when all three are answered does it make sense to ask what the action should be.
@@ -204,6 +204,10 @@ Log loss & Probability assigned to the truth & Confident mistakes are especially
 \bottomrule
 \end{tabular}
 \end{center}
+
+\begin{practicalnote}
+The formulas above apply to binary classification with $y \in \{0,1\}$. Many tasks have more than two classes. Chapter~6 introduces the standard multiclass extension: each class gets a raw score (a \emph{logit}), softmax converts the vector of logits into probabilities that sum to one, and the loss penalizes the log-probability assigned to the true class. The binary version here is worth internalizing first because it makes every idea---confident mistakes, proper scoring, calibration---visible with the fewest symbols.
+\end{practicalnote}
 
 \section*{Proper Scoring Rules and Honest Probability Forecasts}
 
@@ -394,27 +398,30 @@ Let the loss function be \(L(w) = (w - 3)^2\), a simple parabola with minimum at
 w_{\text{new}} = w - \eta \cdot \frac{dL}{dw} = 1 - 0.4 \times (-4) = 1 + 1.6 = 2.6.
 \]
 
-The weight moved from \(1\) toward \(3\) (the minimum). The gradient pointed downhill in the negative direction; subtracting it moved \(w\) uphill in the negative-gradient direction, closing the gap to the optimum.
+The weight moved from \(1\) toward \(3\) (the minimum). At \(w=1\), the gradient points uphill in the negative direction; subtracting it moves \(w\) downhill toward the minimum, closing the gap to the optimum.
 
 \begin{center}
-\begin{tikzpicture}[font=\small]
+\begin{tikzpicture}[font=\small, x=1.6cm, y=1.3cm]
   % Axes
-  \draw[->] (-0.3, 0) -- (5.5, 0) node[right] {$w$};
+  \draw[->] (-0.2, 0) -- (5.8, 0) node[right] {$w$};
   \draw[->] (0, -0.2) -- (0, 4.5) node[above] {$L(w)$};
   % Parabola: L(w) = (w-3)^2, sampled from w=0.5 to w=5.5
   \draw[thick] plot[domain=0.5:5.5, samples=80] (\x, {(\x-3)*(\x-3)});
-  % Key x-axis marks
-  \foreach \x/\lbl in {1/{$w{=}1$}, 2.6/{$w{=}2.6$}, 3/{$w{=}3$}} {
-    \draw (\x, 0.05) -- (\x, -0.05);
-    \node[below] at (\x, -0.05) {\lbl};
-  }
+  % x-axis tick: start
+  \draw (1, 0.05) -- (1, -0.05);
+  \node[below, font=\footnotesize] at (1, -0.1) {$w{=}1$};
+  % x-axis tick: minimum
+  \draw (3, 0.05) -- (3, -0.05);
+  \node[below, font=\footnotesize] at (3, -0.1) {$w{=}3$};
   % Points on the parabola
-  \filldraw[fill=white, draw=black] (1, 4) circle (2pt) node[above right] {$(1,\,4)$};
-  \filldraw[fill=black]             (2.6, 0.16) circle (2pt) node[above right] {$(2.6,\,0.16)$};
-  \filldraw[fill=black]             (3, 0) circle (2pt) node[above right] {$(3,\,0)$};
+  \filldraw[fill=white, draw=black] (1, 4) circle (2pt)
+      node[above right] {$(1,\,4)$};
+  \filldraw[fill=black] (2.6, 0.16) circle (2pt)
+      node[right, xshift=4pt, font=\footnotesize] {$(2.6,\,0.16)$};
+  \filldraw[fill=black] (3, 0) circle (2pt);
   % Arrow showing the step along the x-axis
-  \draw[->, thick] (1, -0.35) -- (2.6, -0.35)
-        node[midway, below] {step $= 1.6$};
+  \draw[->, thick] (1, -0.6) -- (2.55, -0.6)
+        node[midway, below, font=\footnotesize] {step $= 1.6$};
 \end{tikzpicture}
 \end{center}
 

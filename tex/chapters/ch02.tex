@@ -15,11 +15,11 @@ This chapter is therefore the book's first judgment protocol. Its job is not mer
 
 Four terms appear throughout the chapter. A \emph{metric} is the quantity reported after training, such as accuracy or recall. A \emph{loss} is the penalty minimized during training. A \emph{threshold} or \emph{ranking rule} turns scores into actions. A \emph{calibration check} asks whether predicted probabilities match observed frequencies.
 
-The chapter moves in a deliberate order. First, we ask what behavior should be judged. Then we separate reported metrics from training losses, turn scores into actions through thresholds or rankings, and inspect whether probabilities are trustworthy enough to support action or abstention.
+The chapter moves in a deliberate order. First, we ask what behavior should be judged. Then we separate reported metrics from training losses, turn scores into actions through thresholds or rankings, and inspect whether probabilities are trustworthy enough to support action or abstention. Read the chapter as a sequence of answers to one worksheet: what should be reported, how will that score become action, and which evidence is allowed to justify the policy.
 
 \section*{How to Read This Chapter}
 
-Chapter 2 stays on one question: once a model produces scores, what behavior should count as good? Read the chapter in three passes. First separate metric from loss. Then separate score from action. Finally ask whether the probabilities are trustworthy enough for thresholds, rankings, or abstention-to-review.
+Chapter 2 stays on one question: once a model produces scores, what behavior should count as good? Read the chapter in three passes. First separate metric from loss. Then separate score from action. Finally ask whether the probabilities are trustworthy enough for thresholds, rankings, or abstention-to-review. Each major section fills in one part of the metric-and-action worksheet that appears near the end of the chapter.
 
 \begin{decisionbox}
 For a first pass, focus on four distinctions: reported metric, training loss, action rule, and calibration. The next chapter will ask the different question of how to protect those judgments from overfitting, leakage, weak baselines, and accidental test-set reuse.
@@ -51,7 +51,7 @@ Return to the broader course-support setting from Chapter 1. Suppose the same or
 
 That constraint changes the meaning of ``good.'' A useful system is not just one with a low average training penalty. It is one whose scores place the most relevant cases near the top, whose probabilities are trustworthy enough to support action, and whose decision rule respects the real capacity of the support team. Later chapters will widen this same institutional setting into message routing, retrieval, grounded answering, and escalation. For now, one scalar risk score is enough to surface the judgment problem cleanly.
 
-This opening question determines the rest of the chapter. We first need to know what behavior matters. Only after that do training losses make sense.
+This opening question determines the rest of the chapter. We first need to know what behavior matters. Only after that do training losses make sense. The rest of the chapter keeps unpacking that sentence: report the right behavior, choose the right action rule, then decide whether the score is trustworthy enough to automate.
 
 \begin{figure}[t]
 \centering
@@ -62,40 +62,37 @@ This opening question determines the rest of the chapter. We first need to know 
 \begin{tikzpicture}[
   x=1cm, y=1cm, font=\small,
   pipebox/.style={draw=blue!40, rounded corners=3pt, align=center,
-                  minimum width=2.6cm, minimum height=0.85cm,
+                  minimum width=2.6cm, minimum height=0.9cm,
                   fill=c2pipeBg, line width=0.8pt},
   checkbox/.style={draw=orange!50!black, rounded corners=3pt, align=center,
-                   minimum width=2.6cm, minimum height=0.85cm,
+                   minimum width=2.6cm, minimum height=0.9cm,
                    fill=c2checkBg, line width=0.8pt},
   claimbox/.style={draw=green!40!black, rounded corners=3pt, align=center,
-                   minimum width=2.6cm, minimum height=0.85cm,
+                   minimum width=2.6cm, minimum height=0.9cm,
                    fill=c2claimBg, line width=0.8pt},
-  arrow/.style={-Latex, thick, gray!55}
+  arrow/.style={-Latex, thick, gray!60}
 ]
 %% ── Top row: main analysis pipeline ─────────────────────────────────────
-\node[pipebox]  (score)   at (0,   0) {model score};
-\node[pipebox]  (metric)  at (3.4, 0) {reported measure};
-\node[pipebox]  (policy)  at (6.8, 0) {decision rule};
-\node[pipebox]  (loss)    at (10.2,0) {training loss};
+\node[pipebox]  (score)   at (0,    0) {model score};
+\node[pipebox]  (metric)  at (3.6,  0) {reported measure};
+\node[pipebox]  (policy)  at (7.2,  0) {decision rule};
+\node[pipebox]  (loss)    at (10.8, 0) {training loss};
 %% ── Bottom row: quality checks and output ────────────────────────────────
-\node[checkbox] (cal)     at (3.4,-2.0) {confidence check};
-\node[checkbox] (abstain) at (6.8,-2.0) {abstain or review};
-\node[claimbox] (claim)   at (10.2,-2.0) {operational signal};
+\node[checkbox] (cal)     at (3.6, -2.2) {confidence check};
+\node[checkbox] (abstain) at (7.2, -2.2) {abstain or review};
+\node[claimbox] (claim)   at (10.8,-2.2) {operational signal};
 %% ── Row-1 horizontal arrows ──────────────────────────────────────────────
 \draw[arrow] (score)  -- (metric);
 \draw[arrow] (metric) -- (policy);
 %% ── Vertical drop arrows ─────────────────────────────────────────────────
 \draw[arrow] (metric) -- (cal);
 \draw[arrow] (policy) -- (abstain);
-%% ── Two arrows to claim top — enter at different x positions ─────────────
-%%   loss  → arrives 0.3 right of center top  (x=10.5)
-%%   policy → arrives 0.3 left  of center top  (x= 9.9)
-\draw[arrow] (loss.south)  -- (10.5,-1.575);
-\draw[arrow] (policy.east) to[out=0, in=270] (9.9,-1.575);
-%% ── Abstain → claim: short horizontal ───────────────────────────────────
-\draw[arrow] (abstain.east) -- (claim.west);
-%% ── Cal → claim: route below the bottom row to avoid overlap ─────────────
-\draw[arrow] (cal.south) |- (10.2,-2.82) -- (claim.south);
+%% ── Training loss → operational signal: straight down ────────────────────
+\draw[arrow] (loss)   -- (claim);
+%% ── Abstain → claim: straight right ─────────────────────────────────────
+\draw[arrow] (abstain) -- (claim);
+%% ── Confidence check → operational signal: right along bottom ────────────
+\draw[arrow] (cal.east) -- (abstain.west);
 \end{tikzpicture}%
 }
 \caption{Chapter 2 is a judgment chain. A score does not become an operational signal until the chapter has answered how it will be judged, how it becomes a decision, and whether its probabilities can be trusted.}
@@ -212,7 +209,7 @@ The model is accurate only because the majority class dominates the dataset. Thi
 
 \section{Training Loss as the Quantity Optimized During Learning}
 
-Once the reported behavior is clear, training losses make more sense. A learning algorithm needs a rule for preferring one prediction over another during optimization, meaning during the process of adjusting the model to reduce error on the training data. That role is played by a loss function.
+Once the reported behavior is clear, training losses make more sense. A learning algorithm needs a rule for preferring one prediction over another during optimization, meaning during the process of adjusting the model to reduce error on the training data. That role is played by a loss function. This is the chapter's first separation: the number that teaches the model is not automatically the number that justifies the system.
 
 \begin{definition}[Loss Function]
 A loss function $\ell(y,\hat{y})$ measures how bad a prediction $\hat{y}$ is when the desired output is $y$. Smaller values are better, and a value of zero usually represents a perfect prediction.
@@ -276,7 +273,7 @@ The previous sentence can be stated sharply when the model is forced to predict 
 Let $y_1,\ldots,y_n$ be observed target values, and suppose the prediction is restricted to a single constant $c$.
 \begin{enumerate}[leftmargin=*,label=\arabic*.]
 \item The value of $c$ that minimizes $\frac{1}{n}\sum_{i=1}^{n}(y_i-c)^2$ is the sample mean $\bar{y}=\frac{1}{n}\sum_{i=1}^{n} y_i$.
-\item The value of $c$ that minimizes $\frac{1}{n}\sum_{i=1}^{n}|y_i-c|$ is any sample median, meaning any middle observed value when the targets are sorted.
+\item The value of $c$ that minimizes $\frac{1}{n}\sum_{i=1}^{n}|y_i-c|$ is any sample median: when the targets are sorted, any middle observed value for odd $n$, or any value between the two middle order statistics for even $n$.
 \end{enumerate}
 \end{theorem}
 
@@ -285,7 +282,7 @@ For squared error, expand $(y_i-c) = (y_i-\bar{y}) + (\bar{y}-c)$. After summing
 \[
 \sum_{i=1}^{n}(y_i-c)^2 = \sum_{i=1}^{n}(y_i-\bar{y})^2 + n(\bar{y}-c)^2,
 \]
-so the minimum occurs at $c=\bar{y}$. For absolute error, if $c$ sits to the left of a median, more than half of the sorted targets lie to its right, so moving $c$ slightly right decreases more distances than it increases. The symmetric argument applies when $c$ lies to the right of a median. That is why any median minimizes total absolute deviation.
+so the minimum occurs at $c=\bar{y}$. For absolute error, if $c$ sits to the left of the median interval, more than half of the sorted targets lie to its right, so moving $c$ slightly right decreases more distances than it increases. The symmetric argument applies when $c$ lies to the right of that interval. When $n$ is even, this leaves a flat interval between the two middle order statistics on which the total absolute deviation is constant. That is why any median minimizes total absolute deviation.
 \end{proof}
 \end{mathlens}
 
@@ -360,27 +357,28 @@ If $y=1$, then $\ell=-\log p$; if $y=0$, then $\ell=-\log(1-p)$. So as the model
 \definecolor{c2cautBg}{RGB}{220,233,251}
 \definecolor{c2confBg}{RGB}{210,238,220}
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=3.5cm, font=\small]
+\begin{tikzpicture}[x=1cm, y=5cm, font=\small]
 %% ── Light grid ───────────────────────────────────────────────────────────
 \foreach \y in {0.2,0.4,0.6,0.8}
     \draw[gray!18, line width=0.4pt] (0,\y) -- (4.6,\y);
 %% ── Axes ─────────────────────────────────────────────────────────────────
 \draw[->, gray!55, thick] (0,0) -- (4.7,0) node[right] {model};
-\draw[->, gray!55, thick] (0,0) -- (0,0.93) node[above] {average log loss};
+\draw[->, gray!55, thick] (0,0) -- (0,0.95) node[above] {average log loss};
 %% ── Bars ─────────────────────────────────────────────────────────────────
 \filldraw[fill=c2cautBg, draw=blue!40, line width=0.8pt]
-    (0.8,0) rectangle (1.8,0.67);
+    (0.8,0) rectangle (1.8,0.66);
 \filldraw[fill=c2confBg, draw=green!40!black, line width=0.8pt]
     (2.8,0) rectangle (3.8,0.02);
 %% ── Bar value labels ─────────────────────────────────────────────────────
-\node[above, font=\small\bfseries, blue!60!black]  at (1.3,0.67) {0.67};
+\node[above, font=\small\bfseries, blue!60!black]  at (1.3,0.66) {0.66};
 \node[above, font=\small\bfseries, green!45!black] at (3.3,0.02) {0.02};
 %% ── Axis tick labels ─────────────────────────────────────────────────────
 \node[align=center, font=\small\bfseries, blue!55!black]  at (1.3,-0.085) {cautious};
 \node[align=center, font=\small\bfseries, green!45!black] at (3.3,-0.085) {confident};
-%% ── Annotation ───────────────────────────────────────────────────────────
-\node[align=center, text width=3.8cm, font=\footnotesize, gray!60!black]
-    at (2.3,0.83) {both models classify all\\four examples correctly};
+%% ── Annotation (right side, clear of the 0.67 label) ────────────────────
+\node[align=left, text width=3.2cm, font=\footnotesize, gray!60!black,
+      anchor=west]
+    at (5.0,0.55) {both models classify\\all four examples\\correctly};
 \end{tikzpicture}%
 }
 \caption{Accuracy can hide major differences in confidence. A cautious model and a confident model may both be perfectly accurate while having very different log loss.}
@@ -413,13 +411,22 @@ Google reports that Gmail's AI-powered defenses block nearly 15 billion unwanted
 \textbf{Counterexample first.} Before trusting one headline metric, try to construct two models that tie on that metric but differ in decision value. If you can build such a pair, the metric is not sufficient by itself.
 \end{thinkingtool}
 
+\begin{practicalnote}
+When classes are imbalanced, the average loss can be dominated by the majority class. One common remedy is to weight the loss: multiply the per-example loss by a factor that is larger for minority-class examples. If the positive class appears in only 5\% of training examples, an inverse-frequency weight would be $w_+ = 20$. Class-weighted cross-entropy is the standard version:
+\[
+\mathcal{L} = -\frac{1}{n}\sum_{i=1}^{n} w_{y_i}\bigl[y_i\log p_i + (1-y_i)\log(1-p_i)\bigr],
+\]
+where $w_1 > w_0$ reflects the higher cost of ignoring the rarer class. This is a training-time choice that complements the deployment-time threshold and cost-matrix choices discussed in Section~\ref{sec:from-score-to-action}. Adjusting the loss and adjusting the threshold are two different levers; in practice, teams often use both.
+\end{practicalnote}
+
 \begin{warningbox}
 If you report only the optimized training loss, you may hide the behavior that matters for the real decision. A system can improve its loss while leaving the practically important metric unchanged or even worse.
 \end{warningbox}
 
 \section{From Score to Action: Threshold, Ranking, and Abstention}
+\label{sec:from-score-to-action}
 
-Many models produce scores or probabilities, not final actions. A decision still has to be made. That action may involve a threshold, a top-$k$ ranking, meaning ``take the highest $k$ scores,'' or an abstention rule, meaning a rule that withholds automatic action on uncertain cases and sends them to human review.
+Many models produce scores or probabilities, not final actions. A decision still has to be made. That action may involve a threshold, a top-$k$ ranking, meaning ``take the highest $k$ scores,'' or an abstention rule, meaning a rule that withholds automatic action on uncertain cases and sends them to human review. This is the chapter's second separation: even a well-chosen metric is incomplete until the score is attached to an operational policy.
 
 \begin{thinkingtool}
 \textbf{Threshold as policy.} A threshold is not a cleanup detail after training. It encodes a decision about missed cases, false alarms, review capacity, and intervention cost.
@@ -705,7 +712,7 @@ When there are more than two classes, the same logic still applies but the bookk
 
 \section{Confidence Quality: Calibration}
 
-Thresholds and rankings are only part of the story. If the probabilities themselves are used for downstream decisions, the next judgment question is whether those probabilities mean what they appear to mean.
+Thresholds and rankings are only part of the story. If the probabilities themselves are used for downstream decisions, the next judgment question is whether those probabilities mean what they appear to mean. A model can discriminate well enough to order cases correctly and still be unreliable as a source of numerical confidence.
 
 Calibration matters when a model's score is supposed to behave like confidence. A model is well calibrated if events predicted with probability $0.8$ occur about $80\%$ of the time. In this book's worldview, calibration is not optional decoration. Thresholds, abstention rules, review queues, and risk-based interventions behave better when the predicted probabilities can be interpreted honestly.
 
@@ -849,11 +856,11 @@ One modern way to express uncertainty is to output a prediction set or interval 
 
 \section{Validation, Cross-Validation, and Test Discipline}
 
-By this point the chapter has separated metric from loss, score from action, and calibration from ranking quality. One more distinction is needed before any of those choices deserve trust: \emph{which data is allowed to choose them?}
+By this point the chapter has separated metric from loss, score from action, and calibration from ranking quality. One more distinction is needed before any of those choices deserve trust: \emph{which data is allowed to choose them?} This is the bridge from Chapter 2's judgment logic to Chapter 3's evaluation discipline.
 
 Thresholds, calibration methods, regularization strengths, stopping points, and even model families are not innocent details added after the score. They are part of model selection. If those choices are guided by the final test results, the test set stops being external evidence and becomes another development tool.
 
-For this chapter, the core logic can be said plainly. The training data teaches the model parameters. The validation data chooses among serious alternatives: which metric summary matters most, which threshold or ranking cutoff is usable, whether calibration is needed, and which tuned settings make the decision policy work best. The test data is then touched once, after those choices are frozen, to check whether the chosen policy still looks defensible on new cases.
+For this chapter, the core logic can be said plainly. The training data teaches the model parameters. The validation data chooses among serious alternatives: which threshold or ranking cutoff is usable, whether calibration is needed, and which tuned settings make the decision policy work best. The test data is then touched once, after those choices are frozen, to check whether the chosen policy still looks defensible on new cases.
 
 \begin{example}[Threshold Choice Is Part of Model Selection]
 Suppose a student-support team considers thresholds $0.40$, $0.55$, and $0.70$ on the validation set. Under the team's weekly review constraint, threshold $0.40$ catches more true positives but creates too many flags to review. Threshold $0.70$ keeps the queue small but misses too many students in need. Threshold $0.55$ gives the best recall while staying within review capacity, so it becomes the chosen policy. If the team then checks the test set, dislikes the result, and moves the threshold again, the test set has quietly become part of development. The number is still computed correctly, but it is no longer external evidence.
@@ -913,7 +920,7 @@ This chapter introduces the logic because metric choice, threshold choice, calib
 
 \section{Metric Failure Gallery}
 
-Three cases where a standard metric looks good while the real situation is not.
+Three cases where a standard metric looks good while the real situation is not. Read them as recurring failure patterns rather than as isolated exceptions: each one shows how a real operational question can disappear behind a respectable number.
 
 \paragraph{Case one: high accuracy under class imbalance.} A student-support model predicts at-risk status on a cohort where only $5\%$ of students are truly at risk. A model that predicts ``not at risk'' for every student achieves $95\%$ accuracy. That number looks strong at first glance. But the model has never flagged a student in need. Accuracy rewards agreement with the label distribution. When the distribution is heavily skewed, agreement with the majority is cheap. Practitioners who report only accuracy on imbalanced problems invite exactly this confusion. The right questions are: how many true positive cases did the system surface, and at what review cost?
 
@@ -921,7 +928,7 @@ Three cases where a standard metric looks good while the real situation is not.
 High accuracy on an imbalanced dataset is often a sign that the model has learned to ignore the minority class entirely. Always report per-class recall alongside accuracy when prevalence is low.
 \end{failurebox}
 
-\paragraph{Case two: good ROC-AUC with poor precision at the deployment budget.} Suppose a classifier achieves ROC-AUC of $0.88$ on a test set. That looks like a well-discriminating model. Now suppose the operations team can review at most $30$ flagged cases per week, which corresponds to a threshold that captures $80\%$ of true positives. At that threshold, the model flags $120$ cases per week to reach $30$ after filtering, but that means $75\%$ of the flags are false positives. Staff spend most of their time on cases that do not need intervention. ROC-AUC summarizes performance across all possible thresholds and says nothing about which threshold is actually usable under the team's capacity constraint. A good ROC curve does not guarantee operational usefulness at any specific threshold.
+\paragraph{Case two: good ROC-AUC with poor precision at the deployment budget.} Suppose a classifier achieves ROC-AUC of $0.88$ on a test set. That looks like a well-discriminating model. Now suppose the operations team can review at most $30$ flagged cases per week. The score cutoff required to capture $80\%$ of true positives would flag $120$ cases per week, which is far above the team's capacity. If the team keeps only the top $30$ scores instead, recall drops sharply and many truly important cases are missed. ROC-AUC summarizes performance across all possible thresholds and says nothing about which threshold is actually usable under the team's capacity constraint. A good ROC curve does not guarantee operational usefulness at any specific threshold.
 
 \begin{practicalnote}
 When reporting ROC-AUC, also report precision, recall, and queue size at the threshold the team would actually use. The gap between ``aggregate discriminative quality'' and ``operational precision at the deployment budget'' is where many model evaluations mislead.
@@ -950,7 +957,7 @@ The shared lesson is that evaluation claims are always implicitly relative to a 
 
 \section{Chapter Artifact: A Metric and Action Worksheet}
 
-By the end of Chapter 2, the reader should be able to write down not only which number to report, but how that number will become an action and which held-out role is allowed to choose the policy details. The point is to make metric choice, threshold policy, calibration expectations, and selection discipline explicit before the workflow quietly hardens around a vague score.
+By the end of Chapter 2, the reader should be able to write down not only which number to report, but how that number will become an action and which held-out role is allowed to choose the policy details. The point is to make metric choice, threshold policy, calibration expectations, and selection discipline explicit before the workflow quietly hardens around a vague score. This worksheet is the Chapter 2 counterpart to Chapter 1's framing memo: Chapter 1 states the problem clearly; Chapter 2 states how success will be judged and operationalized.
 
 \begin{table}[t]
 \centering
@@ -980,7 +987,7 @@ Abstention or review rule & Which cases should be deferred rather than forced in
 
 \section{Looking Ahead}
 
-This chapter made predictive judgment explicit: metrics, losses, thresholds, rankings, calibration, and abstention. The next chapter asks a different question: how do we protect those judgments from overfitting, leakage, weak baselines, and accidental test-set reuse?
+This chapter made predictive judgment explicit: metrics, losses, thresholds, rankings, calibration, and abstention. The next chapter asks a different question: how do we protect those judgments from overfitting, leakage, weak baselines, and accidental test-set reuse? Chapter 2 chose what would count as good behavior; Chapter 3 asks whether the evidence for that choice deserves to be trusted.
 
 \begin{chaptersummary}
 \item Chapter 2 begins from decision behavior, not from formulas. A model is good only relative to the action it is meant to support.

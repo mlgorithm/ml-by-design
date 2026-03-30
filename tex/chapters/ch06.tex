@@ -11,7 +11,7 @@
 
 The previous chapter explained how neural networks learn internal features through layered optimization. That naturally raises the next question: when are those learned features valuable \emph{beyond one task}? This chapter answers that question.
 
-The shift is larger than it first appears. In classical machine learning, a model is often trained for one task on one dataset with one objective. Representation learning changes the unit of value. What matters is not only whether the model solves today's task, but whether it learns a space that remains useful for tomorrow's tasks as well. Foundation-model workflows push this further by pretraining for reuse first and adapting later. The modern form of this idea draws on work on representation learning as exposed structure, contextual word representations, latent prediction, attention-based sequence modeling, bidirectional pretraining, and foundation-model analysis \citep{bengio2013rep,mikolov2013,peters2018elmo,oord2018cpc,vaswani2017,devlin2019,bommasani2021}.
+The shift is larger than it first appears. In classical machine learning, a model is often trained for one task on one dataset with one objective. Representation learning changes the unit of value. What matters is not only whether the model solves today's task, but whether it learns a space that remains useful for tomorrow's tasks as well. Foundation-model workflows push this further by pretraining for reuse first and adapting later. The modern form of this idea draws on work on representation learning as exposed structure, contextual word representations, latent prediction, attention-based sequence modeling, bidirectional pretraining, and foundation-model analysis \citep{bengio2013rep,mikolov2013,peters2018elmo,oord2018cpc,vaswani2017,devlin2019,bommasani2021}. The chapter follows that same path: first what a reusable space is, then what kinds of training pressure create it, then how probes and adaptation test it, and finally how attention and foundation-model workflows scale the same logic.
 
 \begin{problemsolvinglens}
 This chapter asks when it is worth learning a reusable representation instead of solving one task directly, and how much downstream adaptation that reusable representation really justifies. The central discipline is to separate reusable representation, adaptation strategy, and evidence for the source of improvement.
@@ -23,7 +23,7 @@ The previous chapter ended by showing that neural networks can learn internal fe
 
 This is the opening dilemma of the chapter. Should we solve a task directly from scratch, or should we invest in learning a reusable representation that may help across tasks, domains, or label budgets?
 
-That question matters whenever the useful structure is expensive to relearn from scratch. A model trained only for one classifier may work well today and still throw away value that could have helped retrieval, clustering, transfer, or later fine-tuning. A reusable representation changes what we mean by progress.
+That question matters whenever the useful structure is expensive to relearn from scratch. A model trained only for one classifier may work well today and still throw away value that could have helped retrieval, clustering, transfer, or later fine-tuning. A reusable representation changes what we mean by progress. The rest of the chapter turns that claim into a workflow: define the space, ask what pressure created it, test it with the cleanest downstream diagnostic, and only then decide how much adaptation is justified.
 
 \begin{decisionbox}
 Invest in reusable representation learning when the raw input is too entangled for simple task-specific modeling and when the learned space is likely to be reused across tasks, domains, or limited-label settings.
@@ -57,7 +57,7 @@ The chapter's key question can therefore be stated plainly:
 
 \section{Representation as a Change of Coordinates}
 
-The best mental model for a representation is a change of coordinates.
+The best mental model for a representation is a change of coordinates. It is also the mental model that holds the rest of the chapter together: if the coordinates improve, simple downstream readouts, transfer diagnostics, and later adaptation should all become easier for a reason we can inspect.
 
 \begin{definition}[Representation Learning]
 Representation learning is the process of learning transformations of data that make useful structure easier to detect, compare, transfer, or predict from.
@@ -67,32 +67,49 @@ In one coordinate system, classes may overlap, neighborhoods may be meaningless,
 
 \begin{figure}[t]
 \centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[font=\small]
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  font=\small,
+  paneltitle/.style={font=\footnotesize\bfseries, align=center},
+  panelsub/.style={font=\scriptsize, text=black!65},
+  axislabel/.style={font=\footnotesize, text=black!70},
+  classpos/.style={circle, fill=black, draw=black, inner sep=2.3pt},
+  classneg/.style={circle, fill=white, draw=black, line width=0.8pt, inner sep=2.3pt}
+]
 \begin{scope}
-\draw[->] (0,0) -- (4.4,0) node[right] {raw coordinate 1};
-\draw[->] (0,0) -- (0,4.1) node[above] {raw coordinate 2};
-\filldraw (0.9,1.0) circle (2pt);
-\filldraw (1.3,1.4) circle (2pt);
-\filldraw (1.7,1.1) circle (2pt);
-\draw (1.2,2.1) circle (2pt);
-\draw (1.7,2.5) circle (2pt);
-\draw (2.1,2.0) circle (2pt);
-\node at (2.1,4.6) {raw space: overlap};
+\node[paneltitle] at (1.7,4.35) {Raw Space};
+\node[panelsub] at (1.7,3.95) {classes overlap};
+\draw[-Latex, semithick] (0,0) -- (3.4,0);
+\draw[-Latex, semithick] (0,0) -- (0,3.4);
+\node[axislabel] at (1.7,-0.42) {$x_1$};
+\node[axislabel, rotate=90] at (-0.42,1.7) {$x_2$};
+\node[classpos] at (0.9,1.0) {};
+\node[classpos] at (1.3,1.4) {};
+\node[classpos] at (1.7,1.1) {};
+\node[classneg] at (1.2,2.1) {};
+\node[classneg] at (1.7,2.5) {};
+\node[classneg] at (2.1,2.0) {};
 \end{scope}
-\begin{scope}[xshift=6.2cm]
-\draw[->] (0,0) -- (4.4,0) node[right] {learned coordinate 1};
-\draw[->] (0,0) -- (0,4.1) node[above] {learned coordinate 2};
-\filldraw (0.9,0.9) circle (2pt);
-\filldraw (1.2,1.1) circle (2pt);
-\filldraw (1.4,0.8) circle (2pt);
-\draw (3.0,3.1) circle (2pt);
-\draw (3.3,3.4) circle (2pt);
-\draw (3.5,2.9) circle (2pt);
-\node at (2.1,4.6) {learned space: separation};
+
+\draw[-Latex, semithick, black!55] (4.2,1.7) -- (6.2,1.7);
+\node[font=\footnotesize, text=black!70] at (5.2,2.05) {$f(x)$};
+
+\begin{scope}[xshift=7.0cm]
+\node[paneltitle] at (1.7,4.35) {Learned Space};
+\node[panelsub] at (1.7,3.95) {classes separate};
+\draw[-Latex, semithick] (0,0) -- (3.4,0);
+\draw[-Latex, semithick] (0,0) -- (0,3.4);
+\node[axislabel] at (1.7,-0.42) {$z_1$};
+\node[axislabel, rotate=90] at (-0.42,1.7) {$z_2$};
+\node[classpos] at (0.9,0.9) {};
+\node[classpos] at (1.2,1.1) {};
+\node[classpos] at (1.4,0.8) {};
+\node[classneg] at (2.7,2.7) {};
+\node[classneg] at (3.0,3.0) {};
+\node[classneg] at (3.2,2.6) {};
 \end{scope}
-\end{tikzpicture}%
-}
+\end{tikzpicture}
 \caption{The central promise of representation learning is not magical. It is the possibility of mapping a hard raw space into a more useful space where simpler downstream decisions work better.}
 \label{fig:bad-vs-good-space}
 \end{figure}
@@ -117,7 +134,7 @@ This is why a weak downstream model on top of a strong representation can outper
 
 \section{What Makes a Representation Reusable?}
 
-Not every learned representation transfers to new tasks. A representation is \emph{reusable} in a meaningful sense only when it satisfies several conditions at once. Naming these conditions makes the concept durable beyond any specific model family.
+Not every learned representation transfers to new tasks. A representation is \emph{reusable} in a meaningful sense only when it satisfies several conditions at once. Naming these conditions makes the concept durable beyond any specific model family. These conditions also become the chapter's checklist for deciding whether downstream success is evidence of reuse or only evidence that a later adaptation stage compensated for a weak source space.
 
 \textbf{Invariances captured.} A reusable visual representation should be roughly invariant to the specific lighting conditions, camera angle, and background of the training images, since those factors do not define the content. A reusable language representation should be roughly invariant to paraphrase: ``the student submitted late'' and ``the assignment was turned in after the deadline'' should be close in a representation meant to capture meaning. A representation that has learned the right invariances can transfer to new examples that share the same semantic content under different surface forms.
 
@@ -153,7 +170,7 @@ This framing is more durable than naming current model families because it appli
 An embedding is a learned vector representation of an object such as a word, image patch, document, audio segment, or user event, placed in a continuous space where geometric relationships are intended to capture useful structure.
 \end{definition}
 
-Embeddings are one of the clearest examples of reusable representation learning. Instead of treating each object as an isolated identifier, we map it to a vector. That geometric view supports retrieval, clustering, similarity search, and transfer.
+Embeddings are one of the clearest examples of reusable representation learning. Instead of treating each object as an isolated identifier, we map it to a vector. That geometric view supports retrieval, clustering, similarity search, and transfer. It is the first place where the change-of-coordinates idea becomes directly inspectable.
 
 \begin{figure}[t]
 \centering
@@ -161,29 +178,47 @@ Embeddings are one of the clearest examples of reusable representation learning.
 \definecolor{c7encBlueBg}{RGB}{220,233,251}
 \definecolor{c7downGreen}{RGB}{26,112,64}
 \definecolor{c7downGreenBg}{RGB}{210,238,220}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  ebox/.style={draw=c7encBlue,  fill=c7encBlueBg,  rounded corners,
-               align=center, minimum height=0.95cm, minimum width=2.6cm, text=c7encBlue},
-  dbox/.style={draw=c7downGreen,fill=c7downGreenBg,rounded corners,
-               align=center, minimum height=0.95cm, minimum width=2.6cm, text=c7downGreen},
-  arr/.style={-Latex, thick, black!55}
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  font=\small,
+  ebox/.style={draw=c7encBlue, fill=c7encBlueBg, rounded corners=4pt,
+               align=center, minimum height=1.05cm, text width=2.4cm,
+               font=\small, line width=0.8pt},
+  dbox/.style={draw=c7downGreen, fill=c7downGreenBg, rounded corners=4pt,
+               align=center, minimum height=1.05cm, text width=2.4cm,
+               font=\small, line width=0.8pt},
+  arr/.style={-Latex, line width=1.1pt, draw=c7encBlue},
+  branch/.style={-Latex, line width=1.1pt, draw=c7downGreen}
 ]
-%% Top chain — centres 3.6 cm apart (gap = 3.6 - 2.6 = 1.0 cm)
-\node[ebox] (raw) at (0.0, 0) {raw input};
-\node[ebox] (enc) at (3.6, 0) {encoder};
-\node[ebox] (emb) at (7.2, 0) {embedding};
+%% ── Top row: encoding pipeline ──────────────────────────────
+\node[ebox] (raw) at (0.0,0) {raw input};
+\node[ebox] (enc) at (3.8,0) {encoder};
+\node[ebox] (emb) at (7.6,0) {embedding\\vector};
 \draw[arr] (raw) -- (enc);
 \draw[arr] (enc) -- (emb);
-%% Downstream row — centres 3.6 cm apart, anchored under embedding
-\node[dbox] (probe) at (3.8,-2.2) {linear probe};
-\node[dbox] (retr)  at (7.4,-2.2) {retrieval /\\clustering};
-\node[dbox] (ft)    at (11.0,-2.2) {fine-tuning};
-\draw[arr] (emb) -- (probe);
-\draw[arr] (emb) -- (retr);
-\draw[arr] (emb) -- (ft);
-\end{tikzpicture}%
-}
+
+%% ── Fan-out point ───────────────────────────────────────────
+\coordinate (fan) at (7.6,-1.3);
+\draw[c7encBlue, line width=1.1pt] (emb.south) -- (fan);
+\filldraw[c7encBlue] (fan) circle (2.5pt);
+
+%% ── Bottom row: downstream tasks ───────────────────────────
+\node[dbox] (probe) at (2.8,-2.8) {linear probe};
+\node[dbox] (retr)  at (6.4,-2.8) {retrieval /\\clustering};
+\node[dbox] (ft)    at (10.0,-2.8) {fine-tuning};
+
+%% ── Straight branches from fan-out to each task ─────────────
+\draw[branch] (fan) -- (probe.north);
+\draw[branch] (fan) -- (retr.north);
+\draw[branch] (fan) -- (ft.north);
+
+%% ── Labels ──────────────────────────────────────────────────
+\node[font=\footnotesize, c7encBlue, anchor=south] at (3.8,0.7)
+    {\textbf{learn once}};
+\node[font=\footnotesize, c7downGreen, anchor=north] at (6.4,-3.65)
+    {\textbf{reuse many ways}};
+\end{tikzpicture}
 \caption{A reusable representation is valuable because the same encoder and embedding space can support several downstream operations: simple probes, retrieval, clustering, or more task-specific adaptation.}
 \label{fig:rep-encoder-embedding-workflow}
 \end{figure}
@@ -214,20 +249,20 @@ This is the right moment to keep one distinction explicit. The raw dot products 
 \centering
 \definecolor{c7scatBlue}{RGB}{56,103,170}
 \definecolor{c7scatAmber}{RGB}{184,92,16}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=3.5cm, y=3.5cm, font=\small]
-  \draw[->,black!70] (0,0) -- (1.15,0) node[right] {dimension 1};
-  \draw[->,black!70] (0,0) -- (0,1.10) node[above] {dimension 2};
-  %% Academic terms: filled blue dots, labels to the right
-  \filldraw[c7scatBlue] (0.90,0.70) circle (2pt);
-  \node[right, c7scatBlue] at (0.90,0.70) {exam};
-  \filldraw[c7scatBlue] (0.80,0.60) circle (2pt);
-  \node[right, c7scatBlue] at (0.80,0.60) {quiz};
-  %% Unrelated term: amber open circle, label to the RIGHT (not left — x=0.2 gives room)
-  \draw[c7scatAmber, thick] (0.20,0.95) circle (2pt);
-  \node[right, c7scatAmber] at (0.20,0.95) {guitar};
-\end{tikzpicture}%
-}
+\begin{tikzpicture}[x=4.2cm, y=4.2cm, font=\small]
+\draw[-Latex, semithick, black!75] (0,0) -- (1.12,0);
+\draw[-Latex, semithick, black!75] (0,0) -- (0,1.08);
+\node[font=\footnotesize, text=black!70] at (0.56,-0.13) {dimension 1};
+\node[font=\footnotesize, text=black!70, rotate=90] at (-0.14,0.54) {dimension 2};
+
+\filldraw[fill=c7scatBlue, draw=c7scatBlue] (0.90,0.70) circle (2.8pt);
+\node[anchor=west, font=\footnotesize, text=black] at (0.93,0.76) {exam};
+\filldraw[fill=c7scatBlue, draw=c7scatBlue] (0.80,0.60) circle (2.8pt);
+\node[anchor=west, font=\footnotesize, text=black] at (0.83,0.54) {quiz};
+
+\draw[c7scatAmber, line width=0.9pt, fill=white] (0.20,0.95) circle (3.0pt);
+\node[anchor=west, font=\footnotesize, text=black] at (0.23,1.01) {guitar};
+\end{tikzpicture}
 \caption{Even a toy embedding plot makes the chapter's geometric point visible. Related terms occupy nearby directions; unrelated terms sit elsewhere in the learned space.}
 \label{fig:tiny-embedding-scatter}
 \end{figure}
@@ -248,27 +283,35 @@ The dot product $e_i^\top e_j$ is large when two vectors point in similar direct
 
 \begin{figure}[t]
 \centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=2.2cm,y=2.2cm,font=\small]
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  font=\small,
+  paneltitle/.style={font=\footnotesize\bfseries},
+  panelsub/.style={font=\scriptsize, text=black!65},
+  veca/.style={-Latex, line width=0.95pt, black!75},
+  vecb/.style={-Latex, line width=1.1pt, draw=black}
+]
 \begin{scope}
-\draw[->] (0,0) -- (2.4,0) node[right] {};
-\draw[->] (0,0) -- (0,2.2) node[above] {};
-\draw[-Latex, thick] (0,0) -- (1.0,0.5);
-\draw[-Latex, thick] (0,0) -- (2.0,1.0);
-\node at (1.6,1.55) {same direction,};
-\node at (1.6,1.25) {different lengths};
-\node at (1.4,-0.35) {cosine similarity near $1$};
+\node[paneltitle] at (1.9,3.55) {Same Direction};
+\node[panelsub] at (1.9,3.15) {length differs, cosine near $1$};
+\draw[-Latex, semithick, black!70] (0,0) -- (3.0,0);
+\draw[-Latex, semithick, black!70] (0,0) -- (0,2.8);
+\draw[veca] (0,0) -- (1.1,0.55);
+\draw[vecb] (0,0) -- (2.2,1.10);
 \end{scope}
-\begin{scope}[xshift=6.0cm]
-\draw[->] (0,0) -- (2.4,0) node[right] {};
-\draw[->] (0,0) -- (0,2.2) node[above] {};
-\draw[-Latex, thick] (0,0) -- (2.0,0.2);
-\draw[-Latex, thick] (0,0) -- (0.6,1.8);
-\node at (1.4,1.65) {different angles};
-\node at (1.4,-0.35) {cosine similarity much smaller};
+
+\begin{scope}[xshift=6.1cm]
+\node[paneltitle] at (1.9,3.55) {Different Angles};
+\node[panelsub] at (1.9,3.15) {larger angle, cosine smaller};
+\draw[-Latex, semithick, black!70] (0,0) -- (3.0,0);
+\draw[-Latex, semithick, black!70] (0,0) -- (0,2.8);
+\draw[veca] (0,0) -- (2.35,0.25);
+\draw[vecb] (0,0) -- (0.85,2.15);
+\draw[black!50] (0.7,0) arc[start angle=0,end angle=68,radius=0.7];
+\node[font=\scriptsize, text=black!60] at (0.95,0.52) {$\theta$};
 \end{scope}
-\end{tikzpicture}%
-}
+\end{tikzpicture}
 \caption{Cosine similarity cares about angle, not just length. That makes it useful when vector magnitude reflects scale or confidence but direction reflects role.}
 \label{fig:cosine-angle-not-length}
 \end{figure}
@@ -283,7 +326,7 @@ Embedding neighborhoods are evidence-bearing summaries, not ground-truth meaning
 
 \section{How Representations Are Learned: Supervisory Pressure}
 
-The chapter is strongest when these workflows are understood as different kinds of pressure on the learned space, not as disconnected method names. Different objectives really do produce different reuse profiles. Supervised pretraining often optimizes one label space well and can transfer strongly when the downstream task is close. Self-supervised objectives such as masked prediction, contrastive alignment, and self-distillation instead force the model to preserve context, invariance, or cross-view agreement that may transfer more broadly \citep{bengio2013rep,devlin2019,chen2020simclr,he2020moco,grill2020byol,caron2021dino}. Transfer and adaptation then test how much of that reusable structure actually survives contact with a new task.
+The next question is where reusable structure comes from in the first place. The chapter is strongest when these workflows are understood as different kinds of pressure on the learned space, not as disconnected method names. Different objectives really do produce different reuse profiles. Supervised pretraining often optimizes one label space well and can transfer strongly when the downstream task is close. Self-supervised objectives such as masked prediction, contrastive alignment, and self-distillation instead force the model to preserve context, invariance, or cross-view agreement that may transfer more broadly \citep{bengio2013rep,devlin2019,chen2020simclr,he2020moco,grill2020byol,caron2021dino}. Transfer and adaptation then test how much of that reusable structure actually survives contact with a new task.
 
 \begin{table}[t]
 \centering
@@ -329,7 +372,7 @@ Self-supervised learning creates prediction problems from structure already pres
 \item predicting future segments of time-series or audio data.
 \end{itemize}
 
-The pretext task is not the final goal. It is pressure that teaches invariance, context, continuity, or structure.
+The pretext task is not the final goal. It is pressure that teaches invariance, context, continuity, or structure. Later probe and transfer results are only as good as the pressure that created the representation in the first place.
 
 The exact objective matters. BERT-style masking pressures the model to recover missing language from context, which is why it helped many downstream language tasks after adaptation \citep{devlin2019}. Contrastive predictive coding made the same pressure explicit for sequential data by asking latent states to predict future observations \citep{oord2018cpc}. SimCLR and MoCo use augmentations to define what should count as the same image, so the learned representation preserves object identity while discarding nuisance variation \citep{chen2020simclr,he2020moco}. BYOL and DINO then showed that strong visual representations can also emerge from self-distillation without explicit negative pairs, provided the training dynamics still prevent collapse \citep{grill2020byol,caron2021dino}.
 
@@ -341,24 +384,52 @@ Students do not need to memorize every acronym in that list. The durable lesson 
 \definecolor{c7ssBlue}{RGB}{56,103,170}
 \definecolor{c7ssGreenBg}{RGB}{210,238,220}
 \definecolor{c7ssGreen}{RGB}{26,112,64}
-\resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  ibox/.style={draw=c7ssBlue,  fill=c7ssBlueBg,  rounded corners,
-               align=center, minimum height=1.0cm, minimum width=3.0cm, text=c7ssBlue},
-  obox/.style={draw=c7ssGreen, fill=c7ssGreenBg, rounded corners,
-               align=center, minimum height=1.0cm, minimum width=3.4cm, text=c7ssGreen},
-  arr/.style={-Latex, thick, black!55}
+  sbox/.style={draw=black!55, fill=black!4, rounded corners=4pt,
+               align=center, minimum height=1.1cm, text width=2.3cm,
+               font=\small, line width=0.8pt},
+  mbox/.style={draw=c7ssBlue, fill=c7ssBlueBg, rounded corners=4pt,
+               align=center, minimum height=1.1cm, text width=2.5cm,
+               font=\small, line width=0.8pt},
+  tbox/.style={draw=c7ssGreen, fill=c7ssGreenBg, rounded corners=4pt,
+               align=center, minimum height=1.1cm, text width=2.5cm,
+               font=\small, line width=0.8pt},
+  lossbox/.style={draw=black!60, fill=yellow!8, rounded corners=4pt,
+               align=center, minimum height=1.3cm, text width=2.5cm,
+               font=\small, line width=0.8pt},
+  arr/.style={-Latex, line width=1.1pt, draw=black!65}
 ]
-%% Centres spaced 4.2 cm apart — gap between widest boxes = 4.2 - 3.4 = 0.8 cm
-\node[ibox] (raw)    at (0.0, 0) {raw example};
-\node[ibox] (corr)   at (4.2, 0) {mask / corrupt /\\augment};
-\node[ibox] (enc)    at (8.4, 0) {encoder};
-\node[obox] (target) at (12.6,0) {predict missing part\\or match paired view};
-\draw[arr] (raw)  -- (corr);
-\draw[arr] (corr) -- (enc);
-\draw[arr] (enc)  -- (target);
-\end{tikzpicture}%
-}
+%% ── Left: raw data ─────────────────────────────────────────
+\node[sbox] (raw) at (0,0) {raw example};
+
+%% ── Fork point ──────────────────────────────────────────────
+\coordinate (fork) at (1.8,0);
+\draw[black!65, line width=1.1pt] (raw.east) -- (fork);
+\filldraw[black!55] (fork) circle (2.5pt);
+
+%% ── Top path (model) ───────────────────────────────────────
+\node[mbox] (view) at (4.4, 1.5) {corrupted /\\augmented view};
+\node[mbox] (enc)  at (7.6, 1.5) {encoder $\rightarrow z$};
+\draw[arr] (fork) -- (view.west);
+\draw[arr] (view) -- (enc);
+
+%% ── Bottom path (target) ───────────────────────────────────
+\node[tbox] (target) at (4.4,-1.5) {target /\\paired view};
+\draw[arr] (fork) -- (target.west);
+
+%% ── Right: loss ─────────────────────────────────────────────
+\node[lossbox] (loss) at (9.6, 0) {pretext loss:\\predict or\\compare};
+%% Top path feeds into loss from above
+\draw[-Latex, line width=1.1pt, draw=c7ssBlue]
+    (enc.east) -- (9.6, 1.5) -- (loss.north);
+%% Bottom path feeds into loss from below
+\draw[-Latex, line width=1.1pt, draw=c7ssGreen]
+    (target.east) -- (9.6,-1.5) -- (loss.south);
+
+%% ── Path labels ─────────────────────────────────────────────
+\node[font=\footnotesize\bfseries, c7ssBlue] at (6.0, 2.35) {model path};
+\node[font=\footnotesize\bfseries, c7ssGreen] at (6.0,-2.35) {target path (from the same data)};
+\end{tikzpicture}
 \caption{Self-supervision is not ``learning without targets.'' It is learning from targets created out of the structure already present in the data.}
 \label{fig:selfsupervised-workflow}
 \end{figure}
@@ -384,10 +455,10 @@ for each raw example x:
 \subsection{Autoencoders as Reconstruction-Based Representation Learning}
 
 \begin{definition}[Autoencoder]
-An autoencoder is a model that learns an encoder that compresses an input into a latent representation and a decoder that tries to reconstruct the original input from that latent representation.
+An autoencoder is a model that learns an encoder that maps an input into a latent representation and a decoder that tries to reconstruct the original input from that latent representation. In the standard representation-learning setup, the latent state is smaller or otherwise constrained.
 \end{definition}
 
-The training signal comes from reconstruction. If the model must recover the original input from a smaller or constrained internal state, it cannot simply memorize every detail; it has to keep the information that is most useful for rebuilding the example. That is what makes autoencoders a representation-learning method rather than just a compression trick.
+The training signal comes from reconstruction. When the model must recover the original input from a smaller or constrained internal state, it cannot simply memorize every detail; it has to keep the information that is most useful for rebuilding the example. Under those conditions, reconstruction becomes a representation-learning pressure rather than just a copying exercise.
 
 \begin{mathlens}
 A simple reconstruction objective is
@@ -449,11 +520,11 @@ Multimodal transfer helps when the modalities are tightly aligned, when one moda
 Multimodal transfer fails when the alignment is shallow, when captions or transcripts are generic, or when the downstream task depends on modality-specific detail that the shared space never had to preserve.
 \end{warningbox}
 
-Together, reconstruction and cross-modal alignment show two of the main ways a model can be pressured into reusable structure: by rebuilding what was hidden, or by agreeing across different views of the same thing.
+Together, reconstruction and cross-modal alignment show two of the main ways a model can be pressured into reusable structure: by rebuilding what was hidden, or by agreeing across different views of the same thing. The next step is to ask when that broader pressure actually pays off downstream.
 
 \section{Why Self-Supervision Scales}
 
-The main practical advantage of self-supervision is that unlabeled data is usually much more abundant than carefully labeled data. If the pretraining objective is chosen well, large amounts of raw data can be turned into representational pressure before a downstream label set even exists.
+The main practical advantage of self-supervision is that unlabeled data is usually much more abundant than carefully labeled data. If the pretraining objective is chosen well, large amounts of raw data can be turned into representational pressure before a downstream label set even exists. This section is therefore not making a bigger-is-better claim. It is explaining why reuse-first workflows became practical at all.
 
 This is one of the major reasons the field moved toward pretraining and adaptation. Instead of rebuilding features from scratch for every new task, we can first learn broad reusable structure and then specialize it later.
 
@@ -469,7 +540,7 @@ Contrastive learning is an especially influential self-supervised idea. Two view
 
 \section{Transfer Begins: Pretrain, Probe, Adapt}
 
-Once a representation has been learned, we still need to use it. This is where transfer learning begins.
+The chapter now shifts from how reusable spaces are created to how they are tested. Once a representation has been learned, we still need to use it. This is where transfer learning begins.
 
 \begin{definition}[Transfer Learning]
 Transfer learning is the reuse of knowledge learned on one task, dataset, or objective to improve performance on another task.
@@ -503,26 +574,39 @@ if task_or_domain_shift_is_large:
 \definecolor{c7ptGreen}{RGB}{26,112,64}
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  pbox/.style={draw=c7ptBlue,  fill=c7ptBlueBg,  rounded corners,
-               align=center, minimum height=1.0cm, minimum width=2.8cm, text=c7ptBlue},
-  rbox/.style={draw=c7ptBlue,  fill=c7ptBlueBg,  rounded corners,
-               align=center, minimum height=1.0cm, minimum width=4.2cm, text=c7ptBlue},
-  dbox/.style={draw=c7ptGreen, fill=c7ptGreenBg, rounded corners,
-               align=center, minimum height=1.0cm, minimum width=3.2cm, text=c7ptGreen},
-  arr/.style={-Latex, thick, black!55}
+  pbox/.style={draw=c7ptBlue, fill=c7ptBlueBg, rounded corners=4pt,
+               align=center, minimum height=1.05cm, text width=2.4cm,
+               font=\small, line width=0.8pt},
+  rbox/.style={draw=c7ptBlue, fill=c7ptBlueBg!55, rounded corners=4pt,
+               align=center, minimum height=1.15cm, text width=2.8cm,
+               font=\small, line width=0.8pt},
+  dbox/.style={draw=c7ptGreen, fill=c7ptGreenBg, rounded corners=4pt,
+               align=center, minimum height=1.05cm, text width=2.6cm,
+               font=\small, line width=0.8pt},
+  arr/.style={-Latex, line width=1.1pt, draw=black!60}
 ]
-%% left: pretraining
-\node[pbox] (pre) at (0.0, 0) {pretraining};
-%% centre: shared representation
-\node[rbox] (rep) at (5.2, 0) {shared\\representation};
-%% right column: three adaptation options, 1.5cm row spacing
-\node[dbox] (few)     at (10.8,  1.5) {frozen probe};
-\node[dbox] (partial) at (10.8,  0.0) {partial tuning};
-\node[dbox] (full)    at (10.8, -1.5) {full fine-tuning};
+%% ── Left: pretraining pipeline ──────────────────────────────
+\node[pbox] (pre) at (0.0,0.0) {pretraining};
+\node[rbox] (rep) at (3.8,0.0) {pretrained\\representation};
 \draw[arr] (pre) -- (rep);
-\draw[arr] (rep) -- (few);
-\draw[arr] (rep) -- (partial);
-\draw[arr] (rep) -- (full);
+
+%% ── Fan-out point ───────────────────────────────────────────
+\coordinate (fan) at (6.0,0.0);
+\draw[black!60, line width=1.1pt] (rep.east) -- (fan);
+\filldraw[black!50] (fan) circle (2.5pt);
+
+%% ── Right: adaptation choices ───────────────────────────────
+\node[dbox] (probe)   at (9.0, 1.6) {linear probe\\(encoder frozen)};
+\node[dbox] (partial) at (9.0, 0.0) {partial\\fine-tuning};
+\node[dbox] (full)    at (9.0,-1.6) {full\\fine-tuning};
+\draw[-Latex, line width=1.1pt, draw=c7ptGreen] (fan) -- (probe.west);
+\draw[-Latex, line width=1.1pt, draw=c7ptGreen] (fan) -- (partial.west);
+\draw[-Latex, line width=1.1pt, draw=c7ptGreen] (fan) -- (full.west);
+
+%% ── Annotations ─────────────────────────────────────────────
+\node[font=\footnotesize, black!50, anchor=west] at (10.6, 1.6) {\textit{least change}};
+\node[font=\footnotesize, black!50, anchor=west] at (10.6,-1.6) {\textit{most change}};
+\draw[->, thin, black!35] (10.55, 1.3) -- (10.55,-1.3);
 \end{tikzpicture}%
 }
 \caption{Pretraining and downstream adaptation are separate phases. The main engineering question is how much of the pretrained representation to keep fixed and how much to adapt.}
@@ -553,7 +637,7 @@ This is one of the cleanest habits in the chapter:
 \emph{Probe first when you want to test the representation, not hide it behind a fancy head.}
 \end{center}
 
-If a linear probe performs well, then the representation has already organized the information in a highly usable way. If a very complex downstream model is still required, then the representation may be less mature than it first appeared. A weak probe does not prove the representation is useless. It means the current frozen representation does not make the target easily accessible under a simple readout, which is exactly the diagnostic question we wanted to ask.
+If a linear probe performs well, then the representation has already organized the information in a usable way for that target. If a very complex downstream model is still required, then the representation may be less mature than it first appeared. A weak probe does not prove the representation is useless. It means the current frozen representation does not make the target easily accessible under a simple readout, which is exactly the diagnostic question we wanted to ask.
 
 \begin{mathlens}
 Let $h(x)$ be a frozen representation and let $g_\phi$ be a linear probe trained on top of it. If $g_\phi(h(x))$ performs well, then the target is linearly accessible in the frozen space. That is evidence of reuse, but it does not prove three stronger claims: that the representation is causally organized the way humans describe it, that the signal is robust under distribution shift, or that a nonlinear head could not rescue a weak frozen space. The probe tests accessibility, not truth.
@@ -577,9 +661,9 @@ Use broad reuse-first workflows only when the source representation is plausibly
 
 \section{Probe, Freeze, Partial Tune, or Full Tune?}
 
-The choice of adaptation strategy is not only a computational decision. It is an experimental claim about the quality and fit of the pretrained representation. Each strategy implies a different answer to the question: ``how much of the pretrained representation do I trust for this new task?''
+The previous section argued for probing first. This section names the broader menu of adaptation choices that comes after that first diagnostic. The choice of adaptation strategy is not only a computational decision. It is an experimental claim about the quality and fit of the pretrained representation. Each strategy implies a different answer to the question: ``how much of the pretrained representation do I trust for this new task?''
 
-\textbf{Linear probe (frozen encoder).} Train only a linear head on top of the frozen pretrained features. This strategy makes the strongest claim about the representation: the task-relevant information is already linearly accessible in the frozen space. The probe is also the cleanest diagnostic: if it works well, the representation is genuinely reusable. If it works poorly, you learn that either the representation does not contain the right signals or those signals require a more complex readout.
+\textbf{Linear probe (frozen encoder).} Train only a linear head on top of the frozen pretrained features. This strategy makes the strongest claim about the representation: the task-relevant information is already linearly accessible in the frozen space. The probe is also the cleanest diagnostic: if it works well, the frozen representation is reusable for that target under a simple linear readout. If it works poorly, you learn that either the representation does not contain the right signals or those signals require a more complex readout.
 
 \textbf{Partial fine-tuning (unfreeze top layers).} Allow the later layers of the pretrained network to update while keeping the early layers frozen. This strategy claims that the early-layer representations are general enough to reuse directly, but the later-layer abstractions need task-specific adjustment. The tradeoff is between compute efficiency and the risk of task-specific overfitting in the upper layers.
 
@@ -609,7 +693,7 @@ The judgment rule is to start with the linear probe. If the probe achieves stron
 
 \section{Adaptation Depth: Freeze, Partial Tuning, Full Tuning}
 
-Once a representation is shown to contain useful information, the next question is how much of it should be allowed to move.
+The previous section named the options. This section turns that menu into a decision rule. Once a representation is shown to contain useful information, the next question is how much of it should be allowed to move.
 
 The modern design space is wider than freeze versus full fine-tuning. Gradual-unfreezing strategies such as ULMFiT made this visible early in NLP, and later adapter modules and low-rank updates made the same point at larger scale: teams can specialize a pretrained model while moving only part of it \citep{howard2018ulmfit,houlsby2019adapters,hu2021lora}. These methods can lower compute and preserve more of the original model, but they do not remove the need to show whether the observed gain came from reused representation or from extra task-specific capacity.
 
@@ -687,7 +771,7 @@ Evidence that transfer learning is genuinely helping should include at least one
 
 \section{Attention: Building Context-Dependent Representations}
 
-Representation learning accelerated further when models gained a more flexible way to build context-dependent features. That mechanism is attention, and transformer-style attention made this shift scalable across modalities \citep{vaswani2017}.
+Everything so far has treated reusable representation as a space we can inspect, probe, and adapt. Attention adds a second idea: the representation itself can change with context at prediction time. Representation learning accelerated further when models gained a more flexible way to build context-dependent features. That mechanism is attention, and transformer-style attention made this shift scalable across modalities \citep{vaswani2017}.
 
 \begin{definition}[Attention]
 Attention is a mechanism that computes context-dependent weighted combinations of representations, allowing each element to focus on the most relevant parts of the input.
@@ -705,9 +789,11 @@ In a sentence, a word can attend to previous or later words. In an image, a patc
 
 Before the notation appears, it helps to say the mechanism in plain language. Each token or patch already has a current representation. Attention lets one element ask, ``which other elements are most relevant to me right now, and how much of each should I borrow?'' In that reading, the query is what the current element is looking for, the keys describe what other elements offer, and the values are the information those elements can contribute.
 
-In the transformer formulation, each element has a query vector $q$, key vectors $k_j$, and value vectors $v_j$. The attention weights are computed from the similarity between the query and keys:
+In the transformer formulation, each element has a query vector $q$, key vectors $k_j$, and value vectors $v_j$. The attention weights are computed by normalizing the full list of query-key similarities:
 \[
-\alpha_j = \mathrm{softmax}\left(\frac{q^\top k_j}{\sqrt{d}}\right),
+\mathrm{score}_j = \frac{q^\top k_j}{\sqrt{d}},
+\qquad
+\alpha_j = \frac{\exp(\mathrm{score}_j)}{\sum_\ell \exp(\mathrm{score}_\ell)},
 \qquad
 c = \sum_j \alpha_j v_j.
 \]
@@ -725,35 +811,29 @@ The factor \(\sqrt{d}\) keeps dot-product scores from growing too large as the k
 \centering
 \definecolor{c7attnBlueBg}{RGB}{220,233,251}
 \definecolor{c7attnBlue}{RGB}{56,103,170}
-\resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  tbox/.style={draw=black!60, fill=black!4, rounded corners,
-               align=center, minimum height=0.8cm, minimum width=1.6cm},
-  qbox/.style={draw=c7attnBlue, fill=c7attnBlueBg, rounded corners,
-               align=center, minimum height=0.8cm, minimum width=1.6cm, text=c7attnBlue},
-  cbox/.style={draw=black!60, fill=black!4, rounded corners,
-               align=center, minimum height=0.9cm, minimum width=3.8cm},
-  arr/.style={-Latex, thick, black!65}
+  tbox/.style={draw=black!60, fill=black!3, rounded corners=3pt,
+               align=center, minimum height=0.8cm, text width=1.7cm, text=black},
+  qbox/.style={draw=c7attnBlue!70!black, fill=c7attnBlueBg!80, rounded corners=3pt,
+               align=center, minimum height=0.8cm, text width=1.7cm, text=black},
+  sumbox/.style={draw=black!60, fill=black!2, rounded corners=3pt,
+               align=center, minimum height=0.8cm, text width=2.8cm, text=black},
+  ctxbox/.style={draw=black!65, fill=black!4, rounded corners=3pt,
+               align=center, minimum height=0.9cm, text width=3.0cm, text=black}
 ]
-%% top row: tokens spaced 3.5cm apart
-\node[tbox] (t1) at (0.0, 0) {token 1};
-\node[tbox] (t2) at (3.5, 0) {token 2};
-\node[qbox] (t3) at (7.0, 0) {query token};
-\node[tbox] (t4) at (10.5,0) {token 4};
-%% output box, centred under the group
-\node[cbox] (ctx) at (5.25,-3.2) {context-aware\\representation};
-%% arrows (unlabelled)
-\draw[arr] (t1) -- (ctx);
-\draw[arr] (t2) -- (ctx);
-\draw[arr] (t3) -- (ctx);
-\draw[arr] (t4) -- (ctx);
-%% weight labels placed directly below each token to keep them separated
-\node[font=\footnotesize, black!60] at ( 0.0, -0.85) {low};
-\node[font=\footnotesize, black!60] at ( 3.5, -0.85) {medium};
-\node[font=\footnotesize, c7attnBlue] at ( 7.0, -0.85) {high weight};
-\node[font=\footnotesize, black!60] at (10.5, -0.85) {low};
-\end{tikzpicture}%
-}
+\node[tbox] (t1) at (0.0,1.8) {token 1};
+\node[tbox] (t2) at (2.8,1.8) {token 2};
+\node[qbox] (t3) at (5.6,1.8) {query};
+\node[tbox] (t4) at (8.4,1.8) {token 4};
+\node[sumbox] (sum) at (4.2,0.25) {weighted sum\\$\sum_j \alpha_j v_j$};
+\node[ctxbox] (ctx) at (4.2,-1.55) {context vector};
+
+\draw[-Latex, line width=0.5pt, black!45] (t1.south) -- node[pos=0.45, left, font=\scriptsize, fill=white, inner sep=1pt] {low} (sum.north west);
+\draw[-Latex, line width=0.8pt, black!65] (t2.south) -- node[pos=0.45, left, font=\scriptsize, fill=white, inner sep=1pt] {medium} (sum.north);
+\draw[-Latex, line width=1.2pt, c7attnBlue!85!black] (t3.south) -- node[pos=0.48, right, font=\scriptsize, fill=white, inner sep=1pt, text=black] {high} (sum.north east);
+\draw[-Latex, line width=0.5pt, black!45] (t4.south) -- node[pos=0.45, right, font=\scriptsize, fill=white, inner sep=1pt] {low} (sum.north east);
+\draw[-Latex, semithick, black!65] (sum.south) -- (ctx.north);
+\end{tikzpicture}
 \caption{Attention can be read as weighted averaging over relevant items. The current query does not treat every token or patch equally; it builds a context-specific mixture.}
 \label{fig:attention-weighted-average}
 \end{figure}
@@ -814,24 +894,55 @@ Each row says how one token distributes its attention across the sequence. This 
 
 \section{Why Transformers Matter}
 
-Transformers became important not only because they achieved strong results, but because they offered a general architecture for context-aware representation learning at scale. The same broad mechanism can be used across language, vision, audio, and multimodal systems. CLIP later made the reuse point especially visible: language supervision produced a vision representation that supported strong zero-shot transfer across many image tasks \citep{radford2021clip}.
+This is the bridge from one mechanism to the workflow shift that follows. Transformers became important not only because they achieved strong results, but because they offered a general architecture for context-aware representation learning at scale. The same broad mechanism can be used across language, vision, audio, and multimodal systems. CLIP later made the reuse point especially visible: language supervision produced a vision representation that supported strong zero-shot transfer across many image tasks \citep{radford2021clip}.
 
 The point of this section is not to create a buzzword parade. It is to explain why attention became the dominant vehicle for large-scale reusable representation learning.
 
 \begin{figure}[t]
 \centering
+\definecolor{c7tfBlueBg}{RGB}{220,233,251}
+\definecolor{c7tfBlue}{RGB}{56,103,170}
+\definecolor{c7tfAmberBg}{RGB}{254,237,215}
+\definecolor{c7tfAmber}{RGB}{184,92,16}
+\definecolor{c7tfGreenBg}{RGB}{210,238,220}
+\definecolor{c7tfGreen}{RGB}{26,112,64}
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  box/.style={draw, rounded corners, align=center, minimum width=2.3cm, minimum height=0.8cm, fill=black!4},
-  arrow/.style={-Latex, thick}
+\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
+  inbox/.style={draw=black!55, fill=black!4, rounded corners=4pt,
+                align=center, minimum height=1.1cm, text width=2.4cm,
+                line width=0.8pt},
+  modbox/.style={rounded corners=4pt, align=center, minimum height=1.1cm,
+                 text width=2.6cm, line width=0.8pt},
+  outbox/.style={draw=c7tfGreen, fill=c7tfGreenBg, rounded corners=4pt,
+                 align=center, minimum height=1.1cm, text width=2.6cm,
+                 line width=0.8pt},
+  arr/.style={-Latex, line width=1.1pt, draw=black!60}
 ]
-\node[box] (inp) at (0,0) {tokens / patches};
-\node[box] (attn) at (3.1,0) {self-attention};
-\node[box] (ffn) at (6.2,0) {feed-forward\\update};
-\node[box] (out) at (9.3,0) {contextual\\representations};
-\draw[arrow] (inp) -- (attn);
-\draw[arrow] (attn) -- (ffn);
-\draw[arrow] (ffn) -- (out);
+%% ── Input ───────────────────────────────────────────────────
+\node[inbox] (inp) at (0,0) {tokens /\\patches};
+
+%% ── Transformer block (rounded box) ────────────────────────
+\draw[rounded corners=6pt, draw=c7tfBlue!50, fill=c7tfBlueBg!30,
+      line width=1pt] (2.6,-2.0) rectangle (8.0,2.0);
+\node[font=\small\bfseries, c7tfBlue] at (5.3,1.6) {Transformer block};
+
+%% ── Internal modules ────────────────────────────────────────
+\node[modbox, draw=c7tfBlue, fill=c7tfBlueBg] (attn) at (5.3,0.5)
+    {self-attention};
+\node[modbox, draw=c7tfAmber, fill=c7tfAmberBg] (ffn) at (5.3,-0.9)
+    {feed-forward\\update};
+
+%% ── Output ──────────────────────────────────────────────────
+\node[outbox] (out) at (10.6,0) {contextual\\representations};
+
+%% ── Arrows ──────────────────────────────────────────────────
+\draw[arr] (inp.east) -- (2.6,0) -- (2.6,0.5) -- (attn.west);
+\draw[arr] (attn.south) -- (ffn.north);
+\draw[arr] (ffn.east) -- (8.0,-0.9) -- (8.0,0) -- (out.west);
+
+%% ── Repeat annotation ───────────────────────────────────────
+\node[font=\footnotesize, black!50, anchor=north] at (5.3,-2.3)
+    {\textit{repeat $N$ times}};
 \end{tikzpicture}%
 }
 \caption{At a high level, a transformer block repeatedly does two things: mix information across elements through attention, then transform each contextualized representation further.}
@@ -843,12 +954,11 @@ Transformers matter because they combine flexible context modeling, shared archi
 \end{advancednote}
 
 \section{Foundation Models as a Workflow Shift}
-
 \begin{definition}[Foundation Model]
 A foundation model is a broadly pretrained model intended to support adaptation across many downstream tasks, often across domains or modalities.
 \end{definition}
 
-The defining shift is not just model size. It is workflow. Instead of training one model for one narrow task, a foundation-model workflow usually looks like this:
+The previous sections described a mechanism and an architecture. This section changes level again, from model internals to engineering workflow. The defining shift is not just model size. It is workflow. Instead of training one model for one narrow task, a foundation-model workflow usually looks like this:
 \begin{itemize}[leftmargin=*]
 \item collect broad data,
 \item choose a large-scale pretraining objective,
@@ -883,18 +993,59 @@ Foundation-model workflow & broad data, pretraining, adaptation, and evaluation 
 
 \begin{figure}[t]
 \centering
+\definecolor{c7fmBlueBg}{RGB}{220,233,251}
+\definecolor{c7fmBlue}{RGB}{56,103,170}
+\definecolor{c7fmGreenBg}{RGB}{210,238,220}
+\definecolor{c7fmGreen}{RGB}{26,112,64}
+\definecolor{c7fmAmberBg}{RGB}{254,237,215}
+\definecolor{c7fmAmber}{RGB}{184,92,16}
+\definecolor{c7fmRedBg}{RGB}{254,230,230}
+\definecolor{c7fmRed}{RGB}{180,40,40}
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  box/.style={draw, rounded corners, align=center, minimum width=2.4cm, minimum height=0.8cm, fill=black!4},
-  arrow/.style={-Latex, thick}
+\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
+  pbox/.style={draw=c7fmBlue, fill=c7fmBlueBg, rounded corners=4pt,
+               align=center, minimum height=1.1cm, text width=2.4cm,
+               line width=0.8pt},
+  dbox/.style={draw=c7fmGreen, fill=c7fmGreenBg, rounded corners=4pt,
+               align=center, minimum height=1.1cm, text width=2.2cm,
+               line width=0.8pt},
+  ebox/.style={draw=c7fmAmber, fill=c7fmAmberBg, rounded corners=4pt,
+               align=center, minimum height=1.1cm, text width=2.4cm,
+               line width=0.8pt},
+  arr/.style={-Latex, line width=1.1pt, draw=black!60}
 ]
-\node[box] (data) at (0,0) {broad data};
-\node[box] (pre) at (3.0,0) {pretraining};
-\node[box] (adapt) at (6.0,0) {adaptation};
-\node[box] (eval) at (9.0,0) {evaluation};
-\draw[arrow] (data) -- (pre);
-\draw[arrow] (pre) -- (adapt);
-\draw[arrow] (adapt) -- (eval);
+%% ── Row 1: Pretraining pipeline ─────────────────────────────
+\node[pbox] (data) at (0,0) {broad data};
+\node[pbox] (pre)  at (3.6,0) {pretraining};
+\node[pbox, draw=c7fmBlue, line width=1.2pt, text width=2.6cm]
+    (fm) at (7.4,0) {foundation\\model};
+\draw[arr] (data) -- (pre);
+\draw[arr] (pre) -- (fm);
+
+%% ── Fan-out ─────────────────────────────────────────────────
+\coordinate (fan) at (7.4,-1.2);
+\draw[black!60, line width=1.1pt] (fm.south) -- (fan);
+\filldraw[black!50] (fan) circle (2.5pt);
+
+%% ── Row 2: Adaptation choices ───────────────────────────────
+\node[dbox] (prompt) at (3.6,-2.6) {prompting};
+\node[dbox] (retr)   at (6.6,-2.6) {retrieval};
+\node[dbox] (ft)     at (9.6,-2.6) {fine-tuning};
+\draw[-Latex, line width=1.1pt, draw=c7fmGreen] (fan) -- (prompt.north);
+\draw[-Latex, line width=1.1pt, draw=c7fmGreen] (fan) -- (retr.north);
+\draw[-Latex, line width=1.1pt, draw=c7fmGreen] (fan) -- (ft.north);
+
+%% ── Row 3: Evaluation ──────────────────────────────────────
+\node[ebox, text width=6.0cm] (eval) at (6.6,-4.6)
+    {evaluation: task, robustness, reliability};
+\draw[-Latex, line width=1.1pt, draw=c7fmAmber] (prompt.south) -- (3.6,-4.0) -- (eval.north west);
+\draw[-Latex, line width=1.1pt, draw=c7fmAmber] (retr.south) -- (eval.north);
+\draw[-Latex, line width=1.1pt, draw=c7fmAmber] (ft.south) -- (9.6,-4.0) -- (eval.north east);
+
+%% ── Annotations ─────────────────────────────────────────────
+\node[font=\footnotesize\bfseries, c7fmBlue]  at (3.6, 0.85) {train once};
+\node[font=\footnotesize\bfseries, c7fmGreen] at (11.0,-2.6) {adapt};
+\node[font=\footnotesize\bfseries, c7fmAmber] at (10.4,-4.6) {verify};
 \end{tikzpicture}%
 }
 \caption{Foundation models are better understood as a workflow shift than as a single model class. Broad pretraining is only the beginning; adaptation and evaluation are where many practical failures emerge.}
@@ -922,7 +1073,7 @@ Foundation models create a serious illusion risk. Because they can produce coher
 
 \section{Same Base Model, Different Claims}
 
-Downstream adaptation can take many forms: prompting, instruction tuning, retrieval augmentation, frozen feature extraction, linear probing, parameter-efficient fine-tuning, or full fine-tuning \citep{brown2020,lewis2020rag,houlsby2019adapters,hu2021lora}. These are engineering choices, but they are also epistemic choices. They determine what part of the system is allowed to change, what evidence is available, and what claims become defensible. Retrieval augmentation is especially important because it creates a separate evidence path: part of the answer can now be justified by retrieved documents rather than by the pretrained parameters alone \citep{lewis2020rag}.
+This is the operational consequence of the foundation-model shift. Downstream adaptation can take many forms: prompting, instruction tuning, retrieval augmentation, frozen feature extraction, linear probing, parameter-efficient fine-tuning, or full fine-tuning \citep{brown2020,lewis2020rag,houlsby2019adapters,hu2021lora}. These are engineering choices, but they are also epistemic choices. They determine what part of the system is allowed to change, what evidence is available, and what claims become defensible. Retrieval augmentation is especially important because it creates a separate evidence path: part of the answer can now be justified by retrieved documents rather than by the pretrained parameters alone \citep{lewis2020rag}.
 
 \subsection{Prompting, Retrieval, and Fine-Tuning Solve Different Problems}
 
@@ -967,32 +1118,47 @@ The claim changes with the intervention. A prompting gain often supports a behav
 \definecolor{c7alGreen}{RGB}{26,112,64}
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  bbox/.style={draw=c7alBlue,  fill=c7alBlueBg,  rounded corners,
-               align=center, minimum height=1.0cm, minimum width=4.0cm, text=c7alBlue},
-  lbox/.style={draw=c7alAmber, fill=c7alAmberBg, rounded corners,
-               align=center, minimum height=1.0cm, minimum width=3.2cm, text=c7alAmber},
-  rbox/.style={draw=c7alGreen, fill=c7alGreenBg, rounded corners,
-               align=center, minimum height=1.0cm, minimum width=3.2cm, text=c7alGreen},
-  arr/.style={-Latex, thick, black!55}
+  card/.style={draw=black!50, fill=white, rounded corners=3pt,
+               align=center, minimum height=1.0cm, text width=2.0cm,
+               font=\small, line width=0.7pt}
 ]
-%% top: base model centred over the five options
-\node[bbox] (base) at (7.0, 2.5) {same pretrained\\base model};
-%% bottom row: 3.5cm spacing → 0.3cm gap between 3.2cm-wide boxes
-\node[lbox] (p)    at (0.0, 0) {prompting};
-\node[lbox] (r)    at (3.5, 0) {retrieval\\augmentation};
-\node[rbox] (f)    at (7.0, 0) {frozen features\\or probe};
-\node[rbox] (peft) at (10.5,0) {parameter-efficient\\tuning};
-\node[rbox] (full) at (14.0,0) {full\\fine-tuning};
-\draw[arr] (base) -- (p);
-\draw[arr] (base) -- (r);
-\draw[arr] (base) -- (f);
-\draw[arr] (base) -- (peft);
-\draw[arr] (base) -- (full);
-%% group labels below the two clusters
-\node[c7alAmber, align=center, font=\footnotesize] at (1.75,-1.6)
-  {change task framing\\or accessible evidence};
-\node[c7alGreen, align=center, font=\footnotesize] at (10.5,-1.6)
-  {change the readout\\or model parameters};
+%% ── Top: base model ─────────────────────────────────────────
+\node[draw=c7alBlue, fill=c7alBlueBg, rounded corners=4pt,
+      align=center, minimum height=1.1cm, text width=3.4cm,
+      line width=0.9pt] (base) at (7.0,3.5) {same pretrained\\base model};
+
+%% ── Fan-out ─────────────────────────────────────────────────
+\coordinate (fan) at (7.0,2.2);
+\draw[c7alBlue, line width=1.1pt] (base.south) -- (fan);
+\filldraw[c7alBlue] (fan) circle (2.5pt);
+
+%% ── Left group: framing / evidence ─────────────────────────
+\draw[rounded corners=6pt, draw=c7alAmber, fill=c7alAmberBg!40,
+      line width=0.9pt] (-0.4,-2.2) rectangle (5.6,1.6);
+\node[font=\small\bfseries, c7alAmber] at (2.6,1.1)
+    {change framing / evidence};
+\node[card] (p) at (1.2,-0.3) {prompting};
+\node[card] (r) at (3.9,-0.3) {retrieval\\augmentation};
+
+%% ── Right group: readout / parameters ───────────────────────
+\draw[rounded corners=6pt, draw=c7alGreen, fill=c7alGreenBg!40,
+      line width=0.9pt] (6.2,-2.2) rectangle (14.0,1.6);
+\node[font=\small\bfseries, c7alGreen] at (10.1,1.1)
+    {change readout / parameters};
+\node[card] (f)    at (7.6,-0.3) {frozen\\probe};
+\node[card] (peft) at (10.1,-0.3) {parameter-\\efficient tuning};
+\node[card] (full) at (12.6,-0.3) {full\\fine-tuning};
+
+%% ── Arrows from fan-out to groups ───────────────────────────
+\draw[-Latex, line width=1.1pt, draw=c7alAmber] (fan) -- (2.6,1.6);
+\draw[-Latex, line width=1.1pt, draw=c7alGreen] (fan) -- (10.1,1.6);
+
+%% ── Spectrum arrow ──────────────────────────────────────────
+\draw[->, thin, black!35] (0.0,-2.7) -- (13.6,-2.7);
+\node[font=\footnotesize, black!50, anchor=north west] at (0.0,-2.8)
+    {\textit{less change}};
+\node[font=\footnotesize, black!50, anchor=north east] at (13.6,-2.8)
+    {\textit{more change}};
 \end{tikzpicture}%
 }
 \caption{These are not rungs on one universal ladder. They intervene at different places in the workflow: prompting and retrieval change instructions or evidence, while probes and tuning choices change how much of the learned representation is read out or allowed to move.}
@@ -1009,7 +1175,7 @@ Changing the adaptation method changes the claim you are allowed to make. Always
 
 \section{Chapter Artifact: A Reuse and Adaptation Plan}
 
-By the end of this chapter, the reader should be able to write down not only which pretrained representation or foundation model they want to use, but how they plan to test what is actually being reused and what evidence would justify that claim. The point is to keep reuse claims separate from gains that really come from retrieval, prompting, or downstream tuning.
+By the end of this chapter, the reader should be able to write down not only which pretrained representation or foundation model they want to use, but how they plan to test what is actually being reused and what evidence would justify that claim. The point is to keep reuse claims separate from gains that really come from retrieval, prompting, or downstream tuning. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, the structure diagnosis sheet justified leaving it, and the training report justified the learned-model claim. This chapter's artifact asks a new question: what part of that learned system is reusable, and what evidence would justify saying so?
 
 \begin{table}[t]
 \centering
@@ -1062,7 +1228,7 @@ The mistakes in this section are different surface versions of one deeper error:
 
 \section{Looking Ahead}
 
-This chapter framed AI around reusable representations: embeddings, probes, transfer, attention, and foundation-model workflows. The next chapter grounds those ideas in vision, where invariance and augmentation are easiest to see.
+This chapter framed AI around reusable representations: embeddings, probes, transfer, attention, and foundation-model workflows. The next chapter grounds those ideas in vision, where the reuse question becomes concrete: which visual changes should a model ignore, which should it preserve, and what augmentations or architectures actually encode that judgment?
 
 \begin{chaptersummary}
 \item This chapter answers one question: when is it worth learning a reusable representation instead of solving only one task directly, and how do we know that reusable representation is what is helping?

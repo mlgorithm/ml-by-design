@@ -9,7 +9,7 @@
 \item Produce a sequential design card before making a serious sequential-model claim.
 \end{learninggoals}
 
-The language chapter treated meaning as sequence structure shaped by context and grounding. Audio and time-series data extend that sequential viewpoint into different signal types and operational constraints. Once time enters the problem, examples stop being static records and become evolving processes. That change makes representation, splitting, latency, and leakage part of the modeling claim itself. The chapter culminates in a sequential design card, so the audit stays tied to a reusable design decision rather than remaining a checklist.
+The language chapter treated meaning as sequence structure shaped by context and grounding. Audio and time-series data extend that sequential viewpoint into different signal types and operational constraints. Once time enters the problem, examples stop being static records and become evolving processes. That change makes representation, splitting, latency, and leakage part of the modeling claim itself. The chapter therefore moves in a specific order: fix the decision moment and legal context first, separate the task shapes that sequences can support, choose representations and memory mechanisms that respect that boundary, and only then ask what evaluation and deployment evidence would make the claim honest. The chapter culminates in a sequential design card, so the audit stays tied to a reusable design decision rather than remaining a checklist.
 
 \begin{problemsolvinglens}
 This chapter asks one practical question: at the moment a sequential system must act, what information is actually available, what past context matters, and what evaluation prevents us from cheating through time? The answer drives representation choice, model family, baselines, and deployment realism.
@@ -32,7 +32,7 @@ That question makes sequential modeling different from ordinary tabular predicti
 
 This is why a strong sequential result is not defined only by model accuracy. It is defined by whether the system used only legitimate information at the right time and still performed well.
 
-Keep two running cases in view throughout this chapter. One is a streaming wake-word detector that must fire within a fraction of a second after hearing a target phrase. The other is a one-hour-ahead electricity-demand forecaster for a campus energy system. One consumes audio and the other consumes numeric measurements, but both are governed by the same practical question: what information was really available at the moment a decision had to be made?
+Keep two running cases in view throughout this chapter. One is a streaming wake-word detector that must fire within a fraction of a second after hearing a target phrase. The other is a one-hour-ahead electricity-demand forecaster for a campus energy system. One consumes audio and the other consumes numeric measurements, but both are governed by the same practical question: what information was really available at the moment a decision had to be made? Those two cases also give the chapter its shape: audio makes representation and latency vivid, while forecasting makes horizon, baselines, and backtesting vivid.
 
 \section[Problem-Solving Technique: Prediction-Time Audit]{Problem-Solving Technique:\linebreak Prediction-Time Audit}
 
@@ -55,7 +55,7 @@ Sequential claims should always answer three questions early: what is known at d
 \end{decisionbox}
 
 \begin{practicalnote}
-A compact sequential workflow is: state the decision time and horizon, identify the allowed context and forbidden future information, choose a representation that preserves the relevant time structure, test a chronological baseline, and only then compare model families against the latency budget and drift risks. The audit and the design card are the same procedure at two different levels of detail.
+A compact sequential workflow is: state the decision time and horizon, identify the allowed context and forbidden future information, choose a representation that preserves the relevant time structure, match model memory to that context, test a chronological baseline, and only then compare alternatives against the latency budget and drift risks. That is also the chapter order in miniature. The audit and the design card are the same procedure at two different levels of detail.
 \end{practicalnote}
 
 \begin{example}[Mini Prediction-Time Audit]
@@ -89,7 +89,7 @@ One-hour-ahead demand forecast & top of each hour & past load, calendar, and iss
 \label{tab:prediction-time-two-cases}
 \end{table}
 
-The prediction-time audit is not a technique specific to audio or time-series forecasting. Any task where an action must be taken at a specific moment, using only the information that legally and physically existed at that moment, is a sequential prediction problem governed by the same audit. The chapter uses audio and demand forecasting as its running cases because they contrast well in latency pressure and signal type, but the discipline applies equally to the domains shown in Table~\ref{tab:prediction-time-breadth}.
+The prediction-time audit is not a technique specific to audio or time-series forecasting. Any task where an action must be taken at a specific moment, using only the information that legally and physically existed at that moment, is a sequential prediction problem governed by the same audit. The chapter uses audio and demand forecasting as its running cases because they contrast well in latency pressure and signal type, but the discipline applies equally to the domains shown in Table~\ref{tab:prediction-time-breadth}. This shared audit is what lets the chapter move from two domains into one modeling discipline rather than splitting into unrelated application stories.
 
 \begin{table}[t]
 \centering
@@ -143,7 +143,7 @@ This comparison is the real center of the chapter. The wake-word system fails if
 
 \section{Task Shape Before Model Family}
 
-Before talking about sequence architectures, it helps to ask what kind of output the task really needs.
+Before talking about sequence architectures, it helps to ask what kind of output the task really needs. A transcript, a trigger, an identity judgment, a forecast, and an anomaly alarm do not ask the same question of time.
 
 \subsection{Speech Recognition}
 
@@ -164,6 +164,8 @@ Forecasting predicts future values from information available up to the present.
 \begin{example}[Why Task Shape Comes First]
 An audio stream from a smart home could support at least three different tasks. It could classify the room scene, detect a wake word, or verify that the current speaker is an authorized user. The same raw signal appears in all three cases, but the relevant invariances, latency demands, and evaluation standards are different.
 \end{example}
+
+Once the task shape is fixed, the next question is representational: what view of the sequence preserves the structure that task needs?
 
 \section{Audio as a Representation Problem}
 
@@ -218,19 +220,19 @@ where $x[n]$ is the waveform, $w$ is a local window, and $f$ is a frequency or f
 \begin{mathlens}
 If a window has length $L$ and the step size is $s<L$, then adjacent windows overlap by $L-s$ samples. For example,
 \begin{align*}
-W_t &= (y_{t-L+1},\ldots,y_t), \\
-W_{t+1} &= (y_{t-L+1+s},\ldots,y_{t+1}),
+W_t &= (y_t,\ldots,y_{t+L-1}), \\
+W_{t+s} &= (y_{t+s},\ldots,y_{t+s+L-1}),
 \end{align*}
 so the overlap fraction is \((L-s)/L\). If a random split places one overlapping window in train and the next in test, the test example already contains much of the same raw signal. That is why overlapping windows from one continuous segment should usually stay in the same temporal block or group.
 \end{mathlens}
 
 \subsection{Helpful but Incomplete}
 
-Spectrograms are attractive because they let audio benefit from architectural ideas developed for images. But they also hide structure. Phase information is often compressed or ignored. Windowing can smear sharp events. Reverberation and background noise can distort the display. As elsewhere in the book, the representation is never neutral.
+Spectrograms are attractive because they let audio benefit from architectural ideas developed for images. But they also hide structure. Phase information is often compressed or ignored. Windowing can smear sharp events. Reverberation and background noise can distort the display. As elsewhere in the book, the representation is never neutral. The next section carries the same lesson into forecasting and monitoring, where lags, gaps, and horizons play the role that windows and frequencies played in audio.
 
 \section{Time Series as Evolving Process}
 
-Audio is one kind of sequence. Forecasting and monitoring create another. Here the goal is often to predict future values, detect events, or classify temporal patterns from evolving measurements.
+Audio is one kind of sequence. Forecasting and monitoring create another. Here the goal is often to predict future values, detect events, or classify temporal patterns from evolving measurements. The signal is different, but the teaching move is the same: decide what temporal structure must survive before deciding how to model it.
 
 \subsection{Trend, Seasonality, Lagged Dependence, and Regime Change}
 
@@ -273,7 +275,7 @@ Then
 \hat{y}_{t+1} = 0.2(98) + 0.3(101) + 0.5(103) = 19.6 + 30.3 + 51.5 = 101.4.
 \]
 
-The example is simple on purpose. It shows that sequential prediction begins by deciding what past context matters and how it should enter the prediction. More advanced models learn richer context automatically, but this conditioning logic remains central.
+The example is simple on purpose. It shows that sequential prediction begins by deciding what past context matters and how it should enter the prediction. This is the forecasting counterpart to window choice in audio: both are ways of deciding what local past is allowed to matter. More advanced models learn richer context automatically, but this conditioning logic remains central.
 
 \subsection{Irregular Sampling and Missingness as Signal}
 
@@ -296,7 +298,7 @@ Different answers lead to different designs. Sometimes resampling to hourly or d
 
 \subsection{Horizon Is Part of the Task Definition}
 
-Predicting one step ahead is not the same as predicting a day, a week, or a month ahead. The relevant context, the uncertainty, and the operational meaning all change with the horizon.
+Predicting one step ahead is not the same as predicting a day, a week, or a month ahead. The relevant context, the uncertainty, and the operational meaning all change with the horizon. Once the horizon is fixed, the next question is what kind of memory the model needs in order to carry the right past forward.
 
 \begin{center}
 \emph{Horizon is part of the task definition, not a detail added after modeling.}
@@ -308,7 +310,7 @@ For the campus energy system, a one-hour-ahead forecast can rely heavily on the 
 
 \section{Sequence Models as Memory Choices}
 
-The purpose of a sequential model is not merely to read one item after another. It is to preserve the forms of memory that matter for the task.
+The purpose of a sequential model is not merely to read one item after another. It is to preserve the forms of memory that matter for the task. Architectures enter only after the audit, task shape, representation choice, and horizon are already on the page.
 
 \subsection{Hidden Markov Models and Structured State}
 
@@ -340,7 +342,7 @@ For keyword spotting, the last second of audio may matter most. For electricity 
 
 \section{Evaluation That Respects Time}
 
-This is the chapter's emotional center. Time is one of the easiest ways to fool yourself experimentally.
+This is the chapter's emotional center. Time is one of the easiest ways to fool yourself experimentally. The earlier sections chose representations and memory stories; this section decides whether those choices are being tested honestly.
 
 \subsection{Chronological Splits}
 
@@ -442,7 +444,7 @@ Evidence for a sequential model should answer at least these questions:
 
 \subsection{Backtesting Regimes and Horizon-Specific Claims}
 
-Chronological evaluation still leaves an important choice open: how should the model be rolled forward through time during evaluation? That choice is the backtesting regime, and it should mirror how the system will actually be maintained.
+Chronological evaluation still leaves an important choice open: how should the model be rolled forward through time during evaluation? That choice is the backtesting regime, and it should mirror how the system will actually be maintained. This is where evaluation becomes an operational simulation rather than a single held-out score.
 
 In practice, model selection often uses rolling or walk-forward backtesting rather than a single chronological cut, especially when the deployed system will be retrained repeatedly.
 
@@ -463,7 +465,7 @@ Choose the backtesting regime by asking how the deployed system will actually be
 
 \section{Naive Baselines as Honesty Checks}
 
-Sequential tasks often have deceptively strong simple baselines. In forecasting, predicting that the next value equals the current value can be hard to beat on stable series. In seasonal data, repeating the value from the same time yesterday or last week may be stronger still.
+Sequential tasks often have deceptively strong simple baselines. In forecasting, predicting that the next value equals the current value can be hard to beat on stable series. In seasonal data, repeating the value from the same time yesterday or last week may be stronger still. The companion forecasting demo makes this visible: once the split is honest, a naive rule can recover much of the apparent gain claimed by a more complex model.
 
 \begin{center}
 \emph{In sequential tasks, the first baseline is often not weak at all. It is a realism check.}
@@ -473,7 +475,7 @@ A complicated sequential model that cannot beat a naive baseline under an honest
 
 \section{Deployment Realism: Noise, Latency, and Drift}
 
-A sequential system is not useful just because it is accurate offline. It must also act in time, survive noise, and remain relevant as the process changes.
+A sequential system is not useful just because it is accurate offline. It must also act in time, survive noise, and remain relevant as the process changes. These pressures are not cleanup tasks after modeling. They decide whether the same prediction-time assumptions still hold once the system leaves the notebook.
 
 \subsection{Noise and Channel Variation}
 
@@ -499,7 +501,7 @@ Many sequential deployments are partly monitoring problems. The system must dete
 
 \section{Chapter Artifact: A Sequential Design Card}
 
-By the end of this chapter, the reader should be able to write down not only which sequence model they want to use, but what was truly available at decision time and what evaluation would make the claim honest.
+By the end of this chapter, the reader should be able to write down not only which sequence model they want to use, but what was truly available at decision time and what evaluation would make the claim honest. Earlier artifacts in the book named the decision, the metric, the evaluation plan, the baseline, the structure diagnosis, the training claim, the reuse strategy, the vision deployment constraints, and the language grounding contract. This chapter's card adds the sequential layer: decision time, legal context, backtesting regime, latency, and drift.
 
 \begin{table}[t]
 \centering
@@ -509,7 +511,7 @@ By the end of this chapter, the reader should be able to write down not only whi
 \toprule
 Card field & What must be written clearly \\
 \midrule
-Seven-question focus & Questions 1, 3, 4, 6, and 7: what decision moment matters, what information is really available then, what sequential representation is legal, what evaluation is honest through time, and how latency shapes action \\
+Seven-question focus & Questions 1, 3, 4, 6, and 7: what decision or action moment matters, what information is really available then, what sequential representation is legal, what evaluation is honest through time, and how latency shapes action \\
 Decision time & The moment the system must act or emit a prediction \\
 Horizon & How far into the future the prediction or detection target lies \\
 Allowed context window & What past observations, frames, or tokens are legitimately available \\
@@ -558,7 +560,7 @@ The mistakes in this chapter are surface forms of one deeper error:
 
 \section{Looking Ahead}
 
-This chapter treated sequences as processes, so evaluation had to respect prediction time. The next chapter turns to experiments themselves, because leakage, baselines, and failure analysis decide whether a result means anything.
+This chapter treated sequences as processes, so evaluation had to respect prediction time. The next chapter generalizes that discipline into experiment claims themselves: once the protocol stops cheating through time, we still have to ask what any score actually justifies and what rival explanation survives.
 
 \begin{chaptersummary}
 \item Sequential modeling begins by asking what was known at the decision moment rather than by choosing an architecture by habit.

@@ -9,7 +9,7 @@
 \item Produce a vision design and stress-test card before making a serious vision-model claim.
 \end{learninggoals}
 
-The previous chapter treated reusable representation at a general level. Vision is one of the clearest places to see that logic become operational. Images are not just arrays of pixels to classify. They are measurements shaped by lighting, viewpoint, occlusion, background, sensor choice, and task definition. Those factors determine what a model should ignore, what it must preserve, and what kinds of shortcuts the data may accidentally reward.
+The previous chapter treated reusable representation at a general level. Vision is one of the clearest places to see that logic become operational. Images are not just arrays of pixels to classify. They are measurements shaped by lighting, viewpoint, occlusion, background, sensor choice, and task definition. Those factors determine what a model should ignore, what it must preserve, and what kinds of shortcuts the data may accidentally reward. The chapter follows that logic in order: first decide the output and invariances, then decide what labels and local structure the model must respect, then decide what augmentations and backbones are justified, and finally decide what evidence would make a visual claim trustworthy.
 
 \begin{problemsolvinglens}
 This chapter asks a vision-specific modeling question: which visual variations should count as noise, which should count as signal, and what evidence shows that the model learned the right cue rather than a shortcut? The answer drives architecture, augmentation, transfer, and evaluation choices.
@@ -25,7 +25,7 @@ This is why vision should not begin with architecture names. It should begin wit
 
 Keep one running case in view throughout this chapter: a dashboard-camera pedestrian detector for a low-speed campus shuttle. The detector must work through windshield glare, dusk and night conditions, light rain, partial occlusion, and camera-specific geometry. That single case is useful because it forces the chapter to connect invariance, architecture, augmentation, shortcuts, and deployment-camera realism inside one visual system rather than treating them as disconnected ideas.
 
-That dilemma gives the whole chapter its shape.
+That dilemma gives the whole chapter its shape. First the chapter fixes the output object and the invariance audit, then it clarifies annotation and locality, then it turns to augmentation and transfer, and finally it asks how to distrust benchmark success correctly.
 
 \section{Problem-Solving Technique: Invariance Audit}
 
@@ -53,7 +53,7 @@ Vision performance cannot be interpreted before the invariance audit is clear. A
 \end{decisionbox}
 
 \begin{practicalnote}
-Workflow sketch: start from the task and required output, run the invariance audit, pick the smallest baseline that matches the output shape, add augmentations only for label-preserving variation, then compare a pretrained backbone, a frozen backbone, and fine-tuning on deployment-relevant slices.
+Workflow sketch: start from the task and required output, run the invariance audit, make the annotation policy explicit, pick the smallest baseline that matches the output shape, add augmentations only for label-preserving variation, then compare a pretrained backbone, a frozen backbone, and fine-tuning on deployment-relevant slices.
 \end{practicalnote}
 
 \begin{thinkingtool}
@@ -62,7 +62,7 @@ Workflow sketch: start from the task and required output, run the invariance aud
 
 \section{Task Formulation Before Architecture Depth}
 
-One of the biggest mistakes in vision is to ask ``CNN or transformer?'' before asking what output is actually required.
+One of the biggest mistakes in vision is to ask ``CNN or transformer?'' before asking what output is actually required. This section settles what the system must produce and therefore what kind of evidence later architecture and evaluation need to preserve.
 
 \subsection{Classification}
 
@@ -98,7 +98,7 @@ If \(M\) is the predicted mask and \(G\) the ground-truth mask, two common overl
 \mathrm{Dice}(M,G) &= \frac{2|M\cap G|}{|M|+|G|}.
 \end{aligned}
 \]
-Both reward overlap, but Dice is often more forgiving on very small regions because the doubled intersection gives small objects more influence.
+Both reward overlap, and for a fixed pair of masks Dice is a monotone transform of IoU. In practice people often report both because small foreground regions can make either score move sharply under modest boundary errors.
 \end{mathlens}
 
 \begin{example}[Why Small Masks Are Hard]
@@ -190,15 +190,15 @@ Figure~\ref{fig:vision-street-scene} makes this concrete. Even a simple street i
 %% ─── Panel 3 : Segmentation ──────────────────────────────────────────────
 %% Re-draw the scene with colour-coded regions
 \begin{scope}[xshift=10.0cm]
-  %% sidewalk top — green
+  %% sidewalk top - green
   \fill[c8seg1!40] (0,2.0) rectangle (4.0,3.0);
-  %% road — blue-ish
+  %% road - blue-ish
   \fill[c8seg2]    (0,0.6) rectangle (4.0,2.0);
-  %% crosswalk stripes — amber/tan
+  %% crosswalk stripes - amber/tan
   \foreach \s in {0.55,0.95,1.35,1.75,2.15,2.55,2.95} {
     \fill[c8seg3] (\s,0.62) rectangle (\s+0.28,1.98);
   }
-  %% sidewalk bottom — green
+  %% sidewalk bottom - green
   \fill[c8seg1!40] (0,0.0) rectangle (4.0,0.6);
   \draw[black!30, thin] (0,0) rectangle (4.0,3.0);
   %% legend chips – spaced so labels don't clip
@@ -249,7 +249,7 @@ Model choice follows the output object. Image-level labels suggest a classificat
 
 \subsection{A Running Case: What the Camera Actually Sees}
 
-Suppose the campus shuttle uses a forward-facing dashboard camera mounted low behind the windshield. For the rest of this chapter, assume the real task is \emph{pedestrian detection}, not scene classification, because the system must know where the person is rather than only whether a person is somewhere in the frame.
+Suppose the campus shuttle uses a forward-facing dashboard camera mounted low behind the windshield. For the rest of this chapter, assume the real task is \emph{pedestrian detection}, not scene classification, because the system must know where the person is rather than only whether a person is somewhere in the frame. That one running case will now anchor the rest of the chapter: annotation policy, locality assumptions, augmentation choices, shortcut hypotheses, and deployment slices all have to answer to the same detector.
 
 That detail matters because the camera is not neutral. A low-mounted dashboard camera sees glare from the glass, reflections from the dashboard, raindrops and smear marks on the windshield, seasonal shadows, and strong scale changes as pedestrians move from far away to very close. A benchmark image can therefore be visually clean while still being a weak proxy for deployment. The invariance audit is already doing work here: small horizontal shifts, mild lighting changes, and modest blur should usually preserve the label, while heavy occlusion, extreme darkness, or a viewpoint change that makes the person unresolvable may change what the system can reliably output.
 
@@ -263,7 +263,7 @@ For image sequences or camera data, avoid random splits that put near-duplicate 
 
 \section{Annotation Ontology and Label Ambiguity}
 
-Every vision dataset rests on an annotation policy that defines, sometimes implicitly, which objects count, what counts as an occurrence, and how annotators should resolve ambiguous cases. That policy is a modeling decision. It shapes the label space, and therefore the task, before any image is fed to any model.
+After the output object is fixed, the next question is what the labels actually mean. Every vision dataset rests on an annotation policy that defines, sometimes implicitly, which objects count, what counts as an occurrence, and how annotators should resolve ambiguous cases. That policy is a modeling decision. It shapes the label space, and therefore the task, before any image is fed to any model.
 
 \textbf{What counts as an object?} For the pedestrian-detector running case, the annotation policy must decide whether a person seen through a store window counts. Whether a person behind a fence counts. Whether a headless torso at the image boundary counts. Whether a person with their back turned counts. Different policies on these questions produce different label sets, and a model trained under one policy may behave differently from a model trained under another, even on the same raw images.
 
@@ -285,7 +285,7 @@ Images are often described as arrays of pixels, but that description is too weak
 
 This is the core educational point. Vision is hard because raw measurements do not come with meaning attached. A model must infer edges, parts, shapes, textures, and object relationships from those measurements. The real challenge is to build internal descriptions that remain useful under translation, clutter, lighting change, background change, and viewpoint variation.
 
-Classical computer vision relied heavily on hand-designed features: edges, corners, texture histograms, local descriptors, and shape cues. Those pipelines remain conceptually important because they reveal what practitioners once thought stable visual structure looked like. Deep learning changed the field not by making structure irrelevant, but by making feature extraction itself learnable.
+Classical computer vision relied heavily on hand-designed features: edges, corners, texture histograms, local descriptors, and shape cues. Those pipelines remain conceptually important because they reveal what practitioners once thought stable visual structure looked like. Deep learning changed the field not by making structure irrelevant, but by making feature extraction itself learnable. The next section gives the chapter's first architectural answer to that problem: ask the same local question across the image instead of treating every pixel position as unrelated.
 
 \section{Convolution as a Repeated Local Question}
 
@@ -293,7 +293,7 @@ Classical computer vision relied heavily on hand-designed features: edges, corne
 A convolutional layer applies a small learnable filter across an image, producing a feature map whose values indicate how strongly the filter matches local patterns at different positions.
 \end{definition}
 
-The right headline for convolution is simple:
+The right headline for convolution is simple. It is also the first concrete architectural response to the invariance audit:
 
 \begin{center}
 \emph{Convolution matters because vision is local before it is global.}
@@ -327,7 +327,7 @@ If a vertical edge matters on the left side of an image, it probably matters on 
 \item a built-in bias toward detecting the same local pattern at multiple locations.
 \end{itemize}
 
-This does not make a convolutional network perfectly location-invariant, but it moves the model in that direction and makes it far more compatible with image structure than a fully unstructured dense network on raw pixels.
+This does not make a convolutional network perfectly location-invariant. Weight sharing mainly gives translation-equivariant local detectors, and later operations such as pooling can add partial invariance. Even so, the architecture is far more compatible with image structure than a fully unstructured dense network on raw pixels.
 
 \subsection{Worked Example: Detecting a Vertical Edge}
 
@@ -366,7 +366,7 @@ If the same vertical edge appears at several positions in the image, the feature
 
 \section{Hierarchy and Approximate Invariance}
 
-Each neuron in a convolutional network does not usually see the whole image at once. It sees a local region called its receptive field. As layers stack, receptive fields grow. Early layers may respond to edges and textures, while later layers may integrate those into parts and larger shapes.
+Each neuron in a convolutional network does not usually see the whole image at once. It sees a local region called its receptive field. As layers stack, receptive fields grow. Early layers may respond to edges and textures, while later layers may integrate those into parts and larger shapes. This is where the chapter moves from local detectors to partial robustness: architecture can help with small shifts, but it does not settle the invariance question by itself.
 
 This is one reason deep vision models are hierarchical:
 \begin{itemize}[leftmargin=*]
@@ -402,7 +402,7 @@ Convolution is usually equivariant, not invariant. That is fine for detection an
 
 \section{Augmentation as a Label-Preserving Claim}
 
-Augmentation is not just a bag of tricks for improving leaderboard performance. It is an explicit claim about which transformations should preserve the label.
+If convolution and pooling give an architectural bias toward useful local structure, augmentation states the same judgment at the data level. Augmentation is not just a bag of tricks for improving leaderboard performance. It is an explicit claim about which transformations should preserve the label.
 
 Common examples include:
 \begin{itemize}[leftmargin=*]
@@ -455,7 +455,7 @@ Before finalizing an augmentation pipeline, write down the claim for each augmen
 
 \section{Modern Visual Backbones and Transfer}
 
-Convolutional networks were dominant in vision for many years because their inductive biases fit images well. More recently, transformers and hybrid architectures also became important, especially when pretrained at scale. The high-level lesson from Chapter 6 still applies: once a model learns a strong visual representation, many downstream tasks can reuse it.
+Convolutional networks were dominant in vision for many years because their inductive biases fit images well. More recently, transformers and hybrid architectures also became important, especially when pretrained at scale. The high-level lesson from the previous chapter still applies: once a model learns a strong visual representation, many downstream tasks can reuse it. But backbone choice only becomes meaningful after the task, annotation policy, and invariance claims are already clear.
 
 Pretrained visual backbones often learn reusable low-level and mid-level features such as edges, textures, contours, shapes, and object-part relationships. This is why transfer learning became so effective in vision long before many students encountered large language models.
 
@@ -465,7 +465,7 @@ In applied vision work, training from scratch should not be the default assumpti
 
 \section{Shortcut Learning, Robustness, and Failure Analysis}
 
-This section is the emotional center of the chapter.
+The chapter now turns from building the visual system to distrusting it correctly. This section is the emotional center of the chapter.
 
 \begin{center}
 \emph{A vision model may look competent because the dataset made the shortcut useful.}
@@ -508,7 +508,7 @@ Night rain, familiar camera & 0.53 \\
 Night rain, unseen dashboard camera & 0.44 \\
 \bottomrule
 \end{tabular}
-\caption{A slice breakdown can show that the apparent visual concept is partly a crossing-and-camera concept rather than a pedestrian concept.}
+\caption{A slice breakdown can reveal a shortcut hypothesis, but these slices still confound markings, illumination, and camera source rather than isolating one cause cleanly.}
 \label{tab:vision-slice-breakdown}
 \end{table}
 
@@ -573,9 +573,9 @@ Night rain, unseen dashboard camera & 0.44 \\
 \label{fig:vision-shortcut-slices}
 \end{figure}
 
-The overall benchmark score might still look respectable, especially if the test distribution resembles the daytime training distribution. But Table~\ref{tab:vision-slice-breakdown} tells a different story. The detector loses much more performance when crossing markings disappear, illumination worsens, and the camera changes. That is exactly the pattern we would expect if the model has partly learned background and acquisition shortcuts instead of robust pedestrian evidence.
+The overall benchmark score might still look respectable, especially if the test distribution resembles the daytime training distribution. But Table~\ref{tab:vision-slice-breakdown} tells a different story. The detector loses much more performance when crossing markings disappear, illumination worsens, and the camera changes. Because several factors move together, this table does not identify the cause. It does support a shortcut hypothesis: background or acquisition cues may be carrying part of the signal instead of robust pedestrian evidence.
 
-The right claim is therefore not ``the model fails everywhere.'' It is narrower and more useful: the detector appears competent on the familiar camera-and-crossing regime but is not yet reliable across the deployment conditions that matter. That claim leads to better next steps, such as collecting non-crossing positives, holding out camera sources by design, and reviewing night failures frame by frame instead of celebrating one aggregate score.
+The right claim is therefore not ``the model fails everywhere,'' and it is also not ``crossing paint is definitely the cause.'' It is narrower and more useful: the detector appears competent on the familiar camera-and-crossing regime but is not yet reliable across the deployment conditions that matter. That claim leads to better next steps, such as collecting non-crossing positives, holding out camera sources by design, and reviewing night failures frame by frame instead of celebrating one aggregate score.
 
 \begin{practicalnote}
 Shortcut diagnosis usually comes from slice design, source breakdowns, and failure review rather than from one dramatic heatmap. If a visual concept matters, evaluate it under the backgrounds, cameras, and conditions that might tempt the model to use something easier.
@@ -609,7 +609,7 @@ Write down the annotation policy before training. In vision, label noise often c
 
 \section{Robustness by Nuisance-Factor Stress Tests}
 
-Robustness evaluation should be organized around nuisance factors: properties of the input that should not change the correct label but that vary across deployment conditions. Naming the factors first makes the stress tests concrete and the coverage gaps visible.
+This section converts shortcut suspicion into a test plan. Robustness evaluation should be organized around nuisance factors: properties of the input that should not change the correct label but that vary across deployment conditions. Naming the factors first makes the stress tests concrete and the coverage gaps visible.
 
 \textbf{Naming the nuisance.} For the pedestrian-detector case, the relevant nuisance factors include lighting level (daylight, dusk, night, artificial illumination), weather and precipitation (dry, wet, fog, rain on the windshield), motion blur (from the vehicle or the pedestrian), camera-specific artifacts (compression, rolling shutter, chromatic aberration), and distance-related scale change. For a medical imaging classifier, the nuisance factors include scanner model, acquisition protocol, patient position, image compression, and contrast agent.
 
@@ -642,7 +642,7 @@ Unfamiliar campus zone & Background shortcut does not transfer & Out-of-area hel
 
 \section{Deployment-Camera Realism}
 
-Vision systems inherit the acquisition process. If the benchmark images come from one camera and deployment images come from another, the task has changed even if the object categories have not. Camera height changes object geometry. Lens choice changes distortion. Compression changes texture. Exposure changes what is visible at night. Dirt, rain, glare, and rolling shutter all affect the evidence the model receives.
+Many of the chapter's earlier concerns collapse into one practical rule here: the sensor is part of the task. Vision systems inherit the acquisition process. If the benchmark images come from one camera and deployment images come from another, the task has changed even if the object categories have not. Camera height changes object geometry. Lens choice changes distortion. Compression changes texture. Exposure changes what is visible at night. Dirt, rain, glare, and rolling shutter all affect the evidence the model receives.
 
 For the running pedestrian-detector case, a training set collected from public road datasets may still be an imperfect proxy for the actual shuttle camera. The shuttle may sit lower, use a wider lens, record at a different frame rate, and see more campus-specific lighting and pedestrian behavior. A system that looks strong on benchmark road scenes may therefore still be weak on the real sensor pipeline.
 
@@ -669,7 +669,7 @@ This matters because the rest of the chapter is about evidence quality. A salien
 
 \section{Chapter Artifact: A Vision Design and Stress-Test Card}
 
-By the end of this chapter, the reader should be able to produce a one-page design and stress-test card before making a serious vision claim.
+By the end of this chapter, the reader should be able to produce a one-page design and stress-test card before making a serious vision claim. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, the structure diagnosis sheet justified leaving it, the training report justified the learned-model claim, and the reuse-and-adaptation plan clarified what transfer could legitimately explain. This card adds the vision-specific layer: what the camera sees, what variation should be ignored, what shortcuts are likely, and what slices must be passed before a benchmark result means anything operational.
 
 \begin{table}[t]
 \centering
@@ -716,7 +716,7 @@ For a pedestrian detector on dashboard-camera footage, a sensible card would rea
 
 \section{Looking Ahead}
 
-This chapter grounded representation learning in vision: invariance, locality, augmentation, shortcut learning, and camera realism. The next chapter shifts to language, where meaning depends heavily on context and the basic unit is a token sequence rather than a pixel grid.
+This chapter grounded representation learning in vision: invariance, locality, augmentation, shortcut learning, and camera realism. The next chapter keeps the same methodological discipline but changes the source of difficulty. Instead of asking which visual variation should be ignored, it asks which linguistic context must be preserved and when external grounding is needed before fluent output can be trusted.
 
 \begin{chaptersummary}
 \item This chapter answers one question: which visual variations should the model ignore, which must it preserve, and what evidence shows that it learned the right cue rather than a shortcut?

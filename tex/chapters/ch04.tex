@@ -12,11 +12,11 @@
 
 The previous chapter ended with a question rather than a conclusion. If a careful linear baseline fails, what kind of structure is missing? This chapter answers that question.
 
-The answer is not always ``use a more complicated model.'' The better question is structural. Sometimes the missing structure is conditional logic: different rules apply in different regions, and a single weighted sum is too rigid. Sometimes the missing structure is local geometry: nearby cases should inform one another, so distance is more meaningful than one global score. Sometimes the problem is unlabeled organization: there is no target yet, and the right question is how the data groups or compresses itself.
+The answer is not always ``use a more complicated model.'' The better question is structural. Sometimes the missing structure is conditional logic: different rules apply in different regions, and a single weighted sum is too rigid. Sometimes the missing structure is local geometry: nearby cases should inform one another, so distance is more meaningful than one global score. Sometimes the problem is unlabeled organization: there is no target yet, and the right question is how the data groups or compresses itself. The chapter's job is not to rank methods by prestige. It is to classify failure patterns well enough that the next move becomes principled.
 
 This chapter is therefore the book's structure-diagnosis chapter. It should not be read as a bundle of classical methods. It should be read as one diagnostic with three answers.
 
-The chapter's reusable deliverable is a structure diagnosis sheet. Keep that target in view: the point is to make the failure pattern, the structural hypothesis, and the next justified family explicit before changing models.
+The chapter's reusable deliverable is a structure diagnosis sheet. Keep that target in view: the point is to make the failure pattern, the structural hypothesis, and the next justified family explicit before changing models. By the end of the chapter, the reader should be able to say not just what method comes next, but what evidence made that choice defensible.
 
 \begin{problemsolvinglens}
 When a linear baseline fails, ask what kind of missing structure the failure suggests. Does the task need conditional thresholds and interactions, local similarity, or unlabeled organization? The methods in this chapter are direct answers to that question.
@@ -44,6 +44,8 @@ The opening question of the chapter should therefore be stated brutally clearly:
 \begin{center}
 \emph{When the linear baseline fails, is the missing structure mainly conditional thresholds and interactions, local similarity, or unlabeled organization?}
 \end{center}
+
+Everything that follows should be read as one answer to that question.
 
 \section{A Structural Map Before the Methods}
 
@@ -128,7 +130,7 @@ No labels; seek grouping or compression & Clustering, PCA & Organize or compress
 \label{tab:method-selection}
 \end{table}
 
-The wrong version of this reasoning is method shopping: trying several model families in sequence and reporting the one with the best number, with no explanation of why that family should work. The right version names the structural mismatch first and then selects a method specifically because it addresses that mismatch. That discipline makes model choice defensible and keeps experiments interpretable.
+The wrong version of this reasoning is method shopping: trying several model families in sequence and reporting the one with the best number, with no explanation of why that family should work. The right version names the structural mismatch first and then selects a method specifically because it addresses that mismatch. That discipline makes model choice defensible and keeps experiments interpretable. It also helps rule methods out for good reasons instead of trying everything indiscriminately.
 
 \section{Trees: Conditional Logic and Region-Specific Rules}
 
@@ -140,17 +142,17 @@ The wrong version of this reasoning is method shopping: trying several model fam
 \definecolor{c4regB}{RGB}{254,237,215}
 \definecolor{c4regC}{RGB}{210,238,220}
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[font=\small, scale=0.85, every node/.style={transform shape}]
+\begin{tikzpicture}[font=\small, scale=1.1, every node/.style={transform shape}]
 %% Panel A: one linear separator
 \begin{scope}
   \draw[->,black!70] (0,0) -- (4.2,0) node[right] {feature 1};
-  \draw[->,black!70] (0,0) -- (0,4.2) node[above] {feature 2};
+  \draw[->,black!70] (0,0) -- (0,4.2) node[above right] {feature 2};
   \filldraw[fill=c4cls1,draw=c4cls1] (0.9,0.9) circle (2pt);
   \filldraw[fill=c4cls1,draw=c4cls1] (3.2,3.2) circle (2pt);
   \draw[c4cls2,thick] (0.9,3.2) circle (2.5pt);
   \draw[c4cls2,thick] (3.2,0.9) circle (2.5pt);
   \draw[black!60,thick] (0.5,3.7) -- (3.7,0.5);
-  \node[black!70, font=\small\bfseries] at (2.1,4.55) {one weighted sum};
+  \node[black!70, font=\small\bfseries] at (2.1,5.0) {one weighted sum};
 \end{scope}
 %% Panel B: depth-2 tree regions
 \begin{scope}[xshift=6.2cm]
@@ -158,18 +160,18 @@ The wrong version of this reasoning is method shopping: trying several model fam
   \fill[c4regB] (0,0)   rectangle (2.1,2.1);
   \fill[c4regC] (2.1,0) rectangle (4.2,4.2);
   \draw[->,black!70] (0,0) -- (4.2,0) node[right] {feature 1};
-  \draw[->,black!70] (0,0) -- (0,4.2) node[above] {feature 2};
+  \draw[->,black!70] (0,0) -- (0,4.2) node[above right] {feature 2};
   \filldraw[fill=c4cls1,draw=c4cls1] (0.9,0.9) circle (2pt);
   \filldraw[fill=c4cls1,draw=c4cls1] (3.2,3.2) circle (2pt);
   \draw[c4cls2,thick] (0.9,3.2) circle (2.5pt);
   \draw[c4cls2,thick] (3.2,0.9) circle (2.5pt);
   \draw[black!50,thick] (2.1,0.3) -- (2.1,3.9);
   \draw[black!50,thick] (0.3,2.1) -- (2.1,2.1);
-  \node[black!70, font=\small\bfseries] at (2.1,4.55) {depth-2 tree};
+  \node[black!70, font=\small\bfseries] at (2.1,5.0) {depth-2 tree};
 \end{scope}
 \end{tikzpicture}%
 }
-\caption{The same 2D dataset can defeat a single linear separator and still be easy for a shallow tree. The structural difference is global score versus region-specific rules.}
+\caption{The same 2D dataset can defeat a single linear separator and still invite shallow, region-specific tree rules. The structural difference is global score versus local branching; additional splits can refine the partition further.}
 \label{fig:linear-vs-tree}
 \end{figure}
 
@@ -177,7 +179,7 @@ The wrong version of this reasoning is method shopping: trying several model fam
 A decision tree is a model that predicts by recursively partitioning the feature space. Each internal node asks a question about the input, each branch corresponds to an answer, and each leaf produces a prediction.
 \end{definition}
 
-The right headline for trees is not merely ``nonlinear model.'' It is this: a tree is a model for conditional logic.
+The right headline for trees is not merely ``nonlinear model.'' It is this: a tree is a model for conditional logic. The reader should picture conditions and regions, not coefficients with a more complicated curve wrapped around them.
 
 The simplest mental model is a flowchart. A tree starts at the root and repeatedly asks questions such as:
 \begin{itemize}[leftmargin=*]
@@ -425,7 +427,7 @@ This is where Chapter 3 returns. A tree that keeps improving training accuracy i
 \definecolor{c4trainBlue}{RGB}{56,103,170}
 \definecolor{c4valAmber}{RGB}{184,92,16}
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=0.9cm,y=3.0cm,font=\small]
+\begin{tikzpicture}[x=0.9cm,y=4.2cm,font=\small]
   \draw[->,black!70] (0,0) -- (6.6,0) node[right] {tree depth};
   \draw[->,black!70] (0,0) -- (0,1.1) node[above] {accuracy};
   \foreach \x/\lbl in {1/1,2/2,3/3,4/4,5/5,6/6}
@@ -435,8 +437,8 @@ This is where Chapter 3 returns. A tree that keeps improving training accuracy i
   \draw[c4valAmber,thick]
     plot[smooth] coordinates {(1,0.74)(2,0.82)(3,0.86)(4,0.84)(5,0.80)(6,0.76)};
   \draw[black!30,dashed] (3,0) -- (3,0.9);
-  \node[c4trainBlue, font=\small\bfseries, anchor=west] at (5.0,0.99) {training};
-  \node[c4valAmber,  font=\small\bfseries, anchor=west] at (4.8,0.78) {validation};
+  \node[c4trainBlue, font=\small\bfseries, anchor=south west] at (6.1,1.0) {training};
+  \node[c4valAmber,  font=\small\bfseries, anchor=north west] at (6.1,0.74) {validation};
   \node[align=center, font=\footnotesize, black!60] at (3.6,0.24) {prune or stop\\near here};
 \end{tikzpicture}%
 }
@@ -450,7 +452,7 @@ A single decision tree is often unstable. Small changes in the data can produce 
 
 \section{From Single Trees to Ensembles: Same Structure, More Stability}
 
-Single trees are easy to understand, but they are often noisy and high-variance models. Ensemble methods do not replace tree logic. They stabilize or strengthen it.
+Single trees are easy to understand, but they are often noisy and high-variance models. Once the tree story is clear, the next question is not new structure but stability. Ensemble methods do not replace tree logic. They stabilize or strengthen it.
 
 \begin{table}[t]
 \centering
@@ -473,7 +475,7 @@ Boosted trees & Trees trained sequentially to correct earlier errors & Often ver
 
 A single decision tree is a low-bias model: given enough depth it can represent almost any boundary in its training data. But it is also high-variance. A small change in the training sample, perhaps a few swapped examples, can produce an entirely different root split, different branches, and a different story about what matters. The tree reacts strongly to the particular accidents of the data it saw.
 
-Averaging many independent trees does not change each tree's bias—each one is still fitting the same underlying problem. But it does reduce variance. Predictions that fluctuate differently across trees tend to cancel out in the average, leaving behind the stable signal that most trees agree on.
+Averaging many independent trees does not change each tree's bias---each one is still fitting the same underlying problem. But it does reduce variance. Predictions that fluctuate differently across trees tend to cancel out in the average, leaving behind the stable signal that most trees agree on.
 
 Think of it this way: one panelist's opinion about whether a student is at risk is noisy and idiosyncratic. The average of fifty panelists who independently reviewed the same evidence is far more reliable. Their individual errors are uncorrelated enough to wash out, and the shared signal survives.
 
@@ -575,7 +577,7 @@ Suppose a training set has a systematic labeling error: all examples from a part
 %% ---- Bagging panel ----
 \begin{scope}
   \node[black!70, font=\small\bfseries] at (3.0, 2.2) {Bagging / random forest};
-  %% Three parallel samples — spacing 2.5cm so boxes (2.0cm wide) never touch
+  %% Three parallel samples - spacing 2.5cm so boxes (2.0cm wide) never touch
   \node[bagbox] (sample1) at (0.5, 0.8) {sample 1};
   \node[bagbox] (sample2) at (3.0, 0.8) {sample 2};
   \node[bagbox] (sample3) at (5.5, 0.8) {sample 3};
@@ -625,7 +627,7 @@ def majority_vote(votes):
     return max(counts, key=counts.get)
 
 def forest_predict(trees, example):
-    # Each tree is a callable that returns a class label
+    # Each tree is an object with a .predict() method
     votes = [tree.predict(example) for tree in trees]
     return majority_vote(votes)
 
@@ -652,12 +654,12 @@ Boosting takes a different approach. Instead of averaging many independent trees
 Boosting is powerful, but it also requires careful tuning. If the trees are too strong or the sequence is pushed too far, the ensemble can still overfit. The educational point is that ensembles improve trees not by abandoning recursive partitioning, but by controlling how many trees are combined and how they share the work.
 
 \begin{example}[Structured Ensembles in Weather Forecasting]
-NOAA-supported work on storm-scale severe-weather guidance has compared tree ensembles with logistic baselines in the Warn-on-Forecast setting \citep{flora2021}. That is a good Chapter 5 example because the data is structured, the interactions are real, and the ensemble story is not hype-driven. The model family is chosen because the problem structure rewards it.
+NOAA-supported work on storm-scale severe-weather guidance has compared tree ensembles with logistic baselines in the Warn-on-Forecast setting \citep{flora2021}. That is a good structured-ensemble example because the data is structured, the interactions are real, and the ensemble story is not hype-driven. The model family is chosen because the problem structure rewards it.
 \end{example}
 
 \section{Margin-Based Classification: Support Vector Machines}
 
-Trees handle region-specific logic. Nearest neighbors handle local similarity. Margin-based classification handles a different geometric story: the classes already look roughly linearly separable in the current representation, and the best separator is the one that stays as far as possible from the nearest training points.
+Trees handle region-specific logic. Nearest neighbors handle local similarity. Margin-based classification handles a different geometric story: the classes already look roughly linearly separable in the current representation, and the best separator is the one that stays as far as possible from the nearest training points. In that sense, SVMs are the geometric continuation of the global-separator idea from the linear baseline, but with a stricter robustness preference.
 
 \begin{definition}[Support Vector Machine]
 A support vector machine is a classifier that chooses a separating hyperplane with the largest margin between classes. When perfect separation is not realistic, the soft-margin version allows some violations and penalizes them.
@@ -735,6 +737,8 @@ That is why one sentence in this section matters more than any formula:
 \begin{center}
 \emph{Distance is the real model.}
 \end{center}
+
+Defending a nearest-neighbor result therefore means defending the representation and similarity rule together.
 
 For $k$-nearest neighbors, a new point is compared to the training examples, the $k$ closest examples are identified, and the prediction is based on those neighbors. In classification, this is often a majority vote. In regression, it is often an average of target values.
 
@@ -881,17 +885,17 @@ As the number of features grows, distances often become less informative. Many p
 \definecolor{c4distBlue}{RGB}{56,103,170}
 \definecolor{c4distAmber}{RGB}{184,92,16}
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1.3cm, y=3.0cm, font=\small]
+\begin{tikzpicture}[x=1.3cm, y=4.2cm, font=\small]
   \draw[->,black!70] (0,0) -- (4.8,0) node[right] {dimension};
   \draw[->,black!70] (0,0) -- (0,1.15) node[above] {distance spread};
   %% Descending curve: high spread at low dim, low spread at high dim
   \draw[c4distBlue,thick]
     plot[smooth] coordinates {(0.4,1.0)(1.2,0.80)(2.0,0.58)(3.0,0.36)(3.8,0.22)(4.4,0.14)};
-  %% Annotation placed in top-right clear area, well above the curve
-  \node[align=left, font=\footnotesize, c4distAmber, anchor=north west] at (2.2,1.05)
+  %% Annotation placed top-right, well above the curve
+  \node[align=left, font=\footnotesize, c4distAmber, anchor=south west] at (2.6,1.0)
     {nearest and farthest\\points become\\less distinguishable};
-  %% Arrow from annotation down to curve (curve at ~x=2.0, y=0.58)
-  \draw[->,thin,c4distAmber] (2.55,0.72) -- (2.2,0.58);
+  %% Arrow from annotation down to curve
+  \draw[->,thin,c4distAmber] (2.6,1.0) -- (2.1,0.60);
 \end{tikzpicture}%
 }
 \caption{The curse-of-dimensionality intuition is not that all distances become large, but that they become less discriminative. ``Nearest'' stops meaning much if every point is similarly far away.}
@@ -912,7 +916,7 @@ This warning also creates a natural bridge forward. Later chapters on learned re
 
 So far the chapter has still assumed labeled tasks. Trees and nearest neighbors answer supervised prediction problems. The unsupervised part of the chapter changes the question itself.
 
-Now the question is no longer ``what label should I predict?'' It is closer to ``what organization or lower-dimensional summary is worth inspecting in the data I have?'' That shift matters. It is one of the chapter's biggest intellectual moves.
+Now the question is no longer ``what label should I predict?'' It is closer to ``what organization or lower-dimensional summary is worth inspecting in the data I have?'' That shift matters. It is one of the chapter's biggest intellectual moves. The model is no longer trying to predict a labeled outcome. It is trying to produce a useful summary of structure.
 
 \begin{sanitycheck}
 When labels are absent, ask what counts as evidence. For clustering, check stability under resampling, initialization, and small scaling changes. For PCA, check whether the compressed view preserves enough variation or reduces reconstruction error enough to justify the loss of detail. If the structure is unstable or unhelpful for the downstream question, treat it as exploratory rather than factual.
@@ -1085,7 +1089,7 @@ Rerun clustering after changing feature scaling, random initialization, or a sma
 
 A clustering algorithm produces a partition. That partition is geometrically defined by the algorithm's notion of similarity, the number of clusters chosen, the initialization, and the features provided. None of those choices are neutral, and none of them guarantee that the resulting groups correspond to anything meaningful in the world.
 
-Three levels of interpretation should be kept distinct.
+Three levels of interpretation should be kept distinct. Each level makes a stronger claim than the one before it.
 
 \textbf{Geometric grouping.} A clustering is valid in a narrow sense if the groups are internally coherent under the chosen metric. This is testable: intra-cluster distances should be small relative to inter-cluster distances under the metric used for clustering. Silhouette scores and related diagnostics measure exactly this. But geometric validity says nothing about whether the groups mean anything.
 
@@ -1118,7 +1122,7 @@ PCA is best taught here not as a competitor to predictive methods, but as a lens
 \item and a reminder that simplified views are still model choices.
 \end{itemize}
 
-PCA is also scale-sensitive. If one feature is measured in a much larger numerical unit than another, it can dominate the first principal component. Standardize features first when the units are not already comparable. On the shared student-profile cloud, the first component mainly tracks the click-versus-lateness tradeoff.
+PCA is also scale-sensitive. If one feature is measured in a much larger numerical unit than another, it can dominate the first principal component. Standardize features first when the units are not already comparable. On the shared student-profile cloud, the first component mainly tracks raw clicks unless the features are standardized; after standardization, it can reflect the click-versus-lateness tradeoff.
 
 \begin{mathlens}
 For centered data \(x_1,\ldots,x_n\), a one-dimensional PCA direction \(u\) with \(\|u\|_2=1\) can be found by maximizing the projected variance
@@ -1223,7 +1227,7 @@ Clustering/PCA & You have no labels and want organization, grouping, or compress
 
 \section{Chapter Artifact: A Structure Diagnosis Sheet}
 
-By the end of this chapter, the reader should be able to explain not only which method they want to try next, but why that method matches the failure pattern of the linear baseline. The chapter should end with one diagnosis, not with a shopping list of unrelated methods.
+By the end of this chapter, the reader should be able to explain not only which method they want to try next, but why that method matches the failure pattern of the linear baseline. Chapter 3 named the first serious model to try. This chapter names the reason to leave it. The chapter should end with one diagnosis, not with a shopping list of unrelated methods.
 
 \begin{table}[t]
 \centering
@@ -1265,7 +1269,7 @@ Interpretation boundary & What the method's output does and does not justify cla
 
 \section{Looking Ahead}
 
-This chapter broadened structure beyond one weighted sum to branches, neighborhoods, and low-dimensional views. The next chapter shows how neural networks can learn internal representations and decision rules jointly through optimization.
+This chapter broadened structure beyond one weighted sum to branches, neighborhoods, and low-dimensional views. The next chapter asks when structure should be learned rather than engineered, and how neural networks learn internal representations and decision rules jointly through optimization.
 
 \begin{chaptersummary}
 \item This chapter answers one question: when the linear baseline fails, what kind of missing structure does that failure reveal?

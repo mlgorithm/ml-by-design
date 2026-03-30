@@ -8,7 +8,7 @@
 \item Learn when an AI system should be simplified, constrained, or rejected because the full operational setting does not support reliable deployment.
 \end{learninggoals}
 
-Chapter 12 argued that reliability lives in the full pipeline, not only in the model. This final chapter makes that claim concrete. A deployed AI system is a combination of data collection, preprocessing, model inference, thresholds, interfaces, logging, monitoring, fallback behavior, human review, and organizational ownership. A model can be mathematically elegant and still fail as a system because one of those surrounding pieces is missing or poorly designed. This systems view matches long-running warnings about hidden technical debt and the software-engineering realities of ML production \citep{sculley2015,amershi2019}. The chapter culminates in a system readiness brief, so the service-design sections should be read as steps toward that launch decision.
+The previous chapter argued that reliability lives in the full pipeline, not only in the model. This final chapter turns that reliability review into a deployment decision. A deployed AI system is a combination of data collection, preprocessing, model inference, thresholds, interfaces, logging, monitoring, fallback behavior, human review, and organizational ownership. A model can be mathematically elegant and still fail as a system because one of those surrounding pieces is missing or poorly designed. This systems view matches long-running warnings about hidden technical debt and the software-engineering realities of ML production \citep{sculley2015,amershi2019}. The chapter route is deliberate: define the service objective, state the operational requirements, lock the input contract, turn scores into actions, specify monitoring and staged release, and then decide whether launch is justified. The chapter culminates in a system readiness brief, so the service-design sections should be read as steps toward that launch decision.
 
 This chapter therefore changes the unit of analysis. Earlier chapters often asked whether a model learned a useful mapping from inputs to outputs. Here the question becomes broader: does the entire decision pipeline improve the real task under the actual constraints of deployment? That is the question students must learn to ask if they want to build trustworthy systems rather than impressive demos.
 
@@ -26,7 +26,7 @@ This chapter completes the book's seven-question framework by asking how predict
 
 Keep the same running case in view from the earlier language, experiments, and reliability chapters: a grounded course-support assistant that routes student messages, retrieves institutional policy, drafts bounded answers for routine cases, and escalates uncertain or high-risk cases to humans. This chapter asks whether that system is ready to launch as an actual service rather than as an impressive demo.
 
-That language workflow remains the primary capstone because it makes contracts, retrieval, escalation, and review paths easy to see. But the same systems questions should also survive outside one domain, so this chapter will repeatedly contrast it with the dashboard-camera pedestrian detector from Chapter 8. The aim is to make the systems lesson clearly broader than educational NLP.
+That language workflow remains the primary capstone because it makes contracts, retrieval, escalation, and review paths easy to see. It also gives the chapter its spine: service objective first, then requirements and contracts, then action policy, then monitoring and launch readiness. But the same systems questions should also survive outside one domain, so this chapter will repeatedly contrast it with the dashboard-camera pedestrian detector from Chapter 8. The aim is to make the systems lesson clearly broader than educational NLP.
 
 \begin{figure}[t]
 \centering
@@ -97,7 +97,7 @@ Before asking ``which model performs best?'', ask ``what decision or workflow is
 \end{decisionbox}
 
 \begin{practicalnote}
-A compact deployment workflow is: state the service objective, write the input contract, choose the operating policy and fallback path, test latency and capacity limits, define monitoring and rollback triggers, and only then decide whether launch is justified. The readiness brief at the end is the written form of that workflow.
+A compact deployment workflow is: state the service objective, write the input contract, choose the operating policy and fallback path, test latency and capacity limits, define monitoring and rollback triggers, and only then decide whether launch is justified. That sequence is also the chapter order in miniature. The readiness brief at the end is the written form of that workflow.
 \end{practicalnote}
 
 \begin{figure}[t]
@@ -119,7 +119,7 @@ Several non-accuracy constraints routinely matter:
 \item \textbf{auditability}: can later investigators explain what happened?
 \end{itemize}
 
-These constraints are not secondary implementation details. They change which model class, threshold, interface, or deployment pattern is appropriate.
+These constraints are not secondary implementation details. They change which model class, threshold, interface, or deployment pattern is appropriate. The next section starts with the first deployment question in that workflow: what must the service achieve before any model can be called good enough?
 
 \section{Requirements Before Training}
 
@@ -131,7 +131,7 @@ An operational requirement is a concrete condition that the deployed system must
 
 \subsection{Worked Example: Queue Capacity Changes the Threshold}
 
-Suppose the advising team behind the course-support assistant can manually inspect at most $30$ escalated messages per day. The system scores whether each incoming message is safe to answer automatically or should be deferred. On a $200$-message day, an aggressive escalation threshold sends $78$ messages to humans. A stricter threshold sends $26$.
+Suppose the advising team behind the course-support assistant can manually inspect at most $30$ escalated messages per day. The system assigns each incoming message an \emph{escalation score}, where larger values mean stronger reason to defer to a human. On a $200$-message day, a lower escalation threshold sends $78$ messages to humans. A stricter escalation threshold sends $26$.
 
 If the team deploys the more aggressive policy because it appears safer in isolation, the queue may overload the staff and slow all responses, including the truly urgent ones. The seemingly more cautious threshold can therefore produce the weaker service. The stricter threshold may let more medium-risk cases stay automated, but it also produces a queue the organization can actually process.
 
@@ -140,7 +140,7 @@ Let $q_t$ be the review backlog after day $t$, let $r$ be daily human capacity, 
 \[
 q_{t+1}=\max\{0,\;q_t+a(\tau)-r\}.
 \]
-A "safer" lower threshold can destabilize the queue if it makes $a(\tau)>r$, because the backlog then grows instead of clearing.
+A lower escalation threshold can destabilize the queue if it makes $a(\tau)>r$, because the backlog then grows instead of clearing.
 \end{mathlens}
 
 This is not a trick example. Many deployments face exactly this issue. The useful prediction is not the one that looks best in isolation. It is the one that leads to the best action process under real constraints.
@@ -155,7 +155,7 @@ Precision and recall describe statistical behavior. Capacity tells us whether th
 
 \subsection{Requirements Should Be Written Down Early}
 
-Teams often delay requirement writing because it feels less exciting than training models. That is backwards. If severe errors, response-time limits, or review paths are not defined early, then later evaluation becomes ambiguous. A model cannot be ``good enough'' until the system has stated what ``enough'' means.
+Teams often delay requirement writing because it feels less exciting than training models. That is backwards. If severe errors, response-time limits, or review paths are not defined early, then later evaluation becomes ambiguous. A model cannot be ``good enough'' until the system has stated what ``enough'' means. Once those requirements are explicit, the next systems question is whether the served inputs actually satisfy the assumptions under which the model was evaluated.
 
 \section{Data Contracts and Training-Serving Consistency}
 
@@ -193,7 +193,7 @@ Sculley et al.\ argue that many machine-learning failures come not from the mode
 
 \subsection{Data Contracts Reduce Ambiguity}
 
-A practical response is to define data contracts. These specify what features exist, how they are computed, what units they use, which values are allowed to be missing, how categorical values are encoded, and what validation checks must pass before inference occurs. In mature systems, model deployment is blocked when these contracts fail.
+A practical response is to define data contracts. These specify what features exist, how they are computed, what units they use, which values are allowed to be missing, how categorical values are encoded, and what validation checks must pass before inference occurs. In mature systems, model deployment is blocked when these contracts fail. Requirements state what the service must achieve; contracts state what must be true before the model is allowed to act.
 
 \begin{practicalnote}
 Many deployment bugs are ordinary software bugs: wrong field order, missing normalization, stale joins, silently changed units, or inconsistent tokenization. Systems engineering matters because these bugs can dominate model quality in production.
@@ -201,7 +201,7 @@ Many deployment bugs are ordinary software bugs: wrong field order, missing norm
 
 \section{Prediction Is Not the Decision}
 
-One of the most important system lessons is that a model output is not the final decision. Most models return a score, probability, rank, or generated candidate. The deployed system must still decide what action to take with that output.
+One of the most important system lessons is that a model output is not the final decision. Most models return a score, probability, rank, or generated candidate. The deployed system must still decide what action to take with that output. After the service objective, requirements, and input contract are fixed, this is the next design boundary: how does a score become an action in the real workflow?
 
 \subsection{Thresholds Are Policies}
 
@@ -214,7 +214,7 @@ Once abstention or escalation is available, the threshold also becomes a queuein
 If the lower threshold improves severe-error control only slightly but creates a daily backlog of $16$ unresolved messages, then after five similar days the system accumulates roughly $80$ delayed cases. At that point the system may be statistically cautious and operationally failing. Students should recognize this as a systems error, not merely as a staffing footnote.
 
 \begin{mathlens}
-The same queue can be written as $q_{t+1}=\max\{0,\;q_t+a_t-r\}$, where $a_t$ is the day-$t$ deferral count. Stability requires average arrivals below capacity, $\mathbb{E}[a_t]<r$. If a stricter policy raises deferred cases from $18$ to $36$ while $r=20$, then the expected drift becomes positive and the backlog grows.
+The same queue can be written as $q_{t+1}=\max\{0,\;q_t+a_t-r\}$, where $a_t$ is the day-$t$ deferral count. Stability requires average arrivals below capacity, $\mathbb{E}[a_t]<r$. If a lower escalation threshold raises deferred cases from $18$ to $36$ while $r=20$, then the expected drift becomes positive and the backlog grows.
 \end{mathlens}
 
 The right threshold is therefore constrained by both mistake costs and queue capacity. A policy that looks safer on isolated examples may produce a weaker service once review load, delay, and reviewer fatigue are counted as part of the outcome.
@@ -239,12 +239,14 @@ Sometimes the right system does not force the model to answer every case. Instea
 
 The word \emph{confidence} needs discipline here. It should not mean a vague feeling that the model ``sounds certain.'' It should mean an estimate tied to the action policy. For the support assistant, a useful score would be something like the estimated probability that an automatic answer will stay in scope, remain grounded in approved evidence, and avoid an escalation-worthy mistake.
 
+This score direction is deliberately different from the earlier queue examples. There the score measured escalation pressure, so a lower threshold produced more human review. Here the score measures automation safety, so a lower threshold accepts more cases for automatic answering.
+
 \begin{mathlens}
 Let $a(x)\in\{0,1\}$ indicate whether the system answers on input $x$, and let $\ell(f(x),y)$ be the loss on answered cases. Then coverage is $\phi=\mathbb{E}[a(x)]$ and selective risk is
 \[
 R_\phi(f)=\frac{\mathbb{E}[a(x)\,\ell(f(x),y)]}{\mathbb{E}[a(x)]}.
 \]
-Lowering the threshold usually raises coverage, but it can also raise selective risk if the newly accepted cases are too uncertain. This is why thresholding works best when confidence is reasonably calibrated.
+On this automation-safety score, lowering the threshold usually raises coverage, but it can also raise selective risk if the newly accepted cases are too uncertain. This is why thresholding works best when confidence is reasonably calibrated.
 \end{mathlens}
 
 \begin{definition}[Selective Prediction]
@@ -264,7 +266,7 @@ If the system answers only the most confident $60$ cases automatically and defer
 
 Notice what the score means in this example. A low automation-safety score does not mean ``negative class'' in the ordinary classification sense. It means ``not safe enough to answer automatically under the current policy.''
 
-The right question is therefore not ``can the model answer every message?'' but ``which messages should the system answer on its own, and which should trigger review or fallback?'' That is a systems question.
+The right question is therefore not ``can the model answer every message?'' but ``which messages should the system answer on its own, and which should trigger review or fallback?'' That is a systems question. Once that action policy is written, the next question is how the team will notice when the live system drifts away from the assumptions that made the policy look acceptable.
 
 \begin{advancednote}
 Selective prediction works best when confidence scores are reasonably calibrated. If predicted probabilities do not reflect real uncertainty well, then thresholding by confidence may not separate easy and hard cases as cleanly as expected.
@@ -272,7 +274,7 @@ Selective prediction works best when confidence scores are reasonably calibrated
 
 \section{Monitoring After Deployment}
 
-Deployment is not the end of evaluation. Once a system is live, the environment changes. User behavior changes, interfaces change, sensors degrade, workload grows, and downstream policies change. Monitoring is the mechanism by which the system notices that reality has drifted away from the assumptions made during development.
+Deployment is not the end of evaluation. Once a system is live, the environment changes. User behavior changes, interfaces change, sensors degrade, workload grows, and downstream policies change. Monitoring is the mechanism by which the system notices that reality has drifted away from the assumptions made during development. It is what turns pre-deployment assumptions into live checks rather than launch-time promises.
 
 \subsection{What Should Be Monitored}
 
@@ -298,7 +300,7 @@ Evidence for deployment should include a monitoring plan, alert thresholds, and 
 
 \subsection{Rollback and Recovery}
 
-Good systems assume that some deployments will go wrong. They therefore include ways to disable the model, revert to an earlier version, or fall back to a safer baseline. In some settings the fallback may be human review. In others it may be a conservative rule-based heuristic. Recovery planning is part of reliability, not a sign that the model is weak.
+Good systems assume that some deployments will go wrong. They therefore include ways to disable the model, revert to an earlier version, or fall back to a safer baseline. In some settings the fallback may be human review. In others it may be a conservative rule-based heuristic. Recovery planning is part of reliability, not a sign that the model is weak. The next section asks how to generate that post-launch evidence carefully instead of exposing the full user population all at once.
 
 \section{Post-Deployment Experimentation}
 
@@ -326,7 +328,7 @@ Some systems are too high-stakes, too asymmetric in harm, or too constrained by 
 
 \section{Human-in-the-Loop Design}
 
-Human-in-the-loop design is often misunderstood. It does not simply mean adding a human somewhere in the pipeline. The question is whether the model and the human are arranged so that the combined system is better than either one alone.
+Human-in-the-loop design is often misunderstood. It does not simply mean adding a human somewhere in the pipeline. The question is whether the model and the human are arranged so that the combined system is better than either one alone. In this chapter's workflow, human review is not an afterthought added to rescue a weak model. It is one of the main ways a system turns uncertain predictions into bounded actions.
 
 \subsection{Humans Need the Right Interface}
 
@@ -342,7 +344,7 @@ Adding a human reviewer does not automatically make a system safe. The review st
 
 \section{Documentation, Ownership, and Iteration}
 
-A system that nobody owns will decay. Inputs change, staff turnover occurs, and the assumptions that were obvious during development are forgotten. Documentation helps preserve institutional memory, but documentation alone is not enough. Teams also need clear ownership of retraining, alert handling, audit requests, and rollback decisions.
+A system that nobody owns will decay. Inputs change, staff turnover occurs, and the assumptions that were obvious during development are forgotten. Documentation helps preserve institutional memory, but documentation alone is not enough. Teams also need clear ownership of retraining, alert handling, audit requests, and rollback decisions. This is how a launch plan becomes a maintained service rather than a one-time demo.
 
 \subsection{What Documentation Should Capture}
 
@@ -365,7 +367,7 @@ Teams often respond to a production issue by making a fast change and hoping for
 
 \section{Chapter Artifact: A System Readiness Brief}
 
-By the end of Chapter 13, the reader should be able to produce a one-page system readiness brief before claiming that a model is deployable. The brief condenses the same production questions emphasized by deployment checklists such as the ML test score \citep{breck2016}.
+By the end of this chapter, the reader should be able to produce a one-page system readiness brief before claiming that a model is deployable. The brief is the deployment counterpart to the earlier framing memo, evaluation plan, claim sheet, and reliability review card: it asks whether those earlier decisions still hold once the model becomes a service. It also condenses the same production questions emphasized by deployment checklists such as the ML test score \citep{breck2016}.
 
 \begin{table}[t]
 \centering
@@ -405,7 +407,7 @@ Breck et al.\ propose the ML test score as a production rubric precisely because
 
 \section{When Not to Build an AI System}
 
-The final systems lesson is restraint. Not every decision problem should become a machine-learning deployment.
+The final systems lesson is restraint. Not every decision problem should become a machine-learning deployment. A strong readiness process must allow ``do not launch'' as a technical conclusion rather than treating deployment as the default reward for finishing a model.
 
 \subsection{Simple Rules Sometimes Win}
 
@@ -421,7 +423,7 @@ Some settings demand stronger evidence, stronger fallback behavior, or stronger 
 
 \section{Worked System Walkthrough: Course Support}
 
-To make the full chapter concrete, consider the grounded course-support pipeline developed across the earlier language, experiments, and reliability chapters.
+To make the full chapter concrete, consider the grounded course-support pipeline developed across the earlier language, experiments, and reliability chapters. The walkthrough follows the same order as the readiness brief so that the chapter ends by assembling one coherent launch argument rather than introducing a separate example.
 
 \subsection{Step 1: Define the Service Objective}
 
@@ -468,7 +470,7 @@ Monitoring also looks different without changing the systems logic. Useful signa
 
 \section{Closing Perspective}
 
-This book began with problem framing and ends with system framing. That is a deliberate arc. Learning algorithms matter, but they are not the whole discipline. A mature understanding of AI connects representation, optimization, evaluation, reliability, and deployment into one coherent practice. The framing memo from Chapter 1, the evaluation plan, the claim sheet, the reliability review card, and the system readiness brief are not separate bureaucratic forms. They are the same discipline viewed at progressively more realistic levels. The final professional standard is not ``can I train a model?'' It is ``can I build a system that improves the real task under the real constraints without hiding its limitations?''
+This book began with problem framing and ends with system framing. That is a deliberate arc. Learning algorithms matter, but they are not the whole discipline. A mature understanding of AI connects representation, optimization, evaluation, reliability, and deployment into one coherent practice. The framing memo from Chapter 1, the evaluation plan, the claim sheet, the reliability review card, and the system readiness brief are not separate bureaucratic forms. They are the same discipline viewed at progressively more realistic levels, from defining the task to deciding whether the full service should exist at all. The final professional standard is not ``can I train a model?'' It is ``can I build a system that improves the real task under the real constraints without hiding its limitations?''
 
 \begin{chaptersummary}
 \item A deployed AI system includes data pipelines, feature contracts, thresholds, interfaces, monitoring, fallback behavior, and ownership in addition to the model itself.
