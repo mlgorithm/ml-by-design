@@ -7,12 +7,12 @@
 \item Explain why contextual representations, sequence models, and transformers matter when meaning depends on surrounding language.
 \item Distinguish generation quality from grounded, trustworthy behavior.
 \item Distinguish a base language model from an instruction-following model and explain what additional training stages produce the behavioral difference.
-\item Use a prompting strategy ladder to choose the simplest inference-time intervention that produces reliable behavior.
+\item Use prompting strategies to choose the simplest inference-time intervention that produces reliable behavior.
 \item Choose among prompting, retrieval, and fine-tuning based on what kind of behavioral change is needed and what evidence is available.
 \item Produce an NLP context-and-grounding card before making a serious NLP system claim.
 \end{learninggoals}
 
-The vision chapter treated invariance, shortcuts, and deployment realism as central problems. Language creates a parallel but different challenge. The same words can mean different things in different contexts, while the same idea can be expressed through very different surface forms. A language system therefore has to decide what may be collapsed away, what must be preserved, and when external grounding is required before fluent output can be trusted.
+The vision chapter treated invariance, shortcuts, and deployment realism as central problems. Language creates a parallel but different challenge. The same words can mean different things in different contexts, while the same idea can be expressed through very different surface forms. A language system therefore has to decide what may be collapsed away, what must be preserved, and when external grounding is required before fluent output can be trusted. The chapter follows that route in order: first decide the task shape and the context that must survive, then decide what representation preserves it, then decide how grounding and behavior design change the claim, and finally decide what evaluation would make the claim defensible.
 
 \begin{problemsolvinglens}
 This chapter asks an NLP-specific modeling question: what linguistic structure must the task preserve, and what evidence shows that the system is using that structure rather than producing merely fluent behavior? The answer drives tokenization, baseline choice, contextual modeling, retrieval, and evaluation.
@@ -41,7 +41,7 @@ Language is difficult because surface form is not enough. The sentence \texttt{t
 
 This means NLP should not begin with model names. It should begin with a judgment question: what information must survive the representation? Some tasks care mainly about which words are present. Some care about local order such as negation. Some depend on long-range context, discourse, or entity reference. Some require external knowledge or retrieval before any answer can be trusted.
 
-Throughout this chapter, keep one running case in view: a grounded course-support assistant. The same incoming student message may need to be categorized, matched to the correct policy passage, answered conservatively, or escalated to a human. That single workflow is useful because it shows why representation, retrieval, generation, grounding, and evaluation are not separate concerns in modern NLP.
+Throughout this chapter, keep one running case in view: a grounded course-support assistant. The same incoming student message may need to be categorized, matched to the correct policy passage, answered conservatively, or escalated to a human. That single workflow is useful because it shows why representation, retrieval, generation, grounding, and evaluation are not separate concerns in modern NLP. It also gives the chapter its shape: preserve the right linguistic structure first, then decide what evidence must accompany the answer, then decide what the system should do when that evidence is weak.
 
 \section{Problem-Solving Technique: Context Audit}
 
@@ -64,7 +64,7 @@ In NLP, model choice should follow the context audit. If the task can safely col
 \end{decisionbox}
 
 \begin{practicalnote}
-Workflow sketch: first decide whether token presence, local order, long-range context, or grounding matters. Then start with the simplest baseline that preserves the needed structure, add n-grams or contextual encoders if order and context matter, add retrieval if current evidence is required, and only then choose prompting, fine-tuning, or a hybrid after checking how the workflow will be evaluated.
+Workflow sketch: first decide whether token presence, local order, long-range context, or grounding matters. Then start with the simplest baseline that preserves the needed structure, add n-grams or contextual encoders if order and context matter, add retrieval if current evidence is required, and only then choose prompting, fine-tuning, or a hybrid after checking how the workflow will be evaluated and when it should abstain or escalate.
 \end{practicalnote}
 
 \begin{thinkingtool}
@@ -88,7 +88,7 @@ Workflow sketch: first decide whether token presence, local order, long-range co
 
 \section{Task Shape Before Representation Depth}
 
-The first serious question in NLP is not ``which model is strongest?'' It is ``what behavior should the system produce?''
+The first serious question in NLP is not ``which model is strongest?'' It is ``what behavior should the system produce?'' This section fixes the output object first so the later representation and evaluation choices have a clear job.
 
 \subsection{Classification and Sequence Labeling}
 
@@ -157,7 +157,7 @@ The running case becomes clearer when the whole workflow is written down. Consid
 \begin{quote}
 \texttt{I missed Lab 3 because I was sick.\\ Can I submit tonight without penalty?}
 \end{quote}
-The system should not jump directly from raw text to a fluent answer. It usually has to solve several smaller NLP problems in sequence. Figure~\ref{fig:course-support-pipeline} gives the high-level pipeline, while Table~\ref{tab:course-support-workflow} names the main subproblems more explicitly.
+The system should not jump directly from raw text to a fluent answer. It usually has to solve several smaller NLP problems in sequence. Figure~\ref{fig:course-support-pipeline} gives the high-level pipeline, while Table~\ref{tab:course-support-workflow} names the main subproblems more explicitly. That workflow also previews the rest of the chapter: lexical and contextual representation support routing and slot reading, grounding supports retrieval and answer faithfulness, and behavior design determines whether the system answers, hedges, or escalates.
 
 \begin{figure}[t]
 \centering
@@ -180,7 +180,7 @@ The system should not jump directly from raw text to a fluent answer. It usually
 \draw[arrow] (routing) -- (slots);
 \draw[arrow] (slots) -- (retrieval);
 \draw[arrow] (retrieval) -- (decision);
-\draw[arrow] (source) -- (decision);
+\draw[arrow] (source) -- (retrieval);
 \draw[arrow] (decision) -- (answer);
 \draw[arrow] (decision) -- (human);
 \end{tikzpicture}%
@@ -205,7 +205,7 @@ Policy decision & answer directly or escalate & Marks which cases are safe to au
 Grounded response generation & brief answer tied to evidence & Produces readable language that stays faithful to the retrieved text \\
 \bottomrule
 \end{tabular}
-\caption{One support message often activates several NLP subproblems, not just one. This is why Chapter 8 needs classification, retrieval, generation, grounding, and escalation in the same conceptual frame.}
+\caption{One support message often activates several NLP subproblems, not just one. This is why a single NLP system often needs classification, retrieval, generation, grounding, and escalation in the same conceptual frame.}
 \label{tab:course-support-workflow}
 \end{table}
 
@@ -221,7 +221,7 @@ In modern NLP systems, the model is often only one stage in a language workflow.
 
 \section{Tokenization as a Modeling Decision}
 
-Machine-learning models do not receive meaning directly. They receive tokenized input. Tokenization converts raw text into units such as words, subwords, or characters, and that choice changes what the model is allowed to notice and reuse.
+Machine-learning models do not receive meaning directly. They receive tokenized input. Tokenization converts raw text into units such as words, subwords, or characters, and that choice changes what the model is allowed to notice and reuse. It is therefore the chapter's first representational bottleneck.
 
 \begin{center}
 \emph{Tokenization decides what the model is allowed to notice and reuse.}
@@ -296,7 +296,7 @@ Bag-of-words is not ``dead.'' It is a strong baseline when token presence carrie
 
 \section{N-Grams as the Local-Order Repair}
 
-One classical way to restore some order information is to use n-grams. A unigram is a single token, a bigram is an adjacent token pair, and a trigram is a length-three token sequence. Including bigrams lets the model distinguish between \texttt{dog bites} and \texttt{bites dog}, which plain bag-of-words cannot.
+One classical way to restore some order information is to use n-grams. A unigram is a single token, a bigram is an adjacent token pair, and a trigram is a length-three token sequence. Including bigrams lets the model distinguish between \texttt{dog bites} and \texttt{bites dog}, which plain bag-of-words cannot. If this local repair is enough, the model family need not become more complex. If it is not, the chapter moves next to contextual meaning.
 
 \begin{center}
 \emph{If the needed context is local, repair the representation before escalating the model family.}
@@ -340,7 +340,7 @@ The same issue appears in the running case. The token \texttt{extension} may ref
 
 \section{Sequence Models and Attention as Context Builders}
 
-Once text is treated as a sequence rather than a bag, the next question is how context is carried.
+Once text is treated as a sequence rather than a bag, the next question is how context is carried. This is the point where the chapter moves from representation choices to mechanisms that build context dynamically.
 
 \subsection{Recurrent Models}
 
@@ -353,7 +353,7 @@ Transformers became dominant in NLP because attention allows each token represen
 This is why transformer-based pretraining changed the field so quickly \citep{vaswani2017,devlin2019}. The important idea is not that attention is magical. It is that contextual representation learning became far more scalable and reusable.
 
 \begin{advancednote}
-Chapter 6 already explained attention as a general representation mechanism. In NLP, the central point is task-specific: attention matters because token meaning often depends on distant and selective context, not merely on adjacent words.
+An earlier chapter already explained attention as a general representation mechanism. In NLP, the central point is task-specific: attention matters because token meaning often depends on distant and selective context, not merely on adjacent words.
 \end{advancednote}
 
 \section{Language Modeling as Sequence Prediction}
@@ -362,7 +362,7 @@ Chapter 6 already explained attention as a general representation mechanism. In 
 A language model assigns probabilities to sequences of tokens, typically by predicting each next token conditioned on the tokens that came before it.
 \end{definition}
 
-This chapter uses the classic autoregressive setup because it makes the next-token logic explicit. Masked or denoising objectives are also important in modern NLP, but the next-token factorization is the clearest starting point for the sequence-prediction story here.
+This chapter uses the classic autoregressive setup because it makes the next-token logic explicit. Masked or denoising objectives are also important in modern NLP, but the next-token factorization is the clearest starting point for the sequence-prediction story here. Once context is represented, generation can be described as repeated prediction under that context.
 
 If a sequence is $(w_1, w_2, \ldots, w_T)$, a standard factorization is
 \[
@@ -456,7 +456,7 @@ Encoder-decoder structure does not guarantee faithfulness. If the target is free
 
 \section{Decoding, Retrieval, and Grounding as Behavior Design}
 
-Once a language model produces next-token probabilities, the system still needs a behavior policy.
+The chapter now shifts from representation and training objectives to system behavior. Once a language model produces next-token probabilities, the system still needs a behavior policy.
 
 \subsection{Decoding Changes the Behavior}
 
@@ -609,7 +609,7 @@ Fluency is not proof of truth. A system can produce coherent, confident language
 
 \section{From Language Model to Instruction-Following Model}
 
-A language model trained only on next-token prediction learns to continue text in ways that are statistically plausible given its training distribution. That is a useful foundation, but it is not yet a system that follows instructions, answers questions reliably, or behaves consistently across diverse inputs. The gap between a base language model and an instruction-following system requires additional training stages that apply different kinds of behavioral pressure.
+A language model trained only on next-token prediction learns to continue text in ways that are statistically plausible given its training distribution. That is a useful foundation, but it is not yet a system that follows instructions, answers questions reliably, or behaves consistently across diverse inputs. The gap between a base language model and an instruction-following system requires additional training stages that apply different kinds of behavioral pressure. The previous sections focused on what evidence should enter the system; this section focuses on how the model itself is shaped to respond.
 
 \begin{center}
 \emph{A base language model predicts likely continuations. An instruction-following model responds to requests in a way that is helpful, bounded, and consistent.}
@@ -647,7 +647,7 @@ This distinction matters because the two systems have different failure modes. A
 \label{fig:instruction-pipeline}
 \end{figure}
 
-The three stages can be understood using the same vocabulary introduced for representation learning in Chapter~7: each stage is a different source of training pressure that shapes a different aspect of behavior.
+The three stages can be understood using the same vocabulary introduced in the earlier representation-learning chapter: each stage is a different source of training pressure that shapes a different aspect of behavior.
 
 \begin{table}[t]
 \centering
@@ -676,7 +676,7 @@ Use a base language model when the task requires open-ended text continuation, w
 
 \section{Prompting as a Behavioral Interface}
 
-Once a language model can follow instructions, it can be steered at inference time without changing any of its parameters. The mechanism is prompting: structuring the input to the model so that the output is directed toward a desired behavior.
+Once a language model can follow instructions, it can be steered at inference time without changing any of its parameters. The mechanism is prompting: structuring the input to the model so that the output is directed toward a desired behavior. This is the inference-time counterpart to the training stages in the previous section.
 
 This is a different kind of adaptation from fine-tuning or transfer learning. Fine-tuning changes model weights using additional training. Prompting leaves the model unchanged. It changes what information the model sees at the moment it generates a response, and therefore what response it produces.
 
@@ -727,15 +727,14 @@ This is a different kind of adaptation from fine-tuning or transfer learning. Fi
 \emph{Prompting is a behavioral policy, not a model modification. It shapes output by structuring input, not by adjusting parameters.}
 \end{center}
 
-Three structural patterns of prompting appear consistently across task settings. They form a ladder, just as the representation choices earlier in this chapter form a ladder, where higher rungs provide more guidance but are not always necessary.
+Three prompting patterns appear consistently across task settings, but they do not form a single ladder. Zero-shot and few-shot prompting control how many demonstrations are shown. Chain-of-thought prompting controls whether the prompt asks for intermediate reasoning. A prompt can therefore be zero-shot with chain-of-thought, few-shot without it, or neither.
 
 \begin{figure}[t]
 \centering
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
   font=\small,
-  rung/.style={draw, rounded corners, align=left, text width=10.0cm, minimum height=1.0cm, fill=black!4, inner sep=7pt},
-  arrow/.style={-Latex, thick}
+  rung/.style={draw, rounded corners, align=left, text width=10.0cm, minimum height=1.0cm, fill=black!4, inner sep=7pt}
 ]
 \node[rung] (zs) at (0,0) {%
   \textbf{Zero-shot.}
@@ -750,14 +749,12 @@ Three structural patterns of prompting appear consistently across task settings.
 \node[rung, above=0.4cm of fs] (cot) {%
   \textbf{Chain-of-thought.}
   Ask the model to produce intermediate reasoning steps before the final answer.
-  Useful when the task requires multi-step inference or when intermediate
-  steps are part of what needs to be checked.};
-
-\draw[arrow] (zs) -- (fs);
-\draw[arrow] (fs) -- (cot);
+  This can be added to either zero-shot or few-shot prompts when the task
+  requires multi-step inference or when intermediate steps are part of what
+  needs to be checked.};
 \end{tikzpicture}%
 }
-\caption{Three structural prompting patterns form a ladder of increasing task guidance. Higher rungs are not always better: the simplest pattern that produces reliable behavior under realistic input variation is usually preferable. Each rung adds structure to the input, not to the model.}
+\caption{Three common prompting patterns. Zero-shot and few-shot vary the number of demonstrations, while chain-of-thought adds an optional reasoning scaffold that can be paired with either. The simplest structure that produces reliable behavior under realistic input variation is usually preferable.}
 \label{fig:prompting-ladder}
 \end{figure}
 
@@ -766,9 +763,9 @@ Suppose the task is to classify a student message into one of three routing cate
 \begin{itemize}[leftmargin=*]
 \item \textbf{Zero-shot}: the input describes the categories and asks for a label.
 \item \textbf{Few-shot}: the input includes two or three labeled examples before the new message.
-\item \textbf{Chain-of-thought}: the input asks the model to first identify the main concern in the message, then select the category.
+\item \textbf{Chain-of-thought variant}: either zero-shot or few-shot, but the input asks the model to first identify the main concern in the message and then select the category.
 \end{itemize}
-If the zero-shot result is already reliable under realistic message variation, adding examples or reasoning steps may not improve it. If the model makes consistent errors on edge cases, few-shot examples that cover those cases may help. If the routing logic is genuinely multi-step---for example, distinguishing a visa question from a course question requires identifying a specific entity type first---chain-of-thought may reduce errors by making the intermediate step explicit.
+If the zero-shot result is already reliable under realistic message variation, adding examples or reasoning steps may not improve it. If the model makes consistent errors on edge cases, few-shot examples that cover those cases may help. If the routing logic is genuinely multi-step---for example, distinguishing a visa question from a course question requires identifying a specific entity type first---a chain-of-thought version of either prompt may reduce errors by making the intermediate step explicit. Chain-of-thought is therefore not a third rung above few-shot; it is an extra scaffold that can be paired with different demonstration choices.
 \end{example}
 
 \begin{thinkingtool}
@@ -818,7 +815,7 @@ This is why grounding changes the claim being made. A grounded system does not s
 
 \section{Evaluation Matched to Task}
 
-Evaluation in NLP depends sharply on task shape. The evidence must match the behavior the system is supposed to produce.
+Evaluation in NLP depends sharply on task shape. The evidence must match the behavior the system is supposed to produce. This is where the chapter protects the claim made by the earlier choices about context, grounding, prompting, and escalation.
 
 \subsection{A Simple Evaluation Map}
 
@@ -937,7 +934,7 @@ If a model is trained mostly on formal standard-language text, it may treat dial
 
 \section{Chapter Artifact: An NLP Context-and-Grounding Card}
 
-By the end of this chapter, the reader should be able to write down not only which model family they want to use, but what context the task needs and what grounding evidence would justify a strong claim.
+By the end of this chapter, the reader should be able to write down not only which model family they want to use, but what context the task needs and what grounding evidence would justify a strong claim. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, the structure diagnosis sheet justified leaving it, the training report justified the learned-model claim, the reuse-and-adaptation plan clarified what transfer could explain, and the vision design card made nuisance variation and deployment realism explicit. This chapter's card adds the language-specific layer: what context must survive, what evidence must be present, when the system should answer versus escalate, and what evaluation would justify that workflow.
 
 \begin{table}[t]
 \centering
@@ -989,7 +986,7 @@ For a course-support assistant, a sensible card would specify: task type is \emp
 
 \section{Looking Ahead}
 
-This chapter treated language as context-dependent sequence structure. The next chapter keeps the sequential view but moves to audio and time series, where waveforms, trends, and causality matter more than syntax.
+This chapter treated language as context-dependent sequence structure. The next chapter keeps the sequential view but moves to audio and time series, where the central question becomes more explicit still: what information was actually available at the decision moment, and what would count as cheating through time?
 
 \begin{chaptersummary}
 \item NLP begins by deciding what context the task needs, not by choosing an architecture by habit.

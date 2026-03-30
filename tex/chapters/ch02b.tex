@@ -11,7 +11,7 @@
 
 Chapter 2 answered one judgment question: once a model outputs scores, what predictive behavior should count as good? Chapter 3 answers the next one: when can we trust the evidence for that behavior?
 
-This chapter is therefore about claim protection. A result can look excellent because the model learned a real pattern. It can also look excellent because the split leaked, the baseline was weak, the test set quietly became part of development, or the task changed between semesters. The chapter's job is to keep those possibilities separate.
+This chapter is therefore about claim protection. A result can look excellent because the model learned a real pattern. It can also look excellent because the split leaked, the baseline was weak, the test set quietly became part of development, or the task changed between semesters. The chapter's job is to keep those possibilities separate. Read the chapter as the construction of one evaluation plan: what counts as new evidence, what workflow keeps it external, what traps can fake success, and what baseline makes the final claim legible.
 
 \begin{problemsolvinglens}
 Protect the claim by keeping development, external evidence, and baseline comparison separate. A strong-looking score is not enough if the workflow that produced it made the result too easy to win.
@@ -23,7 +23,7 @@ Protect the claim by keeping development, external evidence, and baseline compar
 
 \section{Opening Dilemma: The Validation Score Looks Great. Can We Trust It?}
 
-Keep the same course-support setting in view from the first two chapters. Suppose a support team trains several early-warning models on historical course data and one of them produces excellent validation recall and a strong final test score. Before celebrating, the team still has to ask harder questions. Were the preprocessing steps learned only from the training data? Was the test set kept external until the end? Did the model beat a serious baseline or only a convenient straw man? Would the result still look strong next semester?
+Keep the same course-support setting in view from the first two chapters. Suppose a support team trains several early-warning models on historical course data and one of them produces excellent validation recall and a strong final test score. Before celebrating, the team still has to ask harder questions. Were the preprocessing steps learned only from the training data? Was the test set kept external until the end? Did the model beat a serious baseline or only a convenient straw man? Would the result still look strong next semester? Each later section of the chapter turns one of those questions into a procedural safeguard.
 
 Those questions are not paperwork added after the model. They are what make the number mean anything.
 
@@ -90,7 +90,7 @@ Zech et al.\ studied pneumonia detection from chest radiographs across multiple 
 
 \section{Protected Evaluation Workflow}
 
-The next question is procedural rather than mathematical: how do we protect evaluation from development? The answer is the disciplined split between training, validation, and test data.
+The next question is procedural rather than mathematical: how do we protect evaluation from development? The answer is the disciplined split between training, validation, and test data. This is the chapter's workflow spine, because every later safeguard depends on these roles staying distinct.
 
 \begin{itemize}[leftmargin=*]
 \item The \emph{training set} is used to fit parameters.
@@ -102,7 +102,7 @@ The next question is procedural rather than mathematical: how do we protect eval
 The workflow is simple enough to say plainly: split first, fit preprocessing on train only, train candidate models on train, choose among them on validation, and touch the test set once at the end.
 \end{practicalnote}
 
-Students often understand those definitions and still run the workflow incorrectly. The key is not only what the sets are called. The key is the order in which they are used.
+Students often understand those definitions and still run the workflow incorrectly. The key is not only what the sets are called. The key is the order in which they are used. The names matter less than the boundary: once information crosses from held-out evidence back into development, the claim is weaker even if the code still runs cleanly.
 
 Here \emph{preprocessing} means data transformations such as scaling, normalization, or feature extraction that are learned from the training data and then applied unchanged to validation and test data.
 
@@ -190,7 +190,7 @@ Chapter 3 establishes minimal experimental discipline for one credible result. C
 
 \section{How Experiments Lie: Leakage}
 
-Data leakage occurs when information from outside the legitimate training process reaches the model or the experiment design. Leakage is dangerous because it often produces excellent-looking results for the wrong reason.
+Data leakage occurs when information from outside the legitimate training process reaches the model or the experiment design. Leakage is dangerous because it often produces excellent-looking results for the wrong reason. The cleanest way to think about it is as a broken boundary: some information that should have stayed outside development was allowed back in.
 
 Common forms of leakage include:
 \begin{itemize}[leftmargin=*]
@@ -221,31 +221,34 @@ Leakage is not a small classroom mistake. Bernett et al.\ present it as a recurr
   right/.style={draw=c3lkRightLine, fill=c3lkRightBg, rounded corners, align=center,
                 minimum height=0.85cm, minimum width=2.3cm,
                 font=\small\bfseries, text=c3lkRightLine},
-  arrow/.style={-Latex, thick, black!55}
+  arrow/.style={-Latex, thick, black!55},
+  leak/.style ={-Latex, thick, dashed, c3lkWrongLine}
 ]
 %% ── Wrong pipeline ─────────────────────────────────────────────
-\node[font=\small\bfseries, c3lkWrongLine] at (0.95, 4.3) {Wrong pipeline};
-\node[neut]  (w1) at (0.95, 3.5) {raw data};
-\node[wrong] (w2) at (4.0,  3.5) {scale or select\\using all data};
-\node[neut]  (w3) at (7.6,  3.5) {split and\\evaluate};
+\node[font=\small\bfseries, c3lkWrongLine] at (0.95, 7.84) {Wrong pipeline};
+\node[neut]  (w1) at (0.95, 6.44) {raw data};
+\node[wrong] (w2) at (4.2,  6.44) {scale or select\\using all data};
+\node[neut]  (w3) at (8.0,  6.44) {split and\\evaluate};
 \draw[arrow] (w1) -- (w2);
 \draw[arrow] (w2) -- (w3);
-%% warning annotation — sits fully below the wrong pipeline row
-\node[c3lkWrongLine, font=\small\bfseries] at (4.0, 2.5)
-  {test information leaked backward};
-\draw[->, thin, c3lkWrongLine] (4.0, 2.75) -- (4.0, 3.07);
+%% leakage arrow: dashed red, from split back to scale (below the boxes)
+\draw[leak] ([yshift=-0.77cm]w3.south) -- ([yshift=-0.77cm]w2.south)
+    node[midway, below=2pt, font=\small\bfseries, c3lkWrongLine]
+    {test info leaks backward};
+\draw[thin, dashed, c3lkWrongLine] (w3.south) -- ++(0,-0.77);
+\draw[thin, dashed, c3lkWrongLine] (w2.south) -- ++(0,-0.77);
 
 %% ── Right pipeline ─────────────────────────────────────────────
-\node[font=\small\bfseries, c3lkRightLine] at (0.95, 1.6) {Right pipeline};
+\node[font=\small\bfseries, c3lkRightLine] at (0.95, 1.8) {Right pipeline};
 \node[neut]  (r1) at (0.95, 0.8) {raw data};
 \node[right] (r2) at (3.7,  0.8) {split first};
-\node[right] (r3) at (7.3,  0.8) {fit on train,\\apply to val/test};
+\node[right] (r3) at (7.6,  0.8) {fit on train,\\apply to val/test};
 \draw[arrow] (r1) -- (r2);
 \draw[arrow] (r2) -- (r3);
-%% ok annotation — sits fully below the right pipeline row
-\node[c3lkRightLine, font=\small\bfseries] at (5.5, -0.2)
+%% ok annotation — sits below the "fit on train" box
+\node[c3lkRightLine, font=\small\bfseries] at (7.6, -0.3)
   {evaluation stays external};
-\draw[->, thin, c3lkRightLine] (5.5, 0.05) -- (5.5, 0.37);
+\draw[->, thin, c3lkRightLine] (7.6, -0.03) -- (r3.south);
 \end{tikzpicture}%
 }
 \caption{Leakage is usually procedural. The wrong pipeline lets information from validation or test examples influence preprocessing or feature design. The right pipeline keeps those steps inside the training boundary.}
@@ -270,7 +273,7 @@ Leakage does not merely make a result slightly noisy. It can destroy the meaning
 
 \section{Baseline Ladder and Sanity Checks}
 
-Before trusting a sophisticated model, ask how well simple methods perform. Always predicting the majority class, using a simple weighted linear model, fitting a small decision tree, or even comparing against a random baseline can reveal whether the task is easy, imbalanced, or poorly specified.
+Before trusting a sophisticated model, ask how well simple methods perform. Always predicting the majority class, using a simple weighted linear model, fitting a small decision tree, or even comparing against a random baseline can reveal whether the task is easy, imbalanced, or poorly specified. The ladder is not a ritual of humility for its own sake. It is a way to make sure the final claim is about real added value rather than about avoiding an obvious comparison.
 
 \begin{table}[t]
 \centering
@@ -304,7 +307,7 @@ Two sanity checks should become automatic:
 
 \section{Metric Failure Gallery}
 
-By this point in the chapter, the reader has seen that no single number settles evaluation. It helps to make that lesson explicit through a small gallery of common metric traps.
+By this point in the chapter, the reader has seen that no single number settles evaluation. It helps to make that lesson explicit through a small gallery of common metric traps. A correct metric can still be the wrong summary if it leaves the operational question untouched.
 
 \begin{table}[t]
 \centering
@@ -343,7 +346,7 @@ The lesson is not that metrics are untrustworthy. The lesson is that every metri
 
 \section{Chapter Artifact: A Minimal Evaluation Plan}
 
-By the end of Chapter 3, the reader should be able to write a short evaluation plan before reporting any result. The goal is not paperwork. The goal is to make the claim explicit enough that weak evidence and procedural mistakes become visible early. This is the point where decision context, threshold as policy, leakage control, and the baseline ladder become one reusable document.
+By the end of Chapter 3, the reader should be able to write a short evaluation plan before reporting any result. The goal is not paperwork. The goal is to make the claim explicit enough that weak evidence and procedural mistakes become visible early. This is the point where decision context, threshold as policy, leakage control, and the baseline ladder become one reusable document. Chapter 2 said what good behavior would look like; Chapter 3 says what workflow and evidence would justify believing that behavior is real.
 
 \begin{table}[t]
 \centering
@@ -353,7 +356,7 @@ By the end of Chapter 3, the reader should be able to write a short evaluation p
 \toprule
 Plan field & What must be written down \\
 \midrule
-Seven-question focus & Questions 1, 5, 6, and 7: what decision matters, what baseline counts, what evidence supports the claim, and how scores become actions \\
+Seven-question focus & Questions 1, 5, and 6 directly: what decision matters, what baseline counts, and what evidence supports the claim. The plan also fixes the threshold or ranking policy that later systems work must implement responsibly \\
 Decision context & What real decision or policy the evaluation is meant to support \\
 Primary metric & The main quantity that expresses success for that decision \\
 Supporting metrics & Additional metrics needed to expose tradeoffs such as imbalance or calibration \\
@@ -385,7 +388,7 @@ Claim statement & The exact sentence the final result is supposed to justify \\
 
 \section{Looking Ahead}
 
-This chapter made evaluation discipline explicit: generalization, protected evidence, leakage control, baselines, and claim design. The next chapter asks whether a simple linear model can already solve the task once the representation is chosen well.
+This chapter made evaluation discipline explicit: generalization, protected evidence, leakage control, baselines, and claim design. The next chapter asks whether a simple linear model can already solve the task once the representation is chosen well. In other words, the book now moves from protecting the claim to choosing the first serious model family that deserves to make one.
 
 \begin{chaptersummary}
 \item Chapter 3 asks whether the result survives new evidence rather than only the sample already seen during development.
@@ -411,7 +414,7 @@ This chapter made evaluation discipline explicit: generalization, protected evid
 \item Give one example of a weak baseline and one example of a serious baseline for the same task. Explain what each one would and would not tell you.
 \item Propose two sanity checks for a model-development workflow in a domain of your choice, and explain what failure on each check would mean.
 \item Use a public task such as sports-shot prediction or news topic classification and state one sensible primary metric, one possible secondary metric, and one failure mode the headline metric cannot rule out.
-\item Write a one-page evaluation plan using Table~\ref{tab:evaluation-plan} for either spam filtering, course support, or another application of your choice. If you are carrying one case through the book, write this for the same case as your framing memo and metric worksheet so the three documents can be read together.
+\item Write a one-page evaluation plan using Table~\ref{tab:evaluation-plan} for either spam filtering, course support, or another application of your choice. If you are carrying one case through the book, write this for the same case as your framing memo and metric-and-action worksheet so the three documents can be read together.
 \end{exercises}
 
 \begin{challengeexercises}

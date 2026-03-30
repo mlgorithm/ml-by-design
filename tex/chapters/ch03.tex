@@ -10,9 +10,9 @@
 \item Produce a first baseline design sheet before moving to more expressive model families.
 \end{learninggoals}
 
-The previous two chapters established how model claims should be judged and protected. The next modeling question is: once a task and evaluation plan are in place, what is the simplest serious model family we should try first?
+The previous two chapters established how model claims should be judged and protected. The next modeling question is now operational: once a task and evaluation plan are in place, what is the simplest serious model family that deserves a real test?
 
-Very often, the answer is a linear model. But that answer is only meaningful if the representation makes the relevant structure visible. A linear model can only add weighted pieces of what it is given. If the important structure has not been encoded, the weighted sum cannot rescue the problem. If the representation is strong, however, one weighted sum can go surprisingly far.
+Very often, the answer is a linear model. But that answer is only meaningful if the representation makes the relevant structure visible. A linear model can only add weighted pieces of what it is given. If the important structure has not been encoded, the weighted sum cannot rescue the problem. If the representation is strong, however, one weighted sum can go surprisingly far. The model family is therefore not only a choice of formula. It is a test of whether the representation already exposes the signal we care about.
 
 This chapter is therefore not mainly a tour of linear regression and logistic regression. It is the book's representation chapter and its first real baseline chapter. The real question is:
 
@@ -20,7 +20,7 @@ This chapter is therefore not mainly a tour of linear regression and logistic re
 \emph{Can a good representation plus one weighted sum already solve the task? If yes, why? If not, what missing structure does the failure reveal?}
 \end{center}
 
-The chapter's reusable deliverable is a first baseline design sheet. Keep that target in mind while reading: the goal is to make the first serious linear model explicit enough that later model changes become justified rather than impulsive.
+The chapter's reusable deliverable is a first baseline design sheet. Keep that target in mind while reading: the goal is to make the first serious linear model explicit enough that later model changes become justified rather than impulsive. By the end of the chapter, the reader should be able to say what the model sees, what it predicts, how its coefficients may be read safely, how it will be regularized, and what specific failure would justify leaving linearity.
 
 \begin{thinkingtool}
 \textbf{Artifact preview: first baseline design sheet.} Keep five fields active from the beginning of the chapter: the raw input and chosen feature map, the target type, the first linear family to try, the regularization choices to validate, and the specific failure pattern that would justify leaving linearity.
@@ -36,7 +36,7 @@ Suppose we have already framed an early student-support task, chosen an evaluati
 
 That is why linear models appear early in this book. They are not here because they are historically old or mathematically easy. They are here because they make the route from representation to prediction unusually visible. A linear model says, in effect: encode the example as numbers, attach a weight to each one, add the contributions, and transform the result if needed. The simplicity is pedagogically valuable because it makes failure diagnostic instead of mysterious.
 
-Keep that same early student-support setting in view through this chapter. Later chapters will widen the institutional workflow into message routing, retrieval, and grounded answers, but the first baseline question is simpler: can a transparent weighted-sum model already surface the right cases for human review?
+Keep that same early student-support setting in view through this chapter. Later chapters will widen the institutional workflow into message routing, retrieval, and grounded answers, but the first baseline question is simpler: can a transparent weighted-sum model already surface the right cases for human review? Each major section of the chapter turns that one question into a modeling discipline: choose the representation, understand the score, read the coefficients carefully, control complexity, and diagnose failure structurally.
 
 \begin{evidencebox}
 CDC guidance for Youth Risk Behavior Survey trend analysis still uses logistic regression for dichotomous risk behaviors and linear regression for continuous ones \citep{cdc_yrbs_trends}. These models are not just teaching artifacts. They remain standard analytical tools in serious public-health workflows.
@@ -67,7 +67,7 @@ The heart of this chapter is not a fitting rule. It is a representation question
 A feature is a measurable attribute used to represent an example for a model. Features may be numeric, binary, categorical after encoding, counts, ratios, embeddings, or other derived quantities.
 \end{definition}
 
-This definition sounds technical, but its consequences are conceptual. A feature is not just a column in a table. It is a modeling decision. When we choose floor area, age, and distance to transit as features for house-price prediction, we are asserting that these properties may help explain price. When we encode words or character patterns for spam detection, we are asserting that certain patterns in language or formatting may carry useful signal.
+This definition sounds technical, but its consequences are conceptual. A feature is not just a column in a table. It is a modeling decision. When we choose floor area, age, and distance to transit as features for house-price prediction, we are asserting that these properties may help explain price. When we encode words or character patterns for spam detection, we are asserting that certain patterns in language or formatting may carry useful signal. Feature design is therefore not bookkeeping after the interesting part. It is where a large share of the interesting part already happens.
 
 This is why representation is already part of the model. The model does not see ``a house in a good neighborhood'' or ``a student who is disengaging.'' It sees the encoded representation. Someone must decide which numbers or indicators could plausibly carry the relevant information.
 
@@ -144,14 +144,14 @@ If the feature map is $\phi(x) = [x_1,\, x_2,\, x_1^2,\, x_2^2,\, x_1 x_2]^\top$
 Why does this matter? Many students conclude too early that linear models are only useful for obviously linear worlds. Basis expansion shows that a thoughtful feature map can extend a linear model's expressiveness considerably. The cost is interpretability: once features interact, individual coefficients become harder to read as standalone effects. The judgment call is whether the gain in fit justifies the loss in narrative clarity.
 
 \begin{practicalnote}
-Add interaction features deliberately rather than exhaustively. Generating all pairwise products of $d$ features produces $d^2/2$ new coordinates. On a dataset with hundreds of features, that explosion can create severe overfitting and slow training. Add interactions when domain knowledge suggests a specific joint effect, and test whether each addition improves held-out performance.
+Add interaction features deliberately rather than exhaustively. Generating all pairwise products of $d$ features produces $d(d-1)/2$ new coordinates. On a dataset with hundreds of features, that explosion can create severe overfitting and slow training. Add interactions when domain knowledge suggests a specific joint effect, and test whether each addition improves held-out performance.
 \end{practicalnote}
 
 \subsection{Common Feature Types}
 
 Numeric features are the simplest case. If we predict house prices, a feature like floor area may enter directly as a number. But even then, choices remain. Should we use total area or the logarithm of area? Should we center and scale it? Should we include an interaction between area and neighborhood?
 
-Categorical features require more care. A feature like neighborhood, major, product category, or browser type cannot be inserted directly as a single integer without creating an artificial ordering. A common solution is one-hot encoding, in which each category receives its own indicator variable.
+Categorical features require more care. A feature like neighborhood, major, product category, or browser type cannot be inserted directly as a single integer without creating an artificial ordering. A common solution is one-hot encoding, in which each category receives its own indicator variable. In models with an explicit intercept, practitioners usually drop one indicator as the reference category or use regularization carefully so the representation is not perfectly collinear.
 
 Text features are often sparse. A bag-of-words representation may include one feature per word, with each feature recording whether the word appears or how often it appears. This is one reason linear models remain strong in text classification: even though the representation is high-dimensional, the modeling assumption is still a weighted combination of informative signals.
 
@@ -205,7 +205,7 @@ Suppose we want to predict apartment prices. Raw inputs might include address, f
 \end{example}
 
 \begin{example}[Feature Design Across Public Tasks]
-The same logic appears across public tasks. A sports-shot prediction problem suggests structured tabular features such as player position, shot distance, and remaining time. A news topic classification problem suggests sparse lexical features or TF--IDF vectors. The tasks are different, but the Chapter 4 question is the same: what representation would let a weighted sum detect the relevant signal?
+The same logic appears across public tasks. A sports-shot prediction problem suggests structured tabular features such as player position, shot distance, and remaining time. A news topic classification problem suggests sparse lexical features or TF--IDF vectors. The tasks are different, but the chapter's question is the same: what representation would let a weighted sum detect the relevant signal?
 \end{example}
 
 \section{The Generic Linear Pipeline}
@@ -253,7 +253,7 @@ score = dot(weights, features) + bias
 prediction = output_transform(score)
 \end{codeexample}
 
-This small program is worth remembering. Linear regression and logistic regression are two specific instances of this general pattern. The main difference is what the output transform does.
+This small program is worth remembering. Linear regression and logistic regression are two specific instances of this general pattern. The main difference is what the output transform does. The score-producing core stays the same, which is why the chapter can teach both models as one reusable pipeline rather than as two unrelated formulas.
 
 \begin{thinkingtool}
 \textbf{Structural rescue test.} If a linear baseline fails, ask two questions in order:
@@ -299,7 +299,7 @@ Linear regression is commonly fit by minimizing the mean squared residual:
 \text{MSE} = \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2.
 \]
 
-Chapter 2 already explained why squared error is a useful training loss. In Chapter 4, the important skill is more concrete: move comfortably from feature values to prediction to residual, and understand what the residual says about the baseline.
+Chapter 2 already explained why squared error is a useful training loss. Here the important skill is more concrete: move comfortably from feature values to prediction to residual, and understand what the residual says about the baseline. A positive residual means the model predicted too low; a negative residual means it predicted too high.
 
 \subsection{Minimizing the Loss: Gradient Descent}
 
@@ -352,19 +352,19 @@ print(round(loss_before, 4))   # loss before the step
 print(round(loss_after, 4))    # loss after one correction
 \end{codeexample}
 
-Running this program produces a smaller loss after a single step. The code makes two things visible at once: the loss goes down because the weights moved in the direction that locally reduced the squared errors, and each component of the gradient tells its corresponding weight which direction to move and by how much. The attendance-rate weight will grow (a higher attendance rate should lower risk), while the late-submission-rate weight will also grow in magnitude, each nudged by exactly the signal the data provides.
+Running this program produces a smaller loss after a single step. The code makes two things visible at once: the loss goes down because the weights moved in the direction that locally reduced the squared errors, and each component of the gradient tells its corresponding weight how far to move. In this tiny no-bias setup, both weights increase on the first step because the model starts by underpredicting every positive target from an all-zero score. That first-step sign should not be overinterpreted as the final semantic effect of each feature; later updates, or a model with an explicit bias term, separate those effects more clearly.
 
 \begin{figure}[t]
 \centering
 \definecolor{c3fitLine}{RGB}{56,103,170}
 \definecolor{c3residLine}{RGB}{180,40,40}
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm,y=1cm,font=\small]
+\begin{tikzpicture}[x=1cm,y=1.4cm,font=\small]
   \draw[->,thick,black!70] (-0.2,0) -- (8.8,0) node[right] {area};
-  \draw[->,thick,black!70] (0,-0.2) -- (0,5.6) node[above] {price};
+  \draw[->,thick,black!70] (0,-0.2) -- (0,6.2) node[above] {price};
   %% Fitted line
   \draw[c3fitLine,thick] (0.3,0.41) -- (8.5,4.92);
-  %% Residuals
+  %% Residuals (dashed red lines between fitted line and data point)
   \draw[dashed,c3residLine,line width=0.9pt] (1.2,0.86) -- (1.2,0.90);
   \draw[dashed,c3residLine,line width=0.9pt] (2.0,1.35) -- (2.0,1.47);
   \draw[dashed,c3residLine,line width=0.9pt] (4.2,2.56) -- (4.2,2.85);
@@ -373,11 +373,13 @@ Running this program produces a smaller loss after a single step. The code makes
   %% Data points
   \foreach \px/\py in {1.2/0.86,2.0/1.47,3.0/1.90,4.2/2.85,5.6/3.53,7.2/4.91}
     \filldraw[c3fitLine,fill=c3fitLine!80] (\px,\py) circle (3pt);
-  %% Labels
-  \node[rotate=29, anchor=south, font=\footnotesize, c3fitLine] at (5.5,3.27) {fitted line};
-  \node[anchor=west, align=left, font=\footnotesize] at (7.35,4.56)
-      {\textcolor{c3residLine}{residuals:}\\[-2pt]vertical prediction\\[-2pt]errors};
-  \draw[<-,thin,c3residLine] (7.22,4.56) -- (7.35,4.56);
+  %% Labels — fitted line label below the line in open space
+  \node[rotate=29, anchor=north, font=\footnotesize, c3fitLine] at (2.2,1.25) {fitted line};
+  %% Residuals label — below the chart, right side, with short upward leader to mid residual
+  \node[anchor=north west, font=\footnotesize, align=left, text width=2.8cm] at (6.5,2.0)
+      {\textcolor{c3residLine}{residuals:} vertical prediction errors};
+  %% leader: straight right from residual at x=4.2, then straight down
+  \draw[<-,thin,c3residLine] (4.2,2.56) -- (6.4,2.56) -- (6.4,2.0);
 \end{tikzpicture}%
 }
 \caption{Linear regression predicts with a line in feature space. Residuals measure how far the observed targets fall above or below the fitted prediction.}
@@ -421,7 +423,7 @@ If the actual sale price turned out to be 338, the residual would be
 r = 338 - 326.8 = 11.2.
 \]
 
-That is the first concrete Chapter 4 skill: move from encoded features to a predicted numeric value, then inspect the residual rather than admiring the formula.
+That is the first concrete skill the chapter wants to automate in the reader's head: move from encoded features to a predicted numeric value, then inspect the residual rather than admiring the formula.
 
 \begin{warningbox}
 An interpretable model is not the same thing as a correct interpretation. Coefficients are only interpretable relative to the features included, their scales, and the correlations among them.
@@ -481,7 +483,7 @@ and then maps that score to a probability through the sigmoid function:
 P(y=1 \mid x) &= \sigma(w^\top x + b).
 \end{align*}
 
-In predictive language, this is the model's estimated conditional probability, not automatically a calibrated real-world frequency. This is why the generic pipeline matters. Linear regression uses the identity transform. Logistic regression uses the sigmoid transform. But the change is not only cosmetic. Logistic regression is trained against a classification objective such as log loss, and its output is meant to support probability estimation and threshold policy rather than unrestricted numeric prediction.
+In predictive language, this is the model's estimated conditional probability, not automatically a calibrated real-world frequency. This is why the generic pipeline matters. Linear regression uses the identity transform. Logistic regression uses the sigmoid transform. But the change is not only cosmetic. Logistic regression is trained against a classification objective such as log loss, and its output is meant to support probability estimation and threshold policy rather than unrestricted numeric prediction. The reader should keep three layers separate all the way through: score, probability, and decision rule.
 
 Logistic regression is linear in the score, the log-odds, and the decision boundary, not in the final probability output itself.
 
@@ -633,7 +635,7 @@ Total logit & --- & --- & 0.72 \\
 \label{tab:logistic-decomposition}
 \end{table}
 
-At a spam threshold of $0.5$, this message would be flagged. At a threshold of $0.7$, the same message would not. Chapter 2 already explained threshold policy in detail. Chapter 4 uses the example only to keep the boundary clear: the model supplies a score and a probability, while the larger system still decides how to act.
+At a spam threshold of $0.5$, this message would be flagged. At a threshold of $0.7$, the same message would not. Chapter 2 already explained threshold policy in detail. Here the example serves one narrower purpose: keep the boundary clear between the model's score and probability, and the larger system's decision about how to act.
 
 \begin{table}[t]
 \centering
@@ -669,7 +671,7 @@ So the same coefficient can have a larger or smaller probability impact dependin
 
 \section{Reading Coefficients Without Fooling Yourself}
 
-One of the selling points of linear models is interpretability. That selling point is real, but it needs language discipline. Coefficients are not self-explaining truths. They are statements about the fitted relationship \emph{within a particular representation}.
+One of the selling points of linear models is interpretability. That selling point is real, but it needs language discipline. Coefficients are not self-explaining truths. They are statements about the fitted relationship \emph{within a particular representation}. The next three subsections give the minimum guardrails: scale, correlation, and omitted variables all change what a coefficient can honestly be said to mean.
 
 \subsection{Scale Matters}
 
@@ -750,12 +752,12 @@ What you are usually not allowed to say from the model alone:
 \end{warningbox}
 
 \begin{practicalnote}
-These assumptions matter for inference, not for prediction alone. Linearity in the encoded features, independent or appropriately modeled errors, roughly constant variance, and no perfect multicollinearity are the classical conditions behind standard errors and hypothesis tests. A linear baseline can still be useful even when some of those assumptions are only approximate.
+These assumptions matter for inference, not for prediction alone. Linearity in the encoded features, exogeneity or zero conditional mean of the errors, independent or appropriately modeled errors, roughly constant variance, and no perfect multicollinearity are the classical conditions behind standard errors and hypothesis tests. A linear baseline can still be useful even when some of those assumptions are only approximate.
 \end{practicalnote}
 
 \section{Prediction Is Not Intervention}
 
-Linear models tempt people into causal language because the coefficients look clean. But a predictive model answers an associational question: given the observed features, what outcome should we expect? A causal question is different: what would happen if we actively changed one part of the world? Pearl's causal framework makes this distinction central by separating ordinary observation from intervention and counterfactual reasoning \citep{pearl2009}.
+Linear models tempt people into causal language because the coefficients look clean. This is the point where linear transparency becomes dangerous if the reader stops being precise. A predictive model answers an associational question: given the observed features, what outcome should we expect? A causal question is different: what would happen if we actively changed one part of the world? Pearl's causal framework makes this distinction central by separating ordinary observation from intervention and counterfactual reasoning \citep{pearl2009}.
 
 This distinction matters even in simple tabular problems. A model may learn that students who attend more office hours tend to earn higher grades. That makes office-hour attendance a potentially useful predictive feature. It does \emph{not} by itself prove that forcing attendance to increase would raise grades by the same amount. Students who seek help may also be more motivated, have different schedules, or receive more support elsewhere. Those hidden differences can create confounding.
 
@@ -775,7 +777,7 @@ The practical rule for this book is conservative. If the task is prediction, say
 
 \section{Controlled Simplicity: Regularization}
 
-Even linear models can overfit, especially when the number of features is large or when features are noisy. Regularization addresses this by penalizing overly large or overly complex coefficient vectors.
+Even linear models can overfit, especially when the number of features is large or when features are noisy. Regularization addresses this by penalizing overly large or overly complex coefficient vectors. It is the chapter's answer to a practical baseline question: how do we keep the first serious model controlled without making it uselessly weak?
 
 \begin{definition}[L2 Regularization]
 L2 regularization adds a penalty proportional to the squared magnitude of the coefficients:
@@ -797,7 +799,7 @@ L1 regularization often drives some coefficients exactly to zero. This can be us
 
 In most implementations, the intercept $b$ is left unpenalized; the regularizer is meant to control feature weights, not to force the global baseline toward zero.
 
-Conceptually, both penalties express a preference for restrained explanations. They do not ban complexity entirely. They require the data to justify it.
+Conceptually, both penalties express a preference for restrained explanations. They do not ban complexity entirely. They require the data to justify it. That is why regularization belongs to baseline design rather than to after-the-fact cleanup.
 
 The geometry gives a useful picture: the L2 penalty has round contour lines, so optimization usually prefers to shrink many weights smoothly rather than eliminate them. The L1 penalty has diamond-shaped contours with corners on the axes, so solutions are more likely to land exactly on an axis, which is why zeros appear naturally.
 
@@ -865,7 +867,7 @@ The L2 penalty nudges every weight toward zero by an amount proportional to the 
 
 \section{Why Linear Models Are the Right First Baseline}
 
-A strong baseline should be cheap to run, understandable to debug, and hard to beat for the right reasons. Linear models satisfy all three criteria.
+A strong baseline should be cheap to run, understandable to debug, and hard to beat for the right reasons. Linear models satisfy all three criteria. A good baseline is supposed to be beatable eventually, but not trivially. If a richer model wins, it should win by capturing a named piece of structure that the linear baseline could not.
 
 \begin{thinkingtool}
 \textbf{Baseline ladder.} Start with the simplest serious model that matches the task. Climb only when you can name the missing structure.
@@ -903,7 +905,7 @@ No model family is universal. Linear models struggle when the decision boundary 
 
 They also struggle when interactions are essential but omitted. If the effect of one feature depends strongly on another, and that interaction is not encoded explicitly, a linear model may be systematically wrong even when each feature is individually informative.
 
-This is the right way to think about moving beyond linear models. Do not abandon them because they are old. Abandon them only when the problem or the evidence shows that the needed structure cannot be captured adequately in the current representation.
+This is the right way to think about moving beyond linear models. Do not abandon them because a richer family is fashionable. Abandon them only when the problem or the evidence shows that the needed structure cannot be captured adequately in the current representation.
 
 \begin{figure}[t]
 \centering
@@ -911,7 +913,17 @@ This is the right way to think about moving beyond linear models. Do not abandon
 \definecolor{c3cls2}{RGB}{184,92,16}
 \definecolor{c3sepLine}{RGB}{26,112,64}
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[font=\small]
+\begin{tikzpicture}[
+  font=\small,
+  paneltitle/.style={
+    font=\footnotesize\bfseries,
+    align=center,
+    fill=white,
+    inner sep=2pt,
+    rounded corners=2pt,
+    text=black!75
+  }
+]
 %% Panel A: XOR – single line fails
 \begin{scope}
   \draw[->,black!70] (0,0) -- (3.8,0) node[right] {$x_1$};
@@ -924,18 +936,21 @@ This is the right way to think about moving beyond linear models. Do not abandon
   \draw[c3cls2,thick] (3.0,0.8) circle (3pt);
   %% A line that doesn't separate them
   \draw[black!50,thick] (0.5,3.3) -- (3.3,0.5);
-  \node[black!70, font=\small\bfseries] at (1.9,4.2) {raw inputs: one line fails};
+  \node[paneltitle, text width=3.2cm] at (1.9,4.85)
+    {raw inputs\\one line fails on XOR};
 \end{scope}
 %% Panel B: engineered feature separates
-\begin{scope}[xshift=6.0cm]
-  \draw[->,black!70] (0,0) -- (4.2,0) node[right] {$x_1 x_2$};
-  \draw[->,black!70] (0,0) -- (0,1.6) node[above] {class};
+\begin{scope}[xshift=6.8cm]
+  \draw[->,black!70] (0,0) -- (4.2,0) node[right] {$(x_1 - x_2)^2$};
+  \draw[->,black!70] (0,0) -- (0,1.8);
   \filldraw[fill=c3cls1,draw=c3cls1] (0.7,1.1) circle (3pt);
-  \filldraw[fill=c3cls1,draw=c3cls1] (3.2,1.1) circle (3pt);
-  \draw[c3cls2,thick] (1.7,0.4) circle (3pt);
-  \draw[c3cls2,thick] (2.2,0.4) circle (3pt);
-  \draw[c3sepLine,thick,dashed] (2.6,0) -- (2.6,1.4);
-  \node[black!70, font=\small\bfseries] at (2.1,1.9) {engineered feature: threshold can work};
+  \filldraw[fill=c3cls1,draw=c3cls1] (1.1,1.1) circle (3pt);
+  \draw[c3cls2,thick] (3.3,0.4) circle (3pt);
+  \draw[c3cls2,thick] (3.7,0.4) circle (3pt);
+  \draw[c3sepLine,thick,dashed] (2.4,0) -- (2.4,1.4);
+  \node[c3sepLine, font=\footnotesize, fill=white, inner sep=1.5pt] at (2.95,0.95) {threshold};
+  \node[paneltitle, text width=3.6cm] at (2.1,2.55)
+    {engineered feature\\a threshold can work};
 \end{scope}
 \end{tikzpicture}%
 }
@@ -951,11 +966,11 @@ The diagnostic questions are often more useful than the answer:
 \item If raw images or sequences matter, learned representations may matter later.
 \end{itemize}
 
-That is why the next chapter is the natural move. It does not replace linear thinking. It answers the specific failure modes that a weighted sum exposes.
+That is why the next chapter is the natural move. It does not replace linear thinking. It asks a sharper structural question: is the missing piece mainly conditional thresholds and interactions, local similarity, or unlabeled organization? The weighted-sum baseline is what makes that diagnosis possible.
 
 \section{Chapter Artifact: A First Baseline Design Sheet}
 
-By the end of this chapter, the reader should be able to write down the first defensible baseline before trying more expressive methods. The point is not to freeze creativity. The point is to make the first modeling move explicit enough that later changes become justified rather than impulsive. This sheet is where representation audit and baseline ladder turn into one written modeling commitment.
+By the end of this chapter, the reader should be able to write down the first defensible baseline before trying more expressive methods. The point is not to freeze creativity. The point is to make the first modeling move explicit enough that later changes become justified rather than impulsive. The framing memo named the decision context, the metric worksheet named good behavior, and the evaluation plan protected the claim. This sheet names the first serious model that deserves to make that claim. It is where representation audit and baseline ladder turn into one written modeling commitment.
 
 \begin{table}[t]
 \centering
@@ -1003,7 +1018,7 @@ For early student-support prediction, the raw input might be course activity log
 
 \section{Looking Ahead}
 
-This chapter showed that representation is already part of the model. The next chapter studies methods that capture branching logic, local neighborhoods, and unlabeled structure more directly than one global weighted sum.
+This chapter showed that representation is already part of the model. The next chapter studies what kind of structure is missing when one global weighted sum is not enough: conditional thresholds and interactions, local similarity, or unlabeled organization.
 
 \begin{chaptersummary}
 \item This chapter begins with a representation question: can a good encoding plus one weighted sum already solve the task?
