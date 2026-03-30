@@ -61,6 +61,17 @@ This repository is intended to be released with Git tags and GitHub releases.
 
 See [VERSIONING.md](VERSIONING.md) for the release convention used here.
 
+## License
+
+The repository uses a split license model.
+
+- The manuscript text, original figures, covers, and editorial materials are
+  licensed under `CC BY-NC-SA 4.0`; see [LICENSE](LICENSE).
+- Code in [`companion/`](companion/) is licensed under `MIT`; see
+  [companion/LICENSE](companion/LICENSE).
+- Third-party assets are excluded from those blanket licenses unless explicitly
+  stated; see [THIRD_PARTY.md](THIRD_PARTY.md).
+
 ## Citation
 
 GitHub will read [CITATION.cff](CITATION.cff) for repository citation metadata. If you mint a Zenodo DOI, update the citation file and release notes so the tagged version and DOI point to the same edition.

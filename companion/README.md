@@ -4,7 +4,8 @@ This directory contains the runnable code that accompanies the book.
 
 Instructor-facing course guidance lives in `instructor-guide.md`.
 Instructor-only solutions scaffolding and distribution guidance live in `instructor-solutions-guide.md`.
-The standalone coding lab lives in `ai-lab/` at the repo root.
+This repository only contains the book-facing companion code, not a separate
+coding-lab site.
 
 The key design rule is simple:
 
@@ -71,3 +72,8 @@ book/companion/chXX/
 ```
 
 Not every chapter needs all directories immediately, but the structure should remain consistent.
+
+## License
+
+Unless a file says otherwise, code in this directory is licensed under the MIT
+License; see `LICENSE` in this directory.
