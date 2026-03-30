@@ -21,7 +21,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch10/minimal/aggregate_vs_slice_demo.py
+python3 companion/ch10/minimal/aggregate_vs_slice_demo.py
 ```
 
 What to notice:
@@ -48,7 +48,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch10/practical/ablation_and_repeated_runs_demo.py
+python3 companion/ch10/practical/ablation_and_repeated_runs_demo.py
 ```
 
 What to notice:

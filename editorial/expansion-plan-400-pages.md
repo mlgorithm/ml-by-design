@@ -30,7 +30,7 @@ That is manuscript length for a short textbook, not a 400-page full textbook.
 
 ## Practical Page Target
 
-With the current `11pt`, one-sided, A4 layout in [book.tex](/Users/farhad.vadiee/Documents/github/AI-book/book/book.tex#L1), a serious `400`-page result probably needs roughly:
+With the current manuscript layout in `tex/book.tex`, a serious `400`-page result probably needs roughly:
 
 - `130k-145k` words of real prose
 - more anchor figures and worked examples

@@ -21,7 +21,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch11/minimal/subgroup_metrics_demo.py
+python3 companion/ch11/minimal/subgroup_metrics_demo.py
 ```
 
 What to notice:
@@ -49,7 +49,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch11/practical/reliability_slice_checks_demo.py
+python3 companion/ch11/practical/reliability_slice_checks_demo.py
 ```
 
 What to notice:

@@ -108,8 +108,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch02/minimal/metric_tradeoffs.py`
-- `book/companion/ch02/practical/overfitting_demo_sklearn.py`
+- `companion/ch02/minimal/metric_tradeoffs.py`
+- `companion/ch02/practical/overfitting_demo_sklearn.py`
 
 ### Chapter 3: Linear Models and Representation
 
@@ -136,8 +136,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch03/minimal/linear_and_logistic_from_scratch.py`
-- `book/companion/ch03/practical/linear_and_logistic_sklearn.py`
+- `companion/ch03/minimal/linear_and_logistic_from_scratch.py`
+- `companion/ch03/practical/linear_and_logistic_sklearn.py`
 
 ### Chapter 4: Structure Beyond Linearity
 
@@ -164,8 +164,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch04/minimal/structure_methods_from_scratch.py`
-- `book/companion/ch04/practical/structure_beyond_linearity_sklearn.py`
+- `companion/ch04/minimal/structure_methods_from_scratch.py`
+- `companion/ch04/practical/structure_beyond_linearity_sklearn.py`
 
 ### Chapter 5: Optimization and Neural Networks
 
@@ -192,8 +192,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch05/minimal/tiny_network_from_scratch.py`
-- `book/companion/ch05/practical/mlp_pytorch_demo.py`
+- `companion/ch05/minimal/tiny_network_from_scratch.py`
+- `companion/ch05/practical/mlp_pytorch_demo.py`
 
 ### Chapter 6: Representation Learning and Foundation Models
 
@@ -220,8 +220,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch06/minimal/cooccurrence_embeddings.py`
-- `book/companion/ch06/practical/contrastive_transfer_demo.py`
+- `companion/ch06/minimal/cooccurrence_embeddings.py`
+- `companion/ch06/practical/contrastive_transfer_demo.py`
 
 ### Chapter 7: Vision: Learning from Images
 
@@ -248,8 +248,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch07/minimal/convolution_and_pooling_demo.py`
-- `book/companion/ch07/practical/digits_cnn_augmentation_demo.py`
+- `companion/ch07/minimal/convolution_and_pooling_demo.py`
+- `companion/ch07/practical/digits_cnn_augmentation_demo.py`
 
 ### Chapter 8: Language: Context and Grounding
 
@@ -276,8 +276,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch08/minimal/order_and_ngrams_demo.py`
-- `book/companion/ch08/practical/order_sensitive_text_demo.py`
+- `companion/ch08/minimal/order_and_ngrams_demo.py`
+- `companion/ch08/practical/order_sensitive_text_demo.py`
 
 ### Chapter 9: Audio, Time, and Sequential Prediction
 
@@ -304,8 +304,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch09/minimal/spectrogram_window_demo.py`
-- `book/companion/ch09/practical/forecast_split_leakage_demo.py`
+- `companion/ch09/minimal/spectrogram_window_demo.py`
+- `companion/ch09/practical/forecast_split_leakage_demo.py`
 
 ### Chapter 10: Experiments, Error Analysis, and Scientific Claims
 
@@ -332,8 +332,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch10/minimal/aggregate_vs_slice_demo.py`
-- `book/companion/ch10/practical/ablation_and_repeated_runs_demo.py`
+- `companion/ch10/minimal/aggregate_vs_slice_demo.py`
+- `companion/ch10/practical/ablation_and_repeated_runs_demo.py`
 
 ### Chapter 11: Reliability: Bias, Robustness, Privacy, and Safety
 
@@ -360,8 +360,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch11/minimal/subgroup_metrics_demo.py`
-- `book/companion/ch11/practical/reliability_slice_checks_demo.py`
+- `companion/ch11/minimal/subgroup_metrics_demo.py`
+- `companion/ch11/practical/reliability_slice_checks_demo.py`
 
 ### Chapter 12: From Models to Systems
 
@@ -388,8 +388,8 @@ Synthesis task:
 
 Companion link:
 
-- `book/companion/ch12/minimal/training_serving_skew_demo.py`
-- `book/companion/ch12/practical/selective_prediction_pipeline_demo.py`
+- `companion/ch12/minimal/training_serving_skew_demo.py`
+- `companion/ch12/practical/selective_prediction_pipeline_demo.py`
 
 ## Cross-Chapter Assignments
 

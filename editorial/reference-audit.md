@@ -8,7 +8,7 @@ High-confidence checks:
 
 - cited bibliography keys found in manuscript: `25`
 - missing bibliography keys referenced in text: `0`
-- unused entries currently present in `references.bib`: `0`
+- unused entries currently present in `tex/references.bib`: `0`
 
 This means the manuscript is structurally sound at the BibTeX level: there are no broken citation keys in the current source.
 

@@ -91,11 +91,11 @@ This order matters because the book is already differentiated. The biggest remai
 
 These are the highest-value project files to add or complete next:
 
-- `manuscript/exercise-plan.md` `created`
-- `manuscript/figure-plan.md` `created`
-- `manuscript/reviewer-packet.md` `created`
+- `editorial/exercise-plan.md` `created`
+- `editorial/figure-plan.md` `created`
+- `editorial/reviewer-packet.md` `created`
 - `companion/instructor-guide.md` `created`
-- `manuscript/terminology-sheet.md` `created`
+- `editorial/terminology-sheet.md` `created`
 
 ## Stop Conditions
 

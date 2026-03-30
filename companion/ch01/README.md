@@ -23,7 +23,7 @@ The code here supports that goal in two layers, both using the spam filtering ca
 Run it with:
 
 ```bash
-python3 book/companion/ch01/minimal/split_and_keyword_baseline.py
+python3 companion/ch01/minimal/split_and_keyword_baseline.py
 ```
 
 ## Practical example
@@ -39,7 +39,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch01/practical/spam_baseline_sklearn.py
+python3 companion/ch01/practical/spam_baseline_sklearn.py
 ```
 
 ## Teaching note

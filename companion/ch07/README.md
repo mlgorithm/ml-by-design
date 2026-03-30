@@ -21,7 +21,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch07/minimal/convolution_and_pooling_demo.py
+python3 companion/ch07/minimal/convolution_and_pooling_demo.py
 ```
 
 What to notice:
@@ -50,7 +50,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch07/practical/digits_cnn_augmentation_demo.py
+python3 companion/ch07/practical/digits_cnn_augmentation_demo.py
 ```
 
 What to notice:

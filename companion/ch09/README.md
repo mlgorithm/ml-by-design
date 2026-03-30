@@ -21,7 +21,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch09/minimal/spectrogram_window_demo.py
+python3 companion/ch09/minimal/spectrogram_window_demo.py
 ```
 
 What to notice:
@@ -49,7 +49,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch09/practical/forecast_split_leakage_demo.py
+python3 companion/ch09/practical/forecast_split_leakage_demo.py
 ```
 
 What to notice:

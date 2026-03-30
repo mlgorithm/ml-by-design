@@ -21,7 +21,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch08/minimal/order_and_ngrams_demo.py
+python3 companion/ch08/minimal/order_and_ngrams_demo.py
 ```
 
 What to notice:
@@ -49,7 +49,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch08/practical/order_sensitive_text_demo.py
+python3 companion/ch08/practical/order_sensitive_text_demo.py
 ```
 
 What to notice:

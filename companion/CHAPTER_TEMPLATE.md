@@ -70,7 +70,7 @@ Good chapter-level defaults:
 - place longer proofs in a `Math Lens`, `Advanced Note`, or appendix when the main line is decision-first
 - introduce the chapter artifact early enough that later abstractions have somewhere to land
 
-See `book/manuscript/teaching-style-guide.md` for the fuller standard.
+See `editorial/teaching-style-guide.md` for the fuller standard.
 
 ## Minimal example checklist
 

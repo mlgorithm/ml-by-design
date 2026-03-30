@@ -6,15 +6,11 @@ The book is organized around a single practical question: how do you move from a
 
 ## What This Repo Contains
 
-- `book.tex`
-  main LaTeX entry point for the manuscript
-- `frontmatter/`, `chapters/`, `appendices/`, `backmatter/`
-  source files for the book
-- `figures/`
-  TikZ and supporting figure assets
 - `companion/`
   chapter companion material that stays close to the printed text
-- `manuscript/`
+- `tex/`
+  LaTeX source for the manuscript, covers, figures, bibliography, and chapter files
+- `editorial/`
   editorial notes, review materials, and planning documents
 - `book.pdf`
   current compiled manuscript
@@ -37,17 +33,29 @@ The manuscript keeps seven recurring questions visible:
 
 ## Build
 
-Build the manuscript from the repository root:
+Build everything from the repository root:
 
 ```bash
-latexmk -pdf -interaction=nonstopmode -halt-on-error book.tex
+make all
 ```
 
-Build the standalone covers:
+Or build individual targets:
 
 ```bash
-latexmk -pdf -interaction=nonstopmode -halt-on-error cover.tex
-latexmk -pdf -interaction=nonstopmode -halt-on-error full-cover.tex
+make book
+make cover
+make full-cover
+```
+
+The `Makefile` keeps the LaTeX source under `tex/` while writing the compiled
+PDFs back to the repository root.
+
+If you prefer the raw commands:
+
+```bash
+latexmk -cd -pdf -interaction=nonstopmode -halt-on-error -outdir=.. tex/book.tex
+latexmk -cd -pdf -interaction=nonstopmode -halt-on-error -outdir=.. tex/cover.tex
+latexmk -cd -pdf -interaction=nonstopmode -halt-on-error -outdir=.. tex/full-cover.tex
 ```
 
 ## Versioning

@@ -23,7 +23,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch02/minimal/metric_tradeoffs.py
+python3 companion/ch02/minimal/metric_tradeoffs.py
 ```
 
 ## Practical example
@@ -40,5 +40,5 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch02/practical/overfitting_demo_sklearn.py
+python3 companion/ch02/practical/overfitting_demo_sklearn.py
 ```

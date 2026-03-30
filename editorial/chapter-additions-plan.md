@@ -326,7 +326,7 @@ The chapter plans below are the recommended insertion points for the next revisi
 
 ## Exact Insertion Checklist for Method Expansions
 
-### Chapter 2: Prediction, Loss, and Decision Rules (`chapters/ch02.tex`)
+### Chapter 2: Prediction, Loss, and Decision Rules (`tex/chapters/ch02.tex`)
 
 - Insert after `Threshold Tradeoffs`.
   New subsection title: `Threshold Sweep as Policy Search`
@@ -348,7 +348,7 @@ The chapter plans below are the recommended insertion points for the next revisi
   Purpose: explain that model choice and parameter choice are part of the evidence protocol, not an invisible prelude.
   Required worked example: two candidate models and one tuning decision that looks good on validation but must not be rechecked repeatedly on test.
 
-### Chapter 4: Structure Beyond Linearity (`chapters/ch04.tex`)
+### Chapter 4: Structure Beyond Linearity (`tex/chapters/ch04.tex`)
 
 - Insert after `Why Averaging Helps: Variance Without Bias`.
   New subsection title: `Bagging as Deliberate Disagreement`
@@ -369,7 +369,7 @@ The chapter plans below are the recommended insertion points for the next revisi
   Purpose: explain why perfect separation is not the only goal and why robustness can require tolerated violations.
   Required worked example: one outlier that changes the hard-margin boundary.
 
-### Chapter 5: Optimization and Neural Networks (`chapters/ch05.tex`)
+### Chapter 5: Optimization and Neural Networks (`tex/chapters/ch05.tex`)
 
 - Insert after `Learning Rate`.
   New subsection title: `Adaptive Optimization: Momentum, Adam, and AdamW`
@@ -391,7 +391,7 @@ The chapter plans below are the recommended insertion points for the next revisi
   Purpose: stop students from treating all regularization ideas as interchangeable.
   Required worked example: one overfitting curve plus one intuition example showing why dropout is not the same as shrinking weights.
 
-### Chapter 6: Representation Learning and Foundation Models (`chapters/ch06.tex`)
+### Chapter 6: Representation Learning and Foundation Models (`tex/chapters/ch06.tex`)
 
 - Insert after `Self-Supervised Pressure`.
   New subsection title: `Autoencoders as Reconstruction-Based Representation Learning`
@@ -409,7 +409,7 @@ The chapter plans below are the recommended insertion points for the next revisi
   Purpose: make transfer less slogan-like by showing one case where reuse works and one where domain mismatch blocks it.
   Required artifact update: extend the chapter's reuse plan with an explicit "evidence that reuse is actually helping" line.
 
-### Chapter 7: Vision: Learning from Images (`chapters/ch07.tex`)
+### Chapter 7: Vision: Learning from Images (`tex/chapters/ch07.tex`)
 
 - Insert after `Tracking and Other Structured Vision Tasks`.
   New subsection title: `One Scene, Three Tasks: Classification, Detection, and Segmentation`
@@ -421,7 +421,7 @@ The chapter plans below are the recommended insertion points for the next revisi
   Purpose: explain that a detector or segmenter cannot be judged with plain classification accuracy because location, overlap, and object completeness are part of the claim.
   Scope note: keep this conceptual. Do not turn it into a benchmark-metric catalog.
 
-### Chapter 8: Language: Context and Grounding (`chapters/ch08.tex`)
+### Chapter 8: Language: Context and Grounding (`tex/chapters/ch08.tex`)
 
 - Insert after `Translation, Summarization, Question Answering, and Generation`.
   New subsection title: `Encoder-Decoder Models as Conditional Sequence Mapping`
@@ -433,7 +433,7 @@ The chapter plans below are the recommended insertion points for the next revisi
   Purpose: distinguish autoregressive continuation from task-directed mapping.
   Required comparison: one sentence-completion objective versus one translation-style objective.
 
-### Chapter 10: Experiments, Error Analysis, and Scientific Claims (`chapters/ch10.tex`)
+### Chapter 10: Experiments, Error Analysis, and Scientific Claims (`tex/chapters/ch10.tex`)
 
 - Insert after `Experimental Protocol as Control of Premises`.
   New subsection title: `Cross-Validation as an Evaluation Design for Limited Data`

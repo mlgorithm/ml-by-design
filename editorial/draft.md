@@ -6,7 +6,7 @@ A Problem-Driven Introduction to Machine Learning, Evaluation, and Reliable AI S
 
 ## Preface
 
-This draft preserves the older main-line manuscript before the mathematical bridge chapters were front-loaded in the current book source. The active manuscript lives in `book/chapters/`, and the current build uses the title and chapter naming shown elsewhere in the repository.
+This draft preserves the older main-line manuscript before the mathematical bridge chapters were front-loaded in the current book source. The active manuscript lives in `tex/chapters/`, and the current build uses the title and chapter naming shown elsewhere in the repository.
 
 Artificial intelligence is often presented in one of two unsatisfying ways. In the first version, AI is a list of clever algorithms, each with a diagram, a formula, and a famous application. In the second version, AI is a collection of tools and code snippets that promise impressive results if the reader follows enough steps. Both approaches miss something central. Intelligence in machines is not a bag of tricks. It is a disciplined way of connecting data, models, decisions, and evidence.
 

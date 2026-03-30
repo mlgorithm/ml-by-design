@@ -63,7 +63,7 @@ Avoid making the book depend on:
 Use the following shape for each chapter:
 
 ```text
-book/companion/chXX/
+companion/chXX/
   README.md
   data/
   minimal/

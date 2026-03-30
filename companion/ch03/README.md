@@ -23,7 +23,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch03/minimal/linear_and_logistic_from_scratch.py
+python3 companion/ch03/minimal/linear_and_logistic_from_scratch.py
 ```
 
 ## Practical example
@@ -39,5 +39,5 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch03/practical/linear_and_logistic_sklearn.py
+python3 companion/ch03/practical/linear_and_logistic_sklearn.py
 ```

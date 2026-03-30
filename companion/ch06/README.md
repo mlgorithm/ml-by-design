@@ -23,7 +23,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch06/minimal/cooccurrence_embeddings.py
+python3 companion/ch06/minimal/cooccurrence_embeddings.py
 ```
 
 What to notice:
@@ -53,7 +53,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch06/practical/contrastive_transfer_demo.py
+python3 companion/ch06/practical/contrastive_transfer_demo.py
 ```
 
 What to notice:

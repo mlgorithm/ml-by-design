@@ -21,7 +21,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch12/minimal/training_serving_skew_demo.py
+python3 companion/ch12/minimal/training_serving_skew_demo.py
 ```
 
 What to notice:
@@ -50,7 +50,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch12/practical/selective_prediction_pipeline_demo.py
+python3 companion/ch12/practical/selective_prediction_pipeline_demo.py
 ```
 
 What to notice:

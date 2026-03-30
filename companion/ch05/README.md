@@ -21,7 +21,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch05/minimal/tiny_network_from_scratch.py
+python3 companion/ch05/minimal/tiny_network_from_scratch.py
 ```
 
 What to notice:
@@ -50,7 +50,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch05/practical/mlp_pytorch_demo.py
+python3 companion/ch05/practical/mlp_pytorch_demo.py
 ```
 
 What to notice:

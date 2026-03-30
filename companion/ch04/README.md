@@ -21,7 +21,7 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch04/minimal/structure_methods_from_scratch.py
+python3 companion/ch04/minimal/structure_methods_from_scratch.py
 ```
 
 ## Practical example
@@ -37,5 +37,5 @@ What it shows:
 Run it with:
 
 ```bash
-python3 book/companion/ch04/practical/structure_beyond_linearity_sklearn.py
+python3 companion/ch04/practical/structure_beyond_linearity_sklearn.py
 ```

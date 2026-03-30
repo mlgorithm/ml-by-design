@@ -5,7 +5,7 @@ This directory documents the reviewer-specific chapter bundles that can be gener
 Use the packet builder:
 
 ```bash
-manuscript/build_review_packets.sh
+editorial/build_review_packets.sh
 ```
 
 Default output:
@@ -17,7 +17,7 @@ Default output:
 You can also choose a custom output directory:
 
 ```bash
-manuscript/build_review_packets.sh /custom/output/path
+editorial/build_review_packets.sh /custom/output/path
 ```
 
 ## Packet Definitions

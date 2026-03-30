@@ -26,7 +26,7 @@ Suggested status values:
 Use the first review round as a dated execution plan rather than an open-ended intention.
 
 1. `March 17, 2026`
-   Send three reviewer packets using `manuscript/reviewer-packet.md`.
+   Send three reviewer packets using `editorial/reviewer-packet.md`.
 2. `March 24, 2026`
    Send one follow-up to any reviewer who has not replied.
 3. `April 3, 2026`
@@ -38,9 +38,9 @@ Use the first review round as a dated execution plan rather than an open-ended i
 
 Track exactly what was sent:
 
-- reviewer packet source: `manuscript/reviewer-packet.md`
-- packet builder: `manuscript/build_review_packets.sh`
-- packet manifest doc: `manuscript/review-packets/README.md`
+- reviewer packet source: `editorial/reviewer-packet.md`
+- packet builder: `editorial/build_review_packets.sh`
+- packet manifest doc: `editorial/review-packets/README.md`
 - manuscript version or commit:
 - chapter PDF excerpt used:
 - date sent:
@@ -99,7 +99,7 @@ Initial binning:
 
 ## Feedback Bins
 
-Use the same bins defined in `manuscript/reviewer-packet.md`:
+Use the same bins defined in `editorial/reviewer-packet.md`:
 
 - `Positioning`
 - `Teachability`
