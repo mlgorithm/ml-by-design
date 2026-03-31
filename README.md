@@ -10,9 +10,7 @@ Download the current edition here:
 
 ## DOI
 
-- Zenodo book DOI: pending manual Zenodo upload of `ml-by-design.pdf`
-
-This README will be updated with the DOI after the PDF edition of the book is uploaded to Zenodo.
+- Zenodo book DOI: [10.5281/zenodo.19341955](https://doi.org/10.5281/zenodo.19341955)
 
 ## License
 
