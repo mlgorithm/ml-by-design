@@ -6,7 +6,7 @@ all: book cover full-cover
 
 book:
 	$(LATEXMK) tex/book.tex
-	cp book.pdf ml-by-design.pdf
+	mv -f book.pdf ml-by-design.pdf
 
 cover:
 	$(LATEXMK) tex/cover.tex
