@@ -8,12 +8,16 @@
 \item Learn when an AI system should be simplified, constrained, or rejected because the full operational setting does not support reliable deployment.
 \end{learninggoals}
 
-The previous chapter argued that reliability lives in the full pipeline, not only in the model. This final chapter turns that reliability review into a deployment decision. A deployed AI system is a combination of data collection, preprocessing, model inference, thresholds, interfaces, logging, monitoring, fallback behavior, human review, and organizational ownership. A model can be mathematically elegant and still fail as a system because one of those surrounding pieces is missing or poorly designed. This systems view matches long-running warnings about hidden technical debt and the software-engineering realities of ML production \citep{sculley2015,amershi2019}. The chapter route is deliberate: define the service objective, state the operational requirements, lock the input contract, turn scores into actions, specify monitoring and staged release, and then decide whether launch is justified. The chapter culminates in a system readiness brief, so the service-design sections should be read as steps toward that launch decision.
+\begin{whychaptermatters}
+This chapter widens the unit of analysis from model to service. After reading it, students should connect objectives, contracts, thresholds, review paths, monitoring, and rollback before calling a system ready. The system readiness brief extends the reliability review card into the book's final launch-or-no-launch artifact.
+\end{whychaptermatters}
 
-This chapter therefore changes the unit of analysis. Earlier chapters often asked whether a model learned a useful mapping from inputs to outputs. Here the question becomes broader: does the entire decision pipeline improve the real task under the actual constraints of deployment? That is the question students must learn to ask if they want to build trustworthy systems rather than impressive demos.
+The previous chapter argued that reliability lives in the full pipeline, not only in the model. Deployment makes that point concrete. A deployed AI system includes data collection, preprocessing, model inference, thresholds, interfaces, logging, monitoring, fallback behavior, human review, and organizational ownership. A model can be mathematically elegant and still fail as a service because one of those surrounding pieces is missing or poorly designed. This systems view matches long-running warnings about hidden technical debt and the software-engineering realities of ML production \citep{sculley2015,amershi2019}.
+
+The question is therefore broader than whether a model learned a useful mapping from inputs to outputs. The real question is whether the whole decision pipeline improves the task under the actual constraints of deployment. That is the habit students need if they want to build trustworthy systems rather than impressive demos.
 
 \begin{problemsolvinglens}
-This chapter completes the book's seven-question framework by asking how prediction becomes action in a real organization. The unit of success is no longer the model checkpoint, but the full system that surrounds it.
+This chapter asks how a prediction becomes an action inside a real organization. The unit of success is no longer the model checkpoint, but the full system that surrounds it.
 \end{problemsolvinglens}
 
 \begin{thinkingtool}
@@ -24,9 +28,9 @@ This chapter completes the book's seven-question framework by asking how predict
 \textbf{Common failure mode $\rightarrow$ recovery move.} Failure mode: trying to launch a strong offline model before the system has an input contract, escalation path, monitoring triggers, and a named owner. Recovery move: write the service blueprint first, including validation, thresholds, fallback behavior, review-capacity limits, alert conditions, and rollback authority, then judge the model only inside that operational design.
 \end{thinkingtool}
 
-Keep the same running case in view from the earlier language, experiments, and reliability chapters: a grounded course-support assistant that routes student messages, retrieves institutional policy, drafts bounded answers for routine cases, and escalates uncertain or high-risk cases to humans. This chapter asks whether that system is ready to launch as an actual service rather than as an impressive demo.
+Keep the same running case in view from the earlier language, experiments, and reliability chapters: a grounded course-support assistant that routes student messages, retrieves institutional policy, drafts bounded answers for routine cases, and escalates uncertain or high-risk cases to humans. The goal now is to judge whether that system is ready to launch as an actual service rather than as an impressive demo.
 
-That language workflow remains the primary capstone because it makes contracts, retrieval, escalation, and review paths easy to see. It also gives the chapter its spine: service objective first, then requirements and contracts, then action policy, then monitoring and launch readiness. But the same systems questions should also survive outside one domain, so this chapter will repeatedly contrast it with the dashboard-camera pedestrian detector from Chapter 8. The aim is to make the systems lesson clearly broader than educational NLP.
+That language workflow remains the main capstone because contracts, retrieval, escalation, and review paths are easy to see in it. A second contrast case, the dashboard-camera pedestrian detector from Chapter 8, shows that the same systems questions survive outside educational NLP: what objective matters, what inputs are trusted, when automation is allowed, how failure is detected, and who can intervene.
 
 \begin{figure}[t]
 \centering
@@ -61,8 +65,20 @@ That language workflow remains the primary capstone because it makes contracts, 
 \end{figure}
 
 \begin{example}[A First End-to-End Service Sketch]
-For the course-support assistant, the system story can already be written in one pass. Validate the incoming message and context. Retrieve only approved current policy sources. Score whether the case is routine enough to answer automatically. If retrieval is weak, the topic is high risk, or the automation-safety score is too low, escalate to a human instead of answering. Log the decision, the evidence used, and the outcome. Monitor overrides, backlog, and citation failures, and give one named owner the authority to tighten the policy or roll back the service.
+For the course-support assistant, the system story can already be written in one pass. Validate the incoming message and context. Retrieve only approved current policy sources. Score whether the case is safe enough to answer automatically. If retrieval is weak, the topic is high risk, or that safety score is too low, escalate to a human instead of answering. Log the decision, the evidence used, and the outcome. Monitor overrides, backlog, and citation failures, and give one named owner the authority to tighten the policy or roll back the service.
 \end{example}
+
+\begin{example}[Failure Cascade: Good Model, Bad Service]
+Suppose the retrieval contract quietly accepts a stale policy page. The model still produces a confident score, so the threshold layer allows direct answers on routine-looking messages. A small fraction of those answers are now wrong, which triggers more user corrections and human overrides. The override spike overloads the review queue, delays genuinely high-risk cases, and finally forces rollback. Nothing in that cascade required a bad neural model in isolation; it required one broken systems boundary to interact with confidence, policy, and queue capacity.
+\end{example}
+
+\begin{practicalnote}
+Read the rest of the chapter as a slow fill-in of the same service sketch. Requirements sharpen the objective, contracts define valid inputs, thresholds define actions, monitors define warnings, and ownership defines who can stop the system when those pieces drift apart.
+\end{practicalnote}
+
+\begin{minimumtakeaway}
+The system is not the model alone. It is the model plus the input contract, policy layer, review path, monitoring, rollback, and owner. A strong offline score can still sit inside a bad service.
+\end{minimumtakeaway}
 
 \section{Systems Thinking Changes the Question}
 
@@ -97,13 +113,13 @@ Before asking ``which model performs best?'', ask ``what decision or workflow is
 \end{decisionbox}
 
 \begin{practicalnote}
-A compact deployment workflow is: state the service objective, write the input contract, choose the operating policy and fallback path, test latency and capacity limits, define monitoring and rollback triggers, and only then decide whether launch is justified. That sequence is also the chapter order in miniature. The readiness brief at the end is the written form of that workflow.
+A compact deployment workflow is: state the service objective, write the input contract, choose the operating policy and fallback path, test latency and capacity limits, define monitoring and rollback triggers, and only then decide whether launch is justified. A readiness brief simply writes that deployment argument in one place.
 \end{practicalnote}
 
 \begin{figure}[t]
 \centering
 \resizebox{\linewidth}{!}{\input{figures/ch12-system-architecture}}
-\caption{Complete system architecture for production AI deployment. The system includes not only the core ML pipeline but also operational components for monitoring, alerting, feedback collection, and rollback capability. A named system owner can tighten thresholds, update validation rules, and disable the service when alerts indicate that it is drifting out of bounds.}
+\caption{A full deployment architecture adds approved sources, logging, monitoring, feedback, and rollback around the model path. The model is only one component in the service.}
 \label{fig:complete-system-architecture}
 \end{figure}
 
@@ -119,7 +135,7 @@ Several non-accuracy constraints routinely matter:
 \item \textbf{auditability}: can later investigators explain what happened?
 \end{itemize}
 
-These constraints are not secondary implementation details. They change which model class, threshold, interface, or deployment pattern is appropriate. The next section starts with the first deployment question in that workflow: what must the service achieve before any model can be called good enough?
+These constraints are not secondary implementation details. They change which model class, threshold, interface, or deployment pattern is appropriate. The first deployment question is therefore simple: what must the service achieve before any model can be called good enough?
 
 \section{Requirements Before Training}
 
@@ -131,16 +147,16 @@ An operational requirement is a concrete condition that the deployed system must
 
 \subsection{Worked Example: Queue Capacity Changes the Threshold}
 
-Suppose the advising team behind the course-support assistant can manually inspect at most $30$ escalated messages per day. The system assigns each incoming message an \emph{escalation score}, where larger values mean stronger reason to defer to a human. On a $200$-message day, a lower escalation threshold sends $78$ messages to humans. A stricter escalation threshold sends $26$.
+Suppose the advising team behind the course-support assistant can manually inspect at most $30$ escalated messages per day. The system assigns each incoming message an \emph{automation-safety score}, where larger values mean stronger evidence that the system can answer safely without human review. On a $200$-message day, a stricter threshold for automatic answering sends $78$ messages to humans. A more permissive threshold sends $26$.
 
-If the team deploys the more aggressive policy because it appears safer in isolation, the queue may overload the staff and slow all responses, including the truly urgent ones. The seemingly more cautious threshold can therefore produce the weaker service. The stricter threshold may let more medium-risk cases stay automated, but it also produces a queue the organization can actually process.
+If the team deploys the stricter policy because it appears safer in isolation, the queue may overload the staff and slow all responses, including the truly urgent ones. The seemingly more cautious threshold can therefore produce the weaker service. The stricter threshold may reduce some automation errors on borderline cases, but it also produces a queue the organization cannot actually process.
 
 \begin{mathlens}
-Let $q_t$ be the review backlog after day $t$, let $r$ be daily human capacity, and let $a(\tau)$ be the number of cases escalated by threshold $\tau$. Then
+Let $q_t$ be the review backlog after day $t$, let $r$ be daily human capacity, and let $a(\tau)$ be the number of cases escalated by automation threshold $\tau$. Then
 \[
 q_{t+1}=\max\{0,\;q_t+a(\tau)-r\}.
 \]
-A lower escalation threshold can destabilize the queue if it makes $a(\tau)>r$, because the backlog then grows instead of clearing.
+An overly strict threshold can destabilize the queue if it makes $a(\tau)>r$, because the backlog then grows instead of clearing.
 \end{mathlens}
 
 This is not a trick example. Many deployments face exactly this issue. The useful prediction is not the one that looks best in isolation. It is the one that leads to the best action process under real constraints.
@@ -209,15 +225,9 @@ Choosing a threshold is not a purely mathematical cleanup step after training. I
 
 \subsection{Queueing, Review Capacity, and Human Bottlenecks}
 
-Once abstention or escalation is available, the threshold also becomes a queueing decision. Suppose the course-support assistant handles about $120$ messages on a busy day and the advising team can review at most $20$ escalated cases before the backlog starts harming response time. A lower threshold might escalate $36$ messages, while a stricter threshold escalates $18$.
+Once abstention or escalation is available, the threshold also becomes a queueing decision. The same safety score that controls automation coverage also controls review load. If the threshold for automatic answering is raised, more borderline cases move into the human queue. That may reduce some automated mistakes, but it also increases delay, reviewer fatigue, and the chance that urgent cases wait behind routine ones.
 
-If the lower threshold improves severe-error control only slightly but creates a daily backlog of $16$ unresolved messages, then after five similar days the system accumulates roughly $80$ delayed cases. At that point the system may be statistically cautious and operationally failing. Students should recognize this as a systems error, not merely as a staffing footnote.
-
-\begin{mathlens}
-The same queue can be written as $q_{t+1}=\max\{0,\;q_t+a_t-r\}$, where $a_t$ is the day-$t$ deferral count. Stability requires average arrivals below capacity, $\mathbb{E}[a_t]<r$. If a lower escalation threshold raises deferred cases from $18$ to $36$ while $r=20$, then the expected drift becomes positive and the backlog grows.
-\end{mathlens}
-
-The right threshold is therefore constrained by both mistake costs and queue capacity. A policy that looks safer on isolated examples may produce a weaker service once review load, delay, and reviewer fatigue are counted as part of the outcome.
+This is why queueing belongs in the policy discussion rather than in an operations appendix. The right threshold is constrained by both mistake costs and review capacity. A policy that looks safer on isolated examples may still produce a weaker service once backlog and delay are counted as part of the outcome.
 
 \begin{decisionbox}
 When human review is part of the system, do not choose the threshold from precision and recall alone. Estimate how many cases the policy will defer per hour or per day, compare that with real review capacity, and ask what backlog the organization can tolerate before service quality degrades.
@@ -237,9 +247,9 @@ The practical consequence is that teams should not monitor only click-through or
 
 Sometimes the right system does not force the model to answer every case. Instead, it allows abstention: confident cases are automated, while ambiguous cases are deferred to humans or alternative procedures \citep{geifman2017}. In the running support-assistant case, the real decision is often among answer, refuse, and escalate rather than simply positive versus negative.
 
-The word \emph{confidence} needs discipline here. It should not mean a vague feeling that the model ``sounds certain.'' It should mean an estimate tied to the action policy. For the support assistant, a useful score would be something like the estimated probability that an automatic answer will stay in scope, remain grounded in approved evidence, and avoid an escalation-worthy mistake.
+The word \emph{confidence} needs discipline here. It should not mean a vague feeling that the model ``sounds certain.'' It should mean an estimate tied to the action policy. For the support assistant, a useful quantity is an \emph{automation-safety score}: the estimated probability that an automatic answer will stay in scope, remain grounded in approved evidence, and avoid an escalation-worthy mistake.
 
-This score direction is deliberately different from the earlier queue examples. There the score measured escalation pressure, so a lower threshold produced more human review. Here the score measures automation safety, so a lower threshold accepts more cases for automatic answering.
+This is the same safety idea used in the earlier service sketches. Larger values mean stronger evidence that automatic answering is acceptable. Lowering the threshold accepts more cases automatically; raising it sends more cases to review.
 
 \begin{mathlens}
 Let $a(x)\in\{0,1\}$ indicate whether the system answers on input $x$, and let $\ell(f(x),y)$ be the loss on answered cases. Then coverage is $\phi=\mathbb{E}[a(x)]$ and selective risk is
@@ -367,7 +377,7 @@ Teams often respond to a production issue by making a fast change and hoping for
 
 \section{Chapter Artifact: A System Readiness Brief}
 
-By the end of this chapter, the reader should be able to produce a one-page system readiness brief before claiming that a model is deployable. The brief is the deployment counterpart to the earlier framing memo, evaluation plan, claim sheet, and reliability review card: it asks whether those earlier decisions still hold once the model becomes a service. It also condenses the same production questions emphasized by deployment checklists such as the ML test score \citep{breck2016}.
+Before a launch decision is credible, the team needs one short document that states who owns the system, what it must achieve, what inputs and policies it relies on, and what would block release. That document is the system readiness brief. It plays the same role for deployment that the framing memo, evaluation plan, claim sheet, and reliability review card played earlier: it turns a broad judgment into something concrete enough to inspect. Production checklists such as the ML test score emphasize many of the same questions \citep{breck2016}.
 
 \begin{table}[t]
 \centering
@@ -377,7 +387,7 @@ By the end of this chapter, the reader should be able to produce a one-page syst
 \toprule
 Brief field & What must be written clearly \\
 \midrule
-Seven-question focus & All seven questions are reconciled operationally here, especially the decision being supported, the evidence required, and how prediction becomes action \\
+Core focus & The service decision being supported, the operating evidence required, and the policy that turns predictions into actions \\
 Decision and primary user & Who acts on the output and what workflow is being improved \\
 Operational requirement & Latency, capacity, severe-error bound, or other non-negotiable service constraint \\
 Input contract & What fields, units, preprocessing rules, and validation checks must hold at serving time \\
@@ -389,17 +399,40 @@ Monitoring and rollback & What alerts, drift checks, and disable-or-revert path 
 Owner and no-launch trigger & Who is responsible for the system and what finding would block deployment \\
 \bottomrule
 \end{tabular}
-\caption{A system readiness brief forces the final chapter to answer the full deployment question, not merely to restate model quality.}
+\caption{A system readiness brief makes the deployment claim concrete as a full service argument rather than a restatement of model quality.}
 \label{tab:system-readiness-brief}
 \end{table}
 
-\begin{thinkingtool}
-\textbf{System readiness brief.} Before deployment, write down the decision owner, the operational requirement, the input contract, the operating policy, the release plan, the human review path, the monitoring and rollback plan, and the exact finding that would block launch.
-\end{thinkingtool}
+The template becomes easier to imitate when the running case is written in the same format students are expected to produce. Table~\ref{tab:filled-system-readiness-brief} compresses the course-support service into one launch-or-no-launch brief; the later walkthrough then unpacks the same fields in order.
 
-\begin{example}[Filled System Readiness Brief]
-For the course-support assistant, a strong readiness brief would identify the primary user as the student-support organization rather than the model team; the operational requirement as bounded response time plus zero tolerance for unauthorized answers on high-risk categories; the input contract as current message text, course or program context when available, approved policy sources, and validated document freshness; the model plus fallback as a retrieval-backed assistant with a rule-based refusal or routing fallback when evidence is weak; the operating policy as ``answer only when retrieval, confidence, and risk checks all pass''; the release plan as shadow mode first, then a limited canary on routine questions only, with rollback on citation-quality or override failures; the human review path as escalation to advisors or specialist staff with the retrieved evidence attached; the monitoring plan as drift checks on message wording, citation coverage, override rate, subgroup gaps, and backlog; and the no-launch trigger as any unresolved failure on severe slices such as visa, accommodation, or crisis-related messages.
-\end{example}
+\begin{table}[p]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.94}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{p{3.15cm}p{7.08cm}}
+\toprule
+Brief field & Course-support assistant brief \\
+\midrule
+Core focus & Answer routine course-policy questions automatically while preserving human review for ambiguous or high-risk cases \\
+Decision and primary user & Student-support staff use the system to handle routine help faster and protect advisor time; students get either a grounded answer or a routed handoff \\
+Operational requirement & In-scope replies must meet service-time targets, review backlog must stay within staffing capacity, and severe unauthorized direct answers on high-risk categories are unacceptable \\
+Input contract & Current message text, course or program context when available, approved policy sources, freshness checks, and schema validation before any answer is produced \\
+Model plus fallback & Retrieval-backed support assistant with a conservative refusal or routing fallback when evidence is weak, stale, incomplete, or out of scope \\
+Operating policy & Answer only when scope, retrieval quality, confidence, and risk checks pass; otherwise escalate to advisors or specialist staff \\
+Release plan & Shadow mode first, then limited canary traffic on routine low-risk questions; expansion stops if citation quality, override rate, or backlog guardrails worsen \\
+Human review path & Escalated cases show the student's message, retrieved passages, draft answer if any, uncertainty trigger, and allowed actions; reviewers can override the system fully \\
+Monitoring and rollback & Monitor source freshness, retrieval hit rate, citation coverage, advisor overrides, subgroup escalation gaps, and backlog growth; disable direct answers if guardrails fail \\
+Owner and no-launch trigger & Student-support and engineering owners share rollback authority; no launch if visa, accommodation, harassment, or crisis slices still show unresolved direct-answer failures \\
+\bottomrule
+\end{tabular}
+\caption{A fully filled system readiness brief for the running course-support service. The value of the artifact is that the deployment claim is now visible in the same structure as the launch decision.}
+\label{tab:filled-system-readiness-brief}
+\end{table}
+
+\begin{thinkingtool}
+\textbf{System readiness brief.} A strong readiness brief names the decision owner, the operational requirement, the input contract, the operating policy, the release plan, the human review path, the monitoring and rollback plan, and the exact finding that would block launch.
+\end{thinkingtool}
 
 \begin{example}[Real-World Callout: Readiness Is a Launch Gate]
 Breck et al.\ propose the ML test score as a production rubric precisely because offline accuracy is not enough to justify launch \citep{breck2016}. Their checklist asks whether the system has testable data assumptions, serving consistency, monitoring, reproducibility, and operational ownership before users are exposed to it. In this chapter's language, the readiness brief is not classroom paperwork. It is a compact no-launch gate for catching missing rollback paths, broken contracts, or absent owners before deployment turns those omissions into user-facing failures.
@@ -423,7 +456,7 @@ Some settings demand stronger evidence, stronger fallback behavior, or stronger 
 
 \section{Worked System Walkthrough: Course Support}
 
-To make the full chapter concrete, consider the grounded course-support pipeline developed across the earlier language, experiments, and reliability chapters. The walkthrough follows the same order as the readiness brief so that the chapter ends by assembling one coherent launch argument rather than introducing a separate example.
+The grounded course-support pipeline is a good place to see these pieces together because its launch decision depends on contracts, routing, review, and monitoring all at once. What matters is not just whether the model can answer some messages well, but whether the whole service can be launched, monitored, and corrected responsibly.
 
 \subsection{Step 1: Define the Service Objective}
 
@@ -449,6 +482,28 @@ When the system escalates a case, the advisor should not receive only a bare ris
 
 After deployment, the team monitors document freshness, retrieval hit rate, subgroup escalation rates, advisor override frequency, backlog growth, and eventual quality audits. If the percentage of escalated cases rises sharply, that may indicate drift, a source-ingestion bug, or a confidence-calibration failure. The team can then investigate before performance collapses.
 
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{2.50cm}L{2.35cm}L{2.10cm}L{2.10cm}}
+\toprule
+Monitoring signal & Why it matters & Guardrail or alert & First response \\
+\midrule
+Document freshness failures & stale policy evidence can make grounded answers unsafe & any approved source older than the release rule & disable direct answers and fall back to retrieval plus escalation \\
+Advisor override rate & rising overrides suggest weak routing, weak evidence, or poor action policy & override rate above the launch baseline for a sustained period & inspect recent cases and tighten thresholds or routing rules \\
+Backlog growth & review capacity may be saturating even if model quality looks fine offline & queue exceeds the staffing budget for more than one reporting window & narrow automation scope or increase fallback staffing \\
+Subgroup escalation gap & one slice may be receiving much worse service or more unsafe automation & subgroup gap crosses the prelaunch tolerance band & run slice audit and consider temporary narrowing for that slice \\
+\bottomrule
+\end{tabular}
+\caption{A mock monitoring dashboard helps undergraduates see what post-launch systems evidence looks like in practice. The useful signals are service signals, not just model scores.}
+\label{tab:systems-monitoring-dashboard}
+\end{table}
+
+\begin{example}[Mini Incident Postmortem]
+Suppose a canary rollout of the course-support assistant looks fine on offline answer quality, but within two days the advisor-review backlog doubles and override rates spike on accommodation questions. A useful first postmortem would not ask only ``which model score moved?'' It would ask which system assumption broke: perhaps the confidence threshold was too low for that slice, the retrieval source mix changed, or the escalation policy routed too many ambiguous cases without enough staffing. The immediate response is to narrow the canary or roll back direct answers on the affected slice, then inspect the backlog trend, override distribution, and recent retrieval evidence before widening again.
+\end{example}
+
 This walkthrough shows the chapter's central point: the useful system is not just the language model or retriever. It is the model plus contracts, routing policy, review interface, monitoring, and organizational ownership.
 
 \subsection{Contrast Case: A Pedestrian-Alert Service}
@@ -470,7 +525,9 @@ Monitoring also looks different without changing the systems logic. Useful signa
 
 \section{Closing Perspective}
 
-This book began with problem framing and ends with system framing. That is a deliberate arc. Learning algorithms matter, but they are not the whole discipline. A mature understanding of AI connects representation, optimization, evaluation, reliability, and deployment into one coherent practice. The framing memo from Chapter 1, the evaluation plan, the claim sheet, the reliability review card, and the system readiness brief are not separate bureaucratic forms. They are the same discipline viewed at progressively more realistic levels, from defining the task to deciding whether the full service should exist at all. The final professional standard is not ``can I train a model?'' It is ``can I build a system that improves the real task under the real constraints without hiding its limitations?''
+By the time a model becomes a service, the earlier course tools should line up. The framing memo says what task is worth doing. The evaluation plan and claim sheet say what evidence would justify the claim. The reliability review card asks where that claim could break. The system readiness brief asks whether the surrounding pipeline is strong enough to let the model act in the real world. Taken together, these are not bureaucratic extras. They are the discipline of building systems that improve the task under real constraints without hiding their limitations.
+
+The system readiness brief closes the artifact chain that began with the framing memo. The book's workflow now reads as one packet: frame the task, choose the judgment rule, protect the evidence, diagnose the model, bound the failure, and decide whether launch is justified.
 
 \begin{chaptersummary}
 \item A deployed AI system includes data pipelines, feature contracts, thresholds, interfaces, monitoring, fallback behavior, and ownership in addition to the model itself.
@@ -482,7 +539,7 @@ This book began with problem framing and ends with system framing. That is a del
 \item Staged release strategies such as shadow mode, canary rollout, and online experiments help teams learn safely before full launch.
 \item Human-in-the-loop design succeeds only when the review step has clear triggers, adequate information, and real authority.
 \item Some tasks should be simplified, delayed, or rejected because the full system evidence is not strong enough.
-\item The main deliverable of the chapter is a system readiness brief that forces the deployment claim to be written before launch.
+\item A system readiness brief makes the deployment claim explicit before launch.
 \end{chaptersummary}
 
 \begin{studyquestions}
@@ -517,4 +574,5 @@ This book began with problem framing and ends with system framing. That is a del
 \item Compare two failure responses to post-deployment drift: retraining the model immediately versus disabling the model and falling back to a simpler policy. Explain when each is justified and what risks each creates.
 \item A team wants to replace its current model with a new one that improves offline quality but has never seen live traffic. Design the strongest staged-release plan you can, including one guardrail metric that would block expansion.
 \item A university wants to launch a course-support assistant before the start of term, but the latest policy pages are still changing daily. Explain the strongest systems argument for delaying launch or narrowing the use case.
+\item A canary rollout of a support assistant suddenly doubles the advisor-review backlog even though offline answer quality looked strong. Write a short incident analysis that names the most likely system cause, the first rollback or narrowing action you would take, and one monitoring signal you would inspect next.
 \end{challengeexercises}

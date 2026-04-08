@@ -10,13 +10,17 @@
 \item Produce a one-page representation card before reporting that a model family is suitable for a task.
 \end{learninggoals}
 
+\begin{whychaptermatters}
+This bridge makes the book's first modeling habit explicit: every example is already a representation choice. After reading it, students should be able to narrate rows, columns, shapes, and weighted sums in plain language instead of treating them as notation cleanup. The representation card becomes the math-side precursor to the baseline-design work in Chapter 4.
+\end{whychaptermatters}
+
 \begin{prereqbridge}
-Use this chapter as just-in-time review: read it now if linear-algebra notation feels rusty, or return when later chapters start leaning on vectors, matrices, and geometry. This chapter assumes comfort with high-school algebra: variables, substitution, and evaluating expressions. Calculus is not required. Familiarity with Python lists or arrays is helpful but not required. Students who have already taken a linear algebra course should still skim this chapter because the AI-specific vocabulary (representation, coordinate, weighted evidence) will recur throughout the book.
+Use this as just-in-time review: read it now if linear-algebra notation feels rusty, or return when later chapters start leaning on vectors, matrices, and geometry. Comfort with high-school algebra is enough: variables, substitution, and evaluating expressions. Calculus is not required. Familiarity with Python lists or arrays is helpful but not required. Students who have already taken a linear algebra course should still skim because the AI-specific vocabulary here (representation, coordinate, weighted evidence) will recur throughout the book.
 \end{prereqbridge}
 
 Many students first meet linear algebra as a list of operations: add vectors, multiply matrices, solve systems. That is not the most helpful entry point for AI. In AI, linear algebra is the language that makes representations visible. It tells us what counts as one example, what counts as one coordinate, how many examples are being processed at once, what a score really is, and what kinds of similarity or geometry a method is quietly assuming.
 
-This bridge chapter is therefore not a miniature mathematics course. It is a reading course in the mathematical objects that later chapters will use constantly. If a student can look at a vector or matrix and ask, ``what real thing does each row, column, or coordinate mean here?'' then the mathematics is already doing its job.
+The point here is not to re-teach every theorem from a full linear algebra course. The point is to make the objects in later chapters feel readable. If you can look at a vector or matrix and ask, ``what real thing does each row, column, or coordinate mean here?'' then the mathematics is already doing its job.
 
 \begin{problemsolvinglens}
 Before asking which model family to use, ask how one case is represented, what each coordinate means, what counts as similarity, and what a weighted combination of the coordinates would mean in plain language.
@@ -26,7 +30,7 @@ Before asking which model family to use, ask how one case is represented, what e
 \textbf{Representation audit.} Before blaming or praising a model, ask four questions: what counts as one example, what each coordinate means, what information has already been discarded, and what notion of similarity the representation makes easy.
 \end{thinkingtool}
 
-Keep the chapter artifact in view from the start. As later sections introduce shapes, weighted scores, geometry, and projection, the intended payoff is a short \emph{representation card}: what one example is, what the coordinates mean, what geometry matters, and what a linear score would mean in plain language.
+One compact summary holds the chapter together: a short \emph{representation card} that names what counts as one example, what the coordinates mean, what geometry matters, and what a linear score would mean in plain language.
 
 \section*{Opening Case: One Student, One Email, One Image Patch}
 
@@ -98,11 +102,15 @@ A vector has a shape. A dataset has a shape. A batch of images or sequences has 
 
 Consider three objects that appear across later chapters.
 
-\textbf{One tabular row.} A single student described by four features is a vector $x \in \mathbb{R}^4$. Its shape is $(4,)$: four numbers, one case.
+\textbf{One tabular row.} A single student described by four features is a vector $x \in \mathbb{R}^4$. In array-style notation, its shape is often written as $(4,)$: four numbers, one case.
 
 \textbf{A bag-of-words batch.} Suppose we process $32$ emails at once, each represented as a count vector over a vocabulary of $10{,}000$ words. The batch is a matrix of shape $(32, 10000)$: $32$ rows for $32$ cases, $10{,}000$ columns for $10{,}000$ features.
 
 \textbf{A token-by-token embedding sequence.} A sentence tokenized into $T$ tokens, where each token is embedded into $d$ dimensions, forms a matrix of shape $(T, d)$. Here the rows are positions in time or sequence, not independent cases. Transposing would swap that meaning and break any downstream operation that assumes the row is a token position.
+
+\begin{prereqbridge}
+In the mathematics of this book, vectors are usually written as column objects. In array libraries such as NumPy, a one-dimensional object with shape $(4,)$ is often treated as neither an explicit row nor an explicit column until it is reshaped. That software convention is convenient, but it can hide orientation mistakes. When matrix multiplication is the topic, it is safer to keep asking whether the object is being used as one column of features, one row of a dataset, or a library-level one-dimensional array.
+\end{prereqbridge}
 
 \begin{table}[t]
 \centering
@@ -303,7 +311,7 @@ Xw =
 \end{bmatrix}.
 \]
 
-Student 1's weighted score is \(0.65\), meaning the model predicts they are moderate risk: reasonable attendance partially offsets one late submission. Student 2's score of \(7.10\) signals high risk because four late submissions dominate. Student 3's score of \(-1.20\) indicates low risk: solid attendance with no late submissions.
+Under this weighted rule, Student 2 receives the largest score, Student 1 an intermediate score, and Student 3 the smallest score. That ordering reflects how strongly late submissions outweigh attendance in the chosen weights. A later chapter may turn such scores into risk categories or actions, but at this stage the safe claim is the ranking induced by the linear rule, not a final decision label.
 
 This is the key idea: the same weight vector \(w\) is applied to every row simultaneously. The matrix does not change the structure of the computation---it only packages it so every student gets scored in one operation.
 \end{example}
@@ -327,21 +335,21 @@ A \emph{partially observed} representation has coordinates that are missing for 
 Type & Example & What absence means \\
 \midrule
 Sparse & Bag-of-words email vector & Word did not appear in this message \\
-Dense & Learned word embedding & Every coordinate is informative; no zero convention \\
+Dense & Learned word embedding & Most coordinates are nonzero; zero does not mean ``feature absent'' \\
 Partially observed & Student engagement record with gaps & Student may not have been enrolled yet, or event did not fire \\
 \bottomrule
 \end{tabular}
-\caption{Representation quality includes density, which coordinates are absent, and whether absence is informative. A zero can mean ``not present,'' ``missing by design,'' or ``unknown,'' and those meanings matter for modeling.}
+\caption{Representation quality includes density, which coordinates are absent, and whether absence is informative. A recorded zero, a structurally missing entry, and an unknown value are different representational states that may need different handling.}
 \label{tab:sparse-dense-missing}
 \end{table}
 
 Three practical lessons follow.
 
-\emph{Sparse representations support fast inner products but can break distance-based methods.} If most of two vectors' coordinates are zero, their Euclidean distance is dominated by the dimensions where both are nonzero---or by the few nonzero dimensions of one but not the other. Cosine similarity can handle this better in some cases, but neither operation treats ``both missing this word'' and ``both present on this word'' the same way.
+\emph{Sparse representations support fast inner products but can break distance-based methods.} Euclidean distance is driven by coordinates where the two vectors differ. In very sparse vectors, that often means a small number of mismatched nonzero entries dominate the distance, while the many shared zeros contribute little. Cosine similarity can handle this better in some cases, but neither operation treats ``both missing this word'' and ``both present on this word'' as the same kind of evidence.
 
 \emph{Dense embeddings lose interpretability at the coordinate level.} A single coordinate of a word embedding does not mean anything human-readable. The space as a whole may encode meaning geometrically, but the coordinates individually do not.
 
-\emph{Missingness in tabular data is often not random.} Imputing a missing value with a mean or zero assumes the value was random noise. But if the value is missing because the student dropped before week eight, or because a sensor was offline after a power failure, the imputation will inject a different kind of noise. Later chapters on reliability and deployment return to this point. For now, the lesson is that ``missing'' is a value in the representation, not an error to be erased before modeling.
+\emph{Missingness in tabular data is often not random.} Imputing a missing value with a mean or zero can be useful, but only after we ask what the missingness means and whether it should be represented explicitly with a mask or indicator. If the value is missing because the student dropped before week eight, or because a sensor was offline after a power failure, blindly replacing it with one default number can inject the wrong kind of signal. Later chapters on reliability and deployment return to this point. For now, the lesson is that ``missing'' is not automatically the same thing as zero; it is part of the representation and data-generation story.
 
 \section*{Geometry: Distance, Similarity, and Scale}
 
@@ -379,7 +387,7 @@ Cosine similarity asks a different question. Instead of asking whether the vecto
 This is useful when overall scale should matter less than pattern. In language or embedding-style problems, two long vectors can represent similar meaning even if one is globally larger than the other.
 
 \begin{failurebox}
-Distance-based methods can fail for a boring reason: one coordinate dominates because it is measured on a much larger numeric scale. If age is stored in years but income is stored in dollars, then raw Euclidean distance mostly measures income. That is not a property of the world. It is a property of the chosen units.
+Distance-based methods can fail for a boring reason: one coordinate dominates because it is measured on a much larger numeric scale. If age is stored in years but income is stored in dollars, then raw Euclidean distance mostly measures income. That is not a property of the world. It is a property of the chosen units. The first recovery move is usually to put the coordinates on comparable scales before trusting the geometry.
 \end{failurebox}
 
 \section*{Norms, Size, and Regularization Intuition}
@@ -391,7 +399,7 @@ A norm measures the size of a vector. Two common norms are
 \|w\|_2 = \sqrt{\sum_{j=1}^{d} w_j^2}.
 \]
 
-Later chapters use these ideas for regularization. The reason is simple. A model with very large coefficients can become brittle, overly reactive, or too willing to fit accidental quirks in the training data. Penalizing large coefficient size is one way of expressing a preference for simpler behavior unless the data strongly demands otherwise.
+Later chapters use these ideas for regularization. The reason is simple, but it depends on the representation being fixed. Once features have been put on a defended scale, a model with very large coefficients can become brittle, overly reactive, or too willing to fit accidental quirks in the training data. Penalizing coefficient size is one way of expressing a preference for simpler behavior unless the data strongly demands otherwise.
 
 Students should not hear the word \emph{regularization} and think only ``extra term in the objective.'' The modeling question is more useful:
 
@@ -527,16 +535,45 @@ Real datasets often have many coordinates but fewer truly important directions. 
 
 The practical lesson is not that every dataset can be compressed aggressively. The lesson is that high ambient dimension does not always mean high effective complexity. This intuition later supports PCA, embeddings, representation learning, and transfer learning.
 
+For a tabular example, imagine four recorded features: attendance, quiz average, assignment completion, and recent platform activity. Those are four coordinates, but they may not vary independently. Students who attend regularly may also submit more work and stay active on the platform, so much of the variation may lie near one broader ``overall engagement'' direction. The raw representation is four-dimensional, but the dominant structure may live in only one or two directions.
+
+\begin{figure}[t]
+\centering
+\definecolor{b1dirBlue}{RGB}{56,103,170}
+\definecolor{b1ptOrange}{RGB}{197,111,43}
+\begin{tikzpicture}[x=0.95cm,y=0.95cm,font=\small]
+  \draw[->, line width=0.8pt, black!65] (0.2,0.2) -- (5.3,0.2);
+  \draw[->, line width=0.8pt, black!65] (0.2,0.2) -- (0.2,5.2);
+
+  \draw[b1dirBlue, line width=1.4pt] (0.7,0.9) -- (4.8,5.0);
+  \node[anchor=west, text=b1dirBlue, font=\footnotesize\bfseries] at (4.0,5.0)
+    {dominant direction};
+
+  \foreach \px/\py/\qx/\qy in {
+    1.0/1.5/1.25/1.45,
+    1.6/2.3/1.95/2.15,
+    2.2/2.1/2.15/2.35,
+    2.7/3.2/2.95/3.15,
+    3.5/3.4/3.45/3.65,
+    4.0/4.4/4.15/4.35
+  }{
+    \fill[b1ptOrange] (\px,\py) circle (2.3pt);
+    \fill[b1dirBlue] (\qx,\qy) circle (1.6pt);
+    \draw[b1dirBlue!70, dashed, line width=0.7pt] (\px,\py) -- (\qx,\qy);
+  }
+\end{tikzpicture}
+\caption{Several visible coordinates can still lie near one dominant direction. Projection keeps the variation along that direction and discards the smaller residual deviations away from it.}
+\label{fig:bridge-lowdim-projection}
+\end{figure}
+
+Figure~\ref{fig:bridge-lowdim-projection} shows the basic geometry. The original points live in a two-coordinate display, but most of their variation is organized by one shared diagonal trend and only a small residual remains off that line.
+
 \begin{mathlens}
-A projection onto an allowed subspace is a linear map. For a unit direction \(u\), define
+A projection onto a lower-dimensional subspace keeps only a smaller set of allowed directions. If \(u_1,\ldots,u_k\) are orthonormal directions, then the projection of \(x\) onto their span is
 \[
-P_u(x)=(u^\top x)u.
+ \hat{x}=\sum_{j=1}^{k}(u_j^\top x)u_j.
 \]
-Then \(P_u\) keeps only the component of \(x\) that lies along \(u\). Applying it twice does nothing new:
-\[
-P_u(P_u(x))=P_u(x).
-\]
-That idempotence is the algebraic version of geometric compression: once the allowed direction has been kept, projecting again does not change the answer.
+Each coefficient \(u_j^\top x\) tells us how much of \(x\) lies along one kept direction. If \(k \ll d\), then the approximation uses far fewer directions than the raw coordinate count. The discarded residual \(r=x-\hat{x}\) is orthogonal to every kept direction, so the kept subspace captures the part of the vector that those directions can explain.
 \end{mathlens}
 
 Students do not need a full singular-value-decomposition treatment here. They do need the idea that useful structure can live in fewer directions than the raw coordinate count suggests.
@@ -575,7 +612,9 @@ If this card cannot be written clearly, later model debates are usually prematur
 
 \section*{Looking Ahead}
 
-This bridge supplied the geometric language of representation: vectors, matrices, weighted scores, distance, and projection. The next bridge adds the uncertainty language that makes those scores trainable and interpretable: probability, loss, empirical risk, and gradient signals. Together they prepare the main text, where Chapter 1 turns those mathematical objects into a defensible learning problem.
+The geometric language of representation is now in place: vectors, matrices, weighted scores, distance, and projection. The next bridge adds the uncertainty language that makes those scores trainable and interpretable: probability, loss, empirical risk, and gradient signals. Together they prepare the main text, where Chapter 1 turns those mathematical objects into a defensible learning problem.
+
+The representation card from this bridge becomes the starting document for the learning-signal card in the next bridge and later for the baseline-design work that begins in Chapter 4.
 
 \begin{chaptersummary}
 \item Linear algebra matters in AI because representation is already part of the model.

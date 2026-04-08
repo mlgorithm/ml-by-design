@@ -6,13 +6,23 @@
 \item Read conditional probability and expectation in plain language before manipulating formulas.
 \item Explain why logarithms, exponentials, sigmoid-style transformations, and cross-entropy appear naturally in ML.
 \item Interpret empirical risk as the average training signal over a dataset rather than as an abstract formula to memorize.
-\item Use a light functional-analysis viewpoint to explain why a predictor is a function and why a risk objective is a rule that assigns one number to the whole predictor.
+\item Use a simple function-level viewpoint to explain why a predictor is a function and why a risk objective assigns one number to the whole predictor.
 \item Read gradients and the chain rule as credit-assignment tools for reducing training loss.
 \end{learninggoals}
+
+\begin{whychaptermatters}
+This bridge keeps five objects separate: score, probability, decision rule, pointwise loss, and dataset objective. After reading it, later metrics, calibration checks, and gradients should feel like parts of one training story instead of isolated formulas. The learning-signal card prepares the judgment and training workflow used immediately in Chapters 2 and 6.
+\end{whychaptermatters}
 
 \begin{prereqbridge}
 Use this chapter as just-in-time review: read it now if probability or training-signal notation feels thin, or return when later chapters start leaning on loss, calibration, and gradients. This chapter assumes comfort with fractions, ratios, and the idea of an average. Familiarity with logarithms is helpful; they are introduced with worked examples. Calculus (derivatives) appears only in a few short derivations, especially the gradient section, and is explained from scratch when it appears. Students who have taken probability theory before should read the chapter anyway: the AI-specific vocabulary (loss, empirical risk, gradient as credit signal) differs from the standard probability course framing.
 \end{prereqbridge}
+
+\begin{corepathbox}
+\textbf{Core path.} Keep five objects separate: score, probability, decision rule, pointwise loss, and dataset objective. Then understand empirical risk as the average training signal and gradients as credit assignment for making that objective smaller.
+
+\textbf{Enrichment.} Proper scoring rules, the functional view of predictors, and projection intuition deepen why the standard losses behave well, but the main undergraduate takeaway is still honest probability language, dataset-level training objectives, and usable update signals.
+\end{corepathbox}
 
 Many students meet probability and optimization in fragments. One course teaches conditional probability. Another introduces derivatives. A machine-learning lecture suddenly writes down log loss, empirical risk, and gradient descent as if the connection were obvious. This chapter slows that chain down.
 
@@ -34,9 +44,17 @@ Separate five objects that students often collapse together: the model score, th
 
 Keep the chapter artifact in view from the start. As later sections separate score, probability, decision rule, pointwise loss, and dataset objective, the goal is to fill a \emph{learning-signal card} rather than to memorize disconnected formulas.
 
+\begin{practicalnote}
+\textbf{Running case for this bridge.} Keep one early-support score in view. A course-support model assigns a risk score to one student for missing a major deadline. Throughout the chapter, that same output will be read in five roles: raw score, probability estimate, decision input, pointwise loss on one case, and part of a dataset-level objective that later generates a gradient update.
+\end{practicalnote}
+
+\section*{Part A: From Scores to Decisions}
+
+The first half of the bridge is about interpretation and action. The questions are: what does a score mean, when is it an honest probability, and how do costs and base rates turn that probability into a decision rule?
+
 \section*{Opening Question: What Does A Score Like 0.8 Mean?}
 
-Suppose a model outputs \(0.8\) for a student, an email, or a medical case. That number could mean several different things.
+Suppose a course-support model outputs \(0.8\) for one student after seeing attendance, quiz, and submission signals. That number could mean several different things.
 
 \begin{itemize}[leftmargin=*]
 \item It could be an uncalibrated score: larger means riskier, but the number is not yet an honest probability.
@@ -50,7 +68,7 @@ This bridge chapter therefore starts with language. A model output is not automa
 
 \section*{Conditional Probability In Plain Language}
 
-Machine-learning prediction usually asks about uncertainty \emph{given} observed information. The notation
+Students often meet conditional probability first as notation. In machine learning, it helps to read it first as a question about evidence: once we have observed the input, how plausible is the target event? The notation
 \[
 P(y=1 \mid x)
 \]
@@ -72,7 +90,7 @@ If the notation feels dense, translate it immediately into a sentence: ``given t
 
 \section*{Expectation As Average Consequence}
 
-Expectation is the language of average consequence. If a quantity can vary, its expectation summarizes the average value we would expect across repeated comparable cases.
+A probability becomes decision-relevant when we ask about average consequence. That is the job of expectation. If a quantity can vary, its expectation summarizes the average value we would expect across repeated comparable cases.
 
 This idea appears constantly in AI:
 
@@ -83,7 +101,7 @@ This idea appears constantly in AI:
 \item average outcome under a probabilistic forecast.
 \end{itemize}
 
-Suppose a support team can contact one student. Contacting a truly struggling student creates \(+5\) units of benefit, while contacting a student who did not need help costs \(-1\) unit of attention. If a model estimates a \(0.8\) chance that the student truly needs help, then the expected value of contacting is
+Return to the same student-support case. Suppose the team can contact one student. Contacting a truly struggling student creates \(+5\) units of benefit, while contacting a student who did not need help costs \(-1\) unit of attention. If the model estimates a \(0.8\) chance that this student truly needs help, then the expected value of contacting is
 \[
 0.8(5) + 0.2(-1) = 4 - 0.2 = 3.8.
 \]
@@ -105,8 +123,14 @@ That question cannot be answered from the probability alone. It depends on:
 \item the base rate: if $30\%$ of students routinely score near $0.35$, routine outreach may be sustainable; if only $2\%$ ever reach that level, the same policy creates a very different workload.
 \end{itemize}
 
-\begin{example}[Same Probability, Different Action]
-A medical triage team and a marketing team both receive a model score of $0.35$. The medical team decides to escalate because missing a true case has a severe consequence and resources are available. The marketing team decides not to act because their cost-per-contact is high relative to the expected value of conversion at $35\%$ likelihood. Same probability, different correct action. The model output did not contain the action. The action required a cost structure on top of the probability.
+\begin{example}[Same Probability, Different Action in the Same Workflow]
+Suppose the same course-support model assigns the same student a probability of $0.35$ in two different weeks.
+
+In a normal week, advisers have spare capacity and low-cost check-ins available. At $0.35$, the student may be worth contacting.
+
+In finals week, advisers can contact only the five riskiest students and every false alarm consumes scarce human time. The same $0.35$ score may now fall below the action threshold or be routed only if capacity remains.
+
+Same probability, different correct action. The model output did not contain the action. The action required a cost structure and capacity constraint on top of the probability.
 \end{example}
 
 Bayes-optimal decisions formalize this idea. In the simplest binary setup, suppose the model score is already the calibrated posterior probability of the positive class, correct decisions carry no extra utility beyond avoiding mistakes, and the relevant costs are $C_{FP}$ (cost of a false positive) and $C_{FN}$ (cost of a false negative). Then the optimal threshold $\tau$ satisfies
@@ -123,7 +147,7 @@ A common undergraduate mistake is to assume that the best classifier, the best p
 
 \section*{Logarithms, Exponentials, and Why They Keep Appearing}
 
-Probabilities often multiply. If a sequence of events or labels is modeled jointly, the full likelihood can become a product of many factors. Logarithms are useful because they turn products into sums:
+Logarithms and exponentials can look like extra symbols at first. They keep appearing in ML for a practical reason. Probabilities often multiply. If a sequence of events or labels is modeled jointly, the full likelihood can become a product of many factors. Logarithms are useful because they turn products into sums:
 \[
 \log(ab) = \log a + \log b.
 \]
@@ -150,7 +174,7 @@ In simple binary classifiers, that number is often read as an estimated class pr
 
 \section*{Loss Functions As Learning Signals}
 
-A loss function is a penalty on one prediction. It says how bad the current output was on one example. Three common losses are worth reading carefully.
+Up to this point, the chapter has separated score, probability, and action. Return now to the same student-support score, but imagine that the later outcome has finally arrived. A loss function is a penalty on one prediction. It says how bad the current output was on one example. Three common losses are worth reading carefully.
 
 \begin{itemize}[leftmargin=*]
 \item \textbf{Squared error}: \((y-\hat{y})^2\). Large misses are punished strongly.
@@ -231,9 +255,13 @@ Why does this matter for AI practice? When a model output drives a threshold dec
 When selecting a training loss, ask whether the loss rewards honest probability forecasts or merely correct binary predictions. For any application where the probability score will drive a downstream decision, prefer log loss or Brier score over accuracy as the training signal.
 \end{practicalnote}
 
+\section*{Part B: From Losses to Learning Signals}
+
+The second half of the bridge is about training. Once score, probability, and action are separated, the next question is how one prediction becomes a pointwise loss, how many losses become empirical risk, and how gradients turn that objective into an update signal.
+
 \section*{From One Example To Many: Empirical Risk}
 
-The ideal quantity we would like to minimize is future expected loss on the population of cases the system will actually face. We almost never know that quantity directly. What training can compute is the average loss on the sample in hand, used as a practical stand-in for the unknown population risk.
+One prediction is not enough to train a model. Training needs one number that summarizes behavior across many examples. The ideal quantity we would like to minimize is future expected loss on the population of cases the system will actually face. We almost never know that quantity directly. What training can compute is the average loss on the sample in hand, used as a practical stand-in for the unknown population risk.
 
 \begin{mathlens}
 If \(f\) is a predictor and \(\mathcal{D}\) is the data-generating process, then the population risk is
@@ -269,6 +297,22 @@ The operational reading is more important than the notation:
 
 This is the bridge from one mistake to a trainable objective.
 
+\begin{example}[Empirical Risk on Three Support Cases]
+Keep the same course-support task, but now imagine three held-out training examples with predicted probabilities and later outcomes:
+\begin{itemize}[leftmargin=*]
+\item Student A: \(p=0.8,\; y=1\), so the log loss is \(-\log(0.8) \approx 0.22\).
+\item Student B: \(p=0.3,\; y=1\), so the log loss is \(-\log(0.3) \approx 1.20\).
+\item Student C: \(p=0.2,\; y=0\), so the log loss is \(-\log(0.8) \approx 0.22\).
+\end{itemize}
+
+The empirical risk under average log loss is therefore
+\[
+\hat{R}_3 \approx \frac{0.22 + 1.20 + 0.22}{3} \approx 0.55.
+\]
+
+That number is not a deployment policy. It is the average training penalty the model currently receives on the available sample.
+\end{example}
+
 \section*{Population Risk Versus Empirical Risk}
 
 Training computes one quantity. The quantity we actually care about is different.
@@ -294,11 +338,24 @@ The correct mental discipline is to treat training loss as a signal about optimi
 \textbf{Population risk discipline.} Whenever training loss is mentioned as evidence of learning, ask: what do the held-out numbers say? If only training loss has been reported, the argument is incomplete.
 \end{thinkingtool}
 
+\begin{minimumtakeaway}
+One loss on one example is not yet the training objective. Training aggregates pointwise losses into empirical risk, while deployment still cares about population risk on unseen cases. Keep those layers separate before gradients enter the story.
+\end{minimumtakeaway}
+
+\begin{warningbox}
+\textbf{Common confusions after empirical risk.}
+\begin{itemize}[leftmargin=*]
+\item Low training loss is not the same as deployment success.
+\item Empirical risk on the sample is not the same as population risk on future cases.
+\item A probability estimate is not the same as the action rule built on top of it.
+\end{itemize}
+\end{warningbox}
+
 \section*{A Gentle Functional View Of Loss Functions}
 
-This next section does not require graduate-level analysis. It asks for one conceptual shift: stop looking only at the coordinates of \(\theta\), and start looking at the whole predictor that training is selecting.
+This next section does not require graduate-level analysis. It asks for one simple shift in viewpoint: stop looking only at the coordinates of \(\theta\), and start looking at the whole predictor that training produces.
 
-This is the right place for one mathematical shift that many students never get stated clearly enough. A model is not only a parameter vector. It is also a function.
+Many students never hear this stated clearly enough: a model is not only a parameter vector. It is also a function.
 
 \subsection*{A Predictor Is A Function}
 
@@ -310,7 +367,7 @@ This viewpoint matters because later questions such as generalization, regulariz
 
 The loss \(\ell(y, \hat{y})\) is pointwise. It looks at one target and one prediction. The empirical risk, by contrast, takes the whole predictor and returns one number that summarizes how it behaved across the dataset.
 
-That is the useful light functional-analysis idea in this book:
+That is the only function-level idea this book needs:
 
 \begin{quote}
 a risk objective is a rule that assigns one scalar value to a whole predictor
@@ -318,7 +375,7 @@ a risk objective is a rule that assigns one scalar value to a whole predictor
 
 Seen this way, the formulas above are not just notation changes. One is the ideal quantity defined by the real world; the other is the computable approximation used during training.
 
-Only after the student understands that sentence does the term \emph{functional} become useful.
+Only after that idea is clear does the term \emph{functional} help more than it distracts.
 
 \subsection*{Hypothesis Classes As Sets Of Allowable Predictors}
 
@@ -355,7 +412,7 @@ This section does \emph{not} need graduate functional analysis. The useful under
 
 \section*{Gradients And Optimization}
 
-Once the training objective is defined, optimization asks how to reduce it. A derivative tells how one quantity changes when another changes slightly. A gradient collects those directional sensitivities across many parameters.
+Once the training objective is defined on the dataset, the next question is how to make it smaller. A derivative tells how one quantity changes when another changes slightly. A gradient collects those directional sensitivities across many parameters.
 
 If the loss is \(\mathcal{L}(\theta)\), then the gradient
 \[
@@ -385,52 +442,49 @@ for step in range(num_steps):
 
 The pseudocode is short because the mechanism is short.
 
-\begin{example}[One Gradient Descent Step by Hand]
-Let the loss function be \(L(w) = (w - 3)^2\), a simple parabola with minimum at \(w = 3\). Start at \(w = 1\) with learning rate \(\eta = 0.4\).
+\begin{example}[One Gradient Step on the Same Support Case]
+Return to the same course-support task. Suppose a tiny model uses one normalized feature \(x=2\) (for example, a lateness summary), one weight \(w\), score \(z=wx\), sigmoid probability \(p=\sigma(z)\), and binary cross-entropy loss for the later label \(y=1\).
 
-\textbf{Step 1: Compute the gradient.}
+Start at \(w=0\) with learning rate \(\eta = 0.1\).
+
+\textbf{Step 1: Compute the current score and probability.}
 \[
-\frac{dL}{dw} = 2(w - 3) = 2(1 - 3) = -4.
+z = wx = 0 \cdot 2 = 0,
+\qquad
+p = \sigma(0) = 0.5.
 \]
 
-\textbf{Step 2: Apply the update rule.}
+\textbf{Step 2: Compute the gradient.}
+For sigmoid plus binary cross-entropy, the reusable gradient signal is
 \[
-w_{\text{new}} = w - \eta \cdot \frac{dL}{dw} = 1 - 0.4 \times (-4) = 1 + 1.6 = 2.6.
+\frac{\partial \mathcal{L}}{\partial w} = (p-y)x.
+\]
+So here
+\[
+\frac{\partial \mathcal{L}}{\partial w} = (0.5 - 1)\cdot 2 = -1.
 \]
 
-The weight moved from \(1\) toward \(3\) (the minimum). At \(w=1\), the gradient points uphill in the negative direction; subtracting it moves \(w\) downhill toward the minimum, closing the gap to the optimum.
+\textbf{Step 3: Apply the update rule.}
+\[
+w_{\text{new}} = w - \eta \frac{\partial \mathcal{L}}{\partial w}
+= 0 - 0.1(-1) = 0.1.
+\]
 
-\begin{center}
-\begin{tikzpicture}[font=\small, x=1.6cm, y=1.3cm]
-  % Axes
-  \draw[->] (-0.2, 0) -- (5.8, 0) node[right] {$w$};
-  \draw[->] (0, -0.2) -- (0, 4.5) node[above] {$L(w)$};
-  % Parabola: L(w) = (w-3)^2, sampled from w=0.5 to w=5.5
-  \draw[thick] plot[domain=0.5:5.5, samples=80] (\x, {(\x-3)*(\x-3)});
-  % x-axis tick: start
-  \draw (1, 0.05) -- (1, -0.05);
-  \node[below, font=\footnotesize] at (1, -0.1) {$w{=}1$};
-  % x-axis tick: minimum
-  \draw (3, 0.05) -- (3, -0.05);
-  \node[below, font=\footnotesize] at (3, -0.1) {$w{=}3$};
-  % Points on the parabola
-  \filldraw[fill=white, draw=black] (1, 4) circle (2pt)
-      node[above right] {$(1,\,4)$};
-  \filldraw[fill=black] (2.6, 0.16) circle (2pt)
-      node[right, xshift=4pt, font=\footnotesize] {$(2.6,\,0.16)$};
-  \filldraw[fill=black] (3, 0) circle (2pt);
-  % Arrow showing the step along the x-axis
-  \draw[->, thick] (1, -0.6) -- (2.55, -0.6)
-        node[midway, below, font=\footnotesize] {step $= 1.6$};
-\end{tikzpicture}
-\end{center}
+The updated score and probability become
+\[
+z_{\text{new}} = 0.1 \cdot 2 = 0.2,
+\qquad
+p_{\text{new}} = \sigma(0.2) \approx 0.55.
+\]
 
-The open circle marks the starting point \(w=1\); the filled circles mark the updated weight \(w=2.6\) and the minimum \(w=3\). One gradient step more than halved the distance to the optimum. With a smaller learning rate the step would be shorter; with a larger one it might overshoot.
-\end{example} Most of the practical difficulty in training comes from scale, instability, architecture choice, and noisy data, not from the basic update rule itself.
+One step nudges the probability upward because the model underpredicted a positive case. That is the practical meaning of the gradient here: it tells the weight how to move so the same kind of case receives a more appropriate score next time.
+\end{example}
+
+Most of the practical difficulty in training comes from scale, instability, architecture choice, and noisy data, not from the basic update rule itself.
 
 \section*{Chain Rule As Credit Assignment}
 
-The chain rule matters because many models are compositions of simpler computations. If
+Gradients become more useful when a model is built from smaller steps. In the same support task, the model may first build an intermediate summary, then turn that summary into a final score. The chain rule explains how responsibility for the final loss is passed backward through that computation. If
 \[
 u = a z + b,
 \qquad
@@ -464,6 +518,8 @@ That is why backpropagation is not just calculus drill. It is structured credit 
 
 \section*{Chapter Artifact: Learning-Signal Card}
 
+By the end of this bridge chapter, the reader should be able to summarize the entire learning setup on one card. The point is not paperwork. The point is to prevent score, probability, loss, metric, and decision rule from collapsing back into one vague idea.
+
 \begin{quote}
 \noindent\textbf{Learning-Signal Card}
 
@@ -484,7 +540,27 @@ Main mismatch risk & What the loss may optimize that the deployment goal does no
 
 This card should make it hard to say ``the model improved'' without stating what improved, under which loss, and in service of which decision.
 
+\begin{example}[Filled Learning-Signal Card for the Running Case]
+\begin{center}
+\small
+\begin{tabular}{p{2.6cm}p{5.4cm}}
+\toprule
+Field & Filled entry for early-support risk scoring \\
+\midrule
+Model output & Sigmoid probability that a student will miss a major deadline given current course signals \\
+Pointwise loss & Binary cross-entropy; it punishes assigning low probability to a true at-risk case, especially with high confidence \\
+Dataset objective & Average cross-entropy across the training cohort \\
+Reported metric & Recall at a fixed outreach budget on held-out students, with calibration checks if the probabilities will be used literally \\
+Decision rule & Contact or queue the highest-risk students up to adviser capacity, or act above a defended threshold such as \(p \ge 0.35\) \\
+Main mismatch risk & The training loss rewards honest per-student probabilities, but deployment also cares about queue size, adviser capacity, and the cost of false alarms \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{example}
+
 \section*{Common Mistakes}
+
+After so many distinctions, it helps to end with the ways students most often collapse them again. These mistakes are common not because the ideas are impossible, but because the language starts to blur when the roles are not kept separate.
 
 \begin{mistakebox}
 \item \textbf{Treating a score as a calibrated probability.} Check what the number really means before interpreting it as a probability.
@@ -497,6 +573,8 @@ This card should make it hard to say ``the model improved'' without stating what
 \section*{Looking Ahead}
 
 The two bridge chapters were not meant as isolated mathematics review. Their job was to make later modeling language readable: representation in the first bridge, and score, probability, decision rule, loss, and update signal in this one. Chapter 1 now begins the main argument of the book by asking what decision, proxy target, data source, and held-out evidence make a learning problem worth modeling at all.
+
+The learning-signal card from this bridge becomes the starting document for Chapter 2's metric-and-action worksheet: once score, probability, decision rule, loss, and dataset objective are separated here, the next chapter can turn them into operational judgment.
 
 \begin{chaptersummary}
 \item A score, a probability, a decision rule, a loss, and a dataset-level objective are different objects with different jobs.
@@ -511,7 +589,7 @@ The two bridge chapters were not meant as isolated mathematics review. Their job
 \begin{studyquestions}
 \item Why is a model score not automatically the same thing as a probability?
 \item What is the practical difference between a pointwise loss and empirical risk?
-\item In plain language, what is the functional-analysis viewpoint on a loss function that this book actually needs?
+\item In plain language, why is it useful to think of empirical risk as one number assigned to the whole predictor?
 \item Why is the chain rule better understood as credit assignment than as symbol pushing?
 \end{studyquestions}
 

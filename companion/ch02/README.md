@@ -16,9 +16,16 @@ What it shows:
 
 - same accuracy with very different log loss
 - binary cross-entropy on a tiny set of predicted probabilities
+- the same worked threshold example used in the chapter tables
 - threshold-dependent metrics such as accuracy, precision, recall, and F1
 - simple calibration-bin summaries
 - why one set of probabilities can support different operating points
+
+Install shared dependencies first when running examples that use external libraries:
+
+```bash
+python3 -m pip install -r companion/requirements.txt
+```
 
 Run it with:
 
@@ -36,6 +43,12 @@ What it shows:
 - a flexible model family with varying depth
 - how training accuracy can keep rising while validation accuracy stops improving
 - choosing a model on validation data and reporting test accuracy once
+
+Install shared dependencies first:
+
+```bash
+python3 -m pip install -r companion/requirements.txt
+```
 
 Run it with:
 

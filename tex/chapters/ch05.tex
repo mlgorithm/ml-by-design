@@ -9,23 +9,33 @@
 \item Produce a minimum credible neural training report before making a serious model claim.
 \end{learninggoals}
 
-The previous chapter broadened our idea of structure by introducing branching rules, local geometry, and unlabeled organization. Neural networks broaden it again, but in a different way. Instead of depending so heavily on manually chosen splits, distances, or handcrafted interactions, neural models learn internal representations directly through optimization. Standard references such as \citet{lecun2015} and \citet{goodfellow2016} treat this layered view as the central idea of modern deep learning. This chapter should therefore be read as the point where structure diagnosis turns into learned structure rather than into one more hand-designed model family.
+\begin{whychaptermatters}
+This chapter turns neural networks from folklore into a trainable debugging workflow. After reading it, students should separate forward pass, loss, optimization, generalization, and reporting instead of treating ``deep learning'' as one opaque step. The minimum credible neural training report extends the structure diagnosis sheet by recording what justified the move to learned representations.
+\end{whychaptermatters}
 
-The chapter should therefore answer one question clearly:
+The previous chapter asked what kind of structure a simple baseline was missing. Sometimes trees or geometry-based methods are enough. Sometimes they are not, because the useful intermediate features are not obvious in advance.
+
+That is the setting where neural networks help. Instead of depending entirely on hand-built splits, distances, or interactions, they can learn internal representations through optimization.
+
+The question underneath all of this is simple:
 
 \begin{center}
 \emph{When should structure be learned rather than engineered, and how does optimization actually teach a network to build that structure?}
 \end{center}
 
 \begin{problemsolvinglens}
-This chapter addresses a different modeling dilemma: when hand-engineered structure stops being enough, how can a model learn the intermediate features it needs? Neural networks matter here not as a catalog of architectures, but as a mechanism for learned representation through optimization.
+When hand-engineered structure stops being enough, ask how the model can learn the intermediate features it needs and what evidence would show that the training process actually worked.
 \end{problemsolvinglens}
 
-By the end of the chapter, the reader should be able to produce a minimum credible neural training report before making a serious model claim. The chapter's job is to make that report feel like the natural endpoint of one coherent training story rather than a checklist added afterward.
+The practical payoff is a neural result that is readable: what the network saw, how it was trained, and what evidence makes the claim believable.
 
 \begin{thinkingtool}
-\textbf{Artifact preview: minimum credible neural training report.} Keep six reporting commitments visible while reading: the baseline to beat, the input representation and output type, the loss, the optimization setup, the stopping rule, and the evidence that separates optimization failure from generalization failure.
+\textbf{Minimum credible neural training report.} A believable neural result makes six things visible: the baseline to beat, the input representation and output type, the loss, the optimization setup, the stopping rule, and the evidence that separates optimization failure from generalization failure.
 \end{thinkingtool}
+
+\begin{decisionbox}
+\textbf{Must-master path through this chapter.} On a first pass, master the learned feature pipeline, the worked forward pass, loss as teaching signal, optimization as repeated correction, backpropagation as credit assignment, generalization versus regularization, and the minimum credible training report. Treat detailed optimizer comparisons, batch-normalization mechanics, and broader capacity-regime discussion as supporting material until that core path feels stable.
+\end{decisionbox}
 
 \section{Opening Dilemma: When Engineered Structure Stops Being Enough}
 
@@ -47,6 +57,18 @@ That is when learned structure becomes the right move. The issue is not merely t
 \begin{practicalnote}
 Workflow sketch: start with the strongest simple baseline, decide what structure it is missing, build the smallest network that could plausibly learn that structure, train with a validation split while watching for optimization versus generalization failure, and then report the result in a minimum credible training report. The rest of the chapter follows that order: representation, forward pass, loss, optimization, debugging, generalization, and then reporting.
 \end{practicalnote}
+
+\begin{thinkingtool}
+\textbf{Starter recipe for a first small MLP.}
+\begin{itemize}[leftmargin=*]
+\item Normalize the inputs and choose the smallest network that could plausibly learn the missing structure.
+\item Match the output layer and loss to the task before tuning anything else.
+\item Hold out validation data immediately and decide what curve or metric will trigger stopping.
+\item Run the tiny-batch overfit test early so optimization failures are separated from generalization failures.
+\item Inspect training and validation curves before changing depth or width.
+\item Change one training choice at a time and record what happened.
+\end{itemize}
+\end{thinkingtool}
 
 This does not mean neural networks are always the best choice. On small tabular datasets, a linear model or tree ensemble may still be stronger, easier to debug, and easier to justify. The important shift is conceptual: neural networks are most valuable when the main modeling problem is that the useful internal features are unknown.
 
@@ -361,6 +383,10 @@ Final probability $\hat{p}$ & $\sigma(s)$ & $0.44$ & $0.61$ \\
 A sigmoid or softmax output is a model score, not yet an action. If the model will make decisions, choose the threshold on validation data. If the output will be interpreted as a probability, check calibration separately instead of assuming the network did that for free.
 \end{warningbox}
 
+\begin{example}[Accurate Does Not Mean Calibrated]
+Suppose a validation set contains twenty examples for which the network reports probabilities near \(0.9\). If only twelve of those twenty examples are actually positive, the classifier may still rank examples reasonably well and even achieve good thresholded accuracy, but the reported ``90\%'' confidence is overstated. Calibration asks whether predicted probabilities match observed frequencies, not whether the top class is often correct.
+\end{example}
+
 \begin{codeexample}[caption={From scratch: a complete forward pass with numerical values}]
 # Network: 2 inputs, 2 hidden units (ReLU), 1 output (sigmoid)
 # Input: suspicious-link signal and urgent-language signal
@@ -393,6 +419,30 @@ import math
 p = 1.0 / (1.0 + math.exp(-s))   # sigmoid probability for class 1
 print("predicted probability:      ", round(p, 4))
 \end{codeexample}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{2.2cm}L{1.9cm}L{2.0cm}L{2.7cm}}
+\toprule
+Object & One example & Batch of \(B\) examples & Meaning \\
+\midrule
+Input & \(x: 1\times 2\) & \(X: B\times 2\) & two input features per example \\
+First-layer weights & \(W^{(1)}: 2\times 2\) & same & map two inputs to two hidden units \\
+Hidden pre-activations & \(Z^{(1)}: 1\times 2\) & \(Z^{(1)}: B\times 2\) & weighted sums before ReLU \\
+Hidden activations & \(H^{(1)}: 1\times 2\) & \(H^{(1)}: B\times 2\) & learned intermediate features after ReLU \\
+Output weights & \(W^{(2)}: 2\times 1\) & same & combine hidden units into one score \\
+Score / probability & \(s,\hat p: 1\times 1\) & \(s,\hat p: B\times 1\) & one logit and one probability per example \\
+\bottomrule
+\end{tabular}
+\caption{Shape bookkeeping becomes much easier once one matrix convention is chosen and kept consistent. Here the batch is treated as a matrix of row examples.}
+\label{tab:shape-bookkeeping}
+\end{table}
+
+\begin{practicalnote}
+Students often find neural notation less confusing once every tensor is read as an answer to one question: how many examples are moving through the network at once, and how many features does each stage expose? Shape bookkeeping is not cosmetic. It is a fast way to catch mismatched layers, wrong output dimensions, and silent implementation errors.
+\end{practicalnote}
 
 Every library that trains a neural network executes exactly this sequence of multiplications, additions, and activation calls. Seeing the numbers makes the pipeline concrete: the hidden units are not magic---they are weighted sums with a nonlinearity applied, and their outputs become the inputs to the next layer.
 
@@ -722,13 +772,13 @@ The learning rate controls step size. If it is too small, training can become pa
 \label{fig:learning-rate-cases}
 \end{figure}
 
-\subsection{Adaptive Optimization: Momentum, Adam, and AdamW}
+\subsection{Optimization Dynamics: Momentum, Adam, and AdamW}
 
-The learning rate tells us how large a step to take, but it does not say how to shape the step when the loss surface is uneven. Adaptive optimizers try to make optimization less brittle by using recent gradient information to smooth motion or scale updates per parameter.
+The learning rate tells us how large a step to take, but it does not say how to shape the step when the loss surface is uneven. Modern update rules try to make optimization less brittle by using recent gradient information either to smooth motion or to scale updates per parameter.
 
 \textbf{Momentum} accumulates a running direction of travel. If successive gradients point roughly the same way, momentum keeps the update moving that way instead of restarting from scratch at every batch. If gradients alternate direction, momentum damps the zig-zag. The idea is simple: do not treat the latest gradient as the entire story.
 
-\textbf{Adam} adds a second idea: keep running statistics of both the gradient and its squared magnitude. The first statistic tracks direction, and the second tracks scale. Parameters with consistently large gradients get smaller effective steps; parameters with consistently small or noisy gradients get more usable steps. In practice, this often makes early training easier and less sensitive to a single global step size.
+\textbf{Adam} adds a second idea: keep running statistics of both the gradient and its squared magnitude. The first statistic tracks direction, and the second tracks scale. Parameters with consistently large gradients get smaller effective steps, while parameters with smaller gradients are not forced to share the same step size as the largest ones. In practice, this often makes early training easier and less sensitive to a single global step size.
 
 \textbf{AdamW} keeps the adaptive step logic but separates weight decay from the gradient update itself. That separation matters because weight decay is a regularization choice, not a disguised learning-rate trick. Students should think of AdamW as saying: ``adapt the step, but still regularize the weights in the intended way.''
 
@@ -784,7 +834,11 @@ Both & High & High & Fix optimization first, then assess generalization \\
 
 This distinction is foundational for debugging. Students who do not draw it clearly will add dropout when they should be fixing the output layer, or increase model capacity when they should be adding regularization. Both changes are reasonable in isolation; neither is helpful when the wrong diagnosis drives it. The first debugging reflex in this chapter should therefore be diagnostic, not architectural.
 
-The cleanest diagnostic procedure is to first establish whether the model can overfit a very small dataset. Take a batch of ten to twenty training examples and train the model until training loss is very low. If the model cannot overfit even ten examples, the problem is optimization. If it can overfit ten examples but not generalize on the full dataset, the problem is generalization. The separation is not always perfect, but the small-batch overfit test is the fastest way to decide which problem to solve first.
+The cleanest diagnostic procedure is to first establish whether the model can overfit a very small dataset. Take a batch of ten to twenty training examples and train the model until training loss is very low. If the model cannot overfit even ten examples, the problem may be optimization, but it may also be label quality, excessive regularization, or insufficient capacity. If it can overfit ten examples but not generalize on the full dataset, the problem is more likely generalization. The separation is not always perfect, but the small-batch overfit test is the fastest way to decide which problem to solve first.
+
+\begin{minimumtakeaway}
+When a neural run looks bad, separate optimization failure from generalization failure before touching the architecture. If the network cannot fit a tiny batch, debug the training setup first; regularization and bigger models come later.
+\end{minimumtakeaway}
 
 \subsection{Mini-Batches, Initialization, and Stability}
 
@@ -906,6 +960,17 @@ The tiny-batch test is especially valuable because it removes excuses. A reasona
 \begin{decisionbox}
 Before increasing model depth or width, ask whether the run failed because the model could not fit the training signal at all, or because it fit the training signal and failed to generalize. Those are different problems and should trigger different interventions.
 \end{decisionbox}
+
+\begin{thinkingtool}
+\textbf{First debugging order.} When a first neural run goes wrong, reach for the levers in this order:
+\begin{enumerate}[leftmargin=*]
+\item verify that labels, output layer, and loss match the task;
+\item test whether the model can overfit one tiny batch;
+\item tune the learning rate and check normalization, initialization, and batch size;
+\item only after optimization works, judge regularization, augmentation, or architecture changes.
+\end{enumerate}
+This ordering matters because regularization does not rescue a network that never learned, and more depth does not fix a mismatched loss-output pair.
+\end{thinkingtool}
 
 \begin{thinkingtool}
 \textbf{Tempting mistake $\rightarrow$ corrected reasoning.} Tempting mistake: ``Validation is bad, so the architecture must be wrong.'' Corrected reasoning: ``First separate optimization failure from generalization failure. If the network cannot overfit a tiny batch, debug the training setup. If it can, inspect data quality, split logic, regularization, and evaluation before redesigning the model family.''
@@ -1200,7 +1265,7 @@ These techniques are different in mechanism but similar in purpose. They push th
 Dropout deserves one extra caution. It is useful because it prevents a network from depending too heavily on one hidden pathway, but it does not magically create information that is absent from the data. If the core representation is wrong, dropout only regularizes a bad model.
 
 \begin{example}[What Dropout Actually Changes]
-Suppose a hidden layer currently produces activations \((1.2, 0.9, 0.0, 1.1)\). With dropout rate \(0.5\), one training step might keep only the first and fourth activations, while another might keep the second and fourth. The next layer therefore cannot rely on one fragile path always being present. Over many updates, the network is pushed to spread evidence across several features. At inference time, all units are available again, usually with a compensating rescaling so the expected signal size stays comparable.
+Suppose a hidden layer currently produces activations \((1.2, 0.9, 0.0, 1.1)\). With dropout rate \(0.5\), one training step might keep only the first and fourth activations, while another might keep the second and fourth. The next layer therefore cannot rely on one fragile path always being present. Over many updates, the network is pushed to spread evidence across several features. In common modern implementations, the scaling is usually applied during training, so inference uses the full network unchanged.
 \end{example}
 
 \begin{figure}[t]
@@ -1254,7 +1319,7 @@ Suppose an augmented image model scores slightly lower on clean validation image
 
 \textbf{Large capacity with limited clean data.} When the dataset is small or labels are sparse, additional capacity often leads to memorization rather than generalization. The model learns idiosyncratic patterns of the training examples instead of the underlying structure. In this regime, regularization, early stopping, data augmentation, and smaller architectures tend to help more than increasing capacity.
 
-\textbf{High label noise.} When labels contain substantial errors---from careless annotation, ambiguous task definitions, or label leakage---a higher-capacity model is more likely to memorize those errors than a lower-capacity one. The large model has the flexibility to overfit the noise; the small model may not. Label quality should be assessed and improved before architectural decisions are made, because adding layers to fix a label-noise problem usually makes the problem worse.
+\textbf{High label noise.} When labels contain substantial errors---from careless annotation or ambiguous task definitions---a higher-capacity model is more likely to memorize those errors than a lower-capacity one. Label leakage is a separate issue: it means target information has slipped into the features or split design, not that the labels themselves are noisy. Label quality and split logic should be checked before architectural decisions are made, because adding layers will not fix either problem.
 
 \begin{figure}[t]
 \centering
@@ -1273,7 +1338,7 @@ Suppose an augmented image model scores slightly lower on clean validation image
 \end{figure}
 
 \begin{example}[Capacity Decision on a Small Medical Dataset]
-A team has a labeled dataset of $800$ patient records for a readmission prediction task. They train a six-layer transformer and achieve very low training loss but poor validation performance. Adding dropout and reducing to two layers closes the gap substantially. The larger model had the capacity to overfit the $800$ examples; the smaller model was forced to learn a more general pattern. The improvement had nothing to do with the learning rate or optimizer.
+A team has a labeled dataset of $800$ patient records for a readmission prediction task. They train a six-layer transformer and achieve very low training loss but poor validation performance. Adding dropout and reducing to two layers closes the gap substantially. The larger model had the capacity to overfit the $800$ examples; the smaller model was forced to learn a more general pattern. The example shows that capacity and regularization mattered here, but it does not isolate every other training choice.
 \end{example}
 
 The operational summary is that model size should be chosen in conversation with data size and label quality. The right question before adding capacity is: does this training set contain enough reliable signal to fill these additional parameters? If yes, larger may help. If no, regularization and data quality improvements come first.
@@ -1284,7 +1349,7 @@ The operational summary is that model size should be chosen in conversation with
 
 \section{Chapter Artifact: A Minimum Credible Neural Training Report}
 
-Real neural training involves more than equations on a board. Several practical choices strongly affect outcomes. By the end of this chapter, a reader should be able to produce a minimum credible training report before making a serious neural-network claim. This is the document that keeps flexible neural models tied back to baselines and evidence instead of hype. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, and the structure diagnosis sheet justified leaving it. This report justifies the learned-model claim itself.
+By the time a neural result is reported, many quiet choices have already shaped it: the split, the preprocessing, the optimizer, the stopping rule, and the baseline it had to beat. If those choices stay implicit, the result is hard to judge. The training report below is a compact way to make them visible.
 
 \begin{table}[t]
 \centering
@@ -1313,8 +1378,38 @@ Baseline & the simpler model used for comparison \\
 \end{table}
 
 \begin{thinkingtool}
-\textbf{Minimum credible neural training report.} Before reporting a neural result, write down the data split, preprocessing, architecture, loss, optimizer, learning rate, batch size, stopping rule, randomness, and baseline comparison.
+\textbf{Minimum credible neural training report.} The report becomes readable only when the data split, preprocessing, architecture, loss, optimizer, learning rate, batch size, stopping rule, randomness, and baseline comparison are all visible.
 \end{thinkingtool}
+
+\begin{example}[Filled Minimum Credible Neural Training Report]
+Suppose the task is binary student-risk prediction from the first three weeks of course activity. A minimally credible report might say: chronological split by semester with $70\%$ train, $15\%$ validation, and $15\%$ test; train-only standardization of activity counts plus explicit missingness indicators; a two-layer MLP with input width matched to the engineered features, one hidden layer of modest size, and a sigmoid output; binary cross-entropy for training and area under the precision-recall curve plus escalation recall for evaluation; AdamW with a validated learning rate, fixed batch size, and early stopping on validation loss; three seeds rather than one lucky run; calibration checked on validation before probabilities are interpreted; and a logistic-regression baseline reported alongside the neural result. The report is not impressive because it is verbose. It is credible because it tells the reader what the network saw, how it was trained, and what simpler model it had to beat.
+\end{example}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{p{2.7cm}p{7.3cm}}
+\toprule
+Item & One filled undergraduate example \\
+\midrule
+Task & predict whether a student should be flagged for human review after the first three course weeks \\
+Split & chronological by semester: $70\%$ train, $15\%$ validation, $15\%$ test \\
+Preprocessing & train-only standardization of activity counts; explicit missingness indicators for not-yet-observed fields \\
+Architecture & two-layer MLP with one modest hidden layer and sigmoid output \\
+Loss and metrics & binary cross-entropy for training; PR-AUC and escalation recall for evaluation \\
+Decision rule & validation-set threshold chosen to keep reviewer workload feasible \\
+Calibration & checked on validation before probability language is used in the report \\
+Optimizer & AdamW \\
+Learning rate / batch size & one validated learning rate; fixed batch size reported explicitly \\
+Stopping rule & early stopping on validation loss \\
+Randomness & three seeds with mean and spread reported \\
+Baseline & logistic regression on the same engineered features \\
+\bottomrule
+\end{tabular}
+\caption{A filled report is easier for students to imitate and easier for instructors to grade. The goal is not formality for its own sake; it is to make the neural claim auditable.}
+\label{tab:filled-neural-training-report}
+\end{table}
 
 \begin{table}[t]
 \centering
@@ -1380,9 +1475,9 @@ An image classifier does not begin with hand-coded edge counters written by the 
 \label{fig:representation-hierarchy}
 \end{figure}
 
-This is the culmination of the chapter. Optimization is not only fitting a final boundary. It is teaching the model which internal coordinates make the task easier.
+Optimization is not only fitting a final boundary. It is teaching the model which internal coordinates make the task easier.
 
-This is also the bridge to the next chapter. This chapter learned features for one task through one training loop. The next chapter asks when those learned spaces become reusable assets across tasks, domains, and label budgets. Once representation learning becomes strong enough, we can pretrain models on broad data and reuse those learned spaces across many downstream tasks. That is the foundation-model story in one sentence.
+Once those learned coordinates become strong enough, they can outlive the original task. A model trained for one problem can supply a reusable space for later tasks, domains, and label budgets. That is the beginning of pretraining and transfer, and it is the idea the next chapter takes up.
 
 \section{Common Mistakes with Neural Networks}
 
@@ -1399,10 +1494,12 @@ The mistakes in this section are not merely ``deep-learning mistakes.'' They are
 
 \section{Looking Ahead}
 
-This chapter explained how neural learning works: hidden features, loss, backpropagation, and regularization. The next chapter asks when those learned spaces are reusable across tasks and how to tell whether transfer is really helping.
+Hidden features, loss, backpropagation, and regularization explain how neural learning works. The next question is when those learned spaces are reusable across tasks and how to tell whether transfer is really helping.
+
+The minimum credible neural training report from this chapter becomes the starting document for Chapter 7's reuse and adaptation plan: once a network learns useful internal features, the next question is whether those features transfer honestly.
 
 \begin{chaptersummary}
-\item This chapter answers one question: when should structure be learned rather than engineered, and how does optimization teach a network to build it?
+\item The central question here is when structure should be learned rather than engineered, and how optimization teaches a network to build it.
 \item A neural network is best understood as a learned feature pipeline rather than as a bag of layers and tricks.
 \item Nonlinearity matters because without it a deep network collapses back into one larger affine map, so depth alone does not create learned structure.
 \item Losses provide the teaching signal for optimization, while evaluation metrics remain the tools for judgment.
@@ -1428,10 +1525,16 @@ This chapter explained how neural learning works: hidden features, loss, backpro
 \item A multiclass classifier outputs logits $(1.0, 0.0, -1.0)$. Compute the softmax probabilities approximately and state the cross-entropy loss if class 1 is the true class.
 \item For the scalar model $\hat{y}=wx$, let $x=3$, $y=9$, and current $w=1$. Using squared error loss, compute the gradient with respect to $w$ and perform one gradient descent update with learning rate $0.05$.
 \item Explain in words why backpropagation is a credit-assignment procedure rather than just a formula-manipulation trick.
+\item A mini-batch contains \(32\) examples, each input has dimension \(16\), the hidden layer has \(8\) units, and the output layer has \(3\) logits. Using the row-batch convention from Table~\ref{tab:shape-bookkeeping}, give the shapes of \(X\), \(W^{(1)}\), \(Z^{(1)}\), \(H^{(1)}\), \(W^{(2)}\), and the logits.
+\item A classifier is \(92\%\) accurate on validation data. Among the examples assigned probability near \(0.9\), only \(60\%\) are actually positive. What does this say about calibration, and what extra check should be reported before treating the outputs as probabilities?
+\item A training run shows train/validation losses \((0.69,0.69)\), \((0.69,0.68)\), \((0.68,0.69)\), and \((0.68,0.69)\) over four epochs. Diagnose the main failure type and name the first two things you would inspect.
 \item A binary classifier shows the following training and validation losses across six epochs: $(0.69,0.70)$, $(0.61,0.63)$, $(0.53,0.58)$, $(0.44,0.60)$, $(0.36,0.66)$, $(0.29,0.74)$. Diagnose the main failure pattern, and name one change you would try first.
+\item Another run reaches very high training and validation performance almost immediately on a task where some features may contain post-outcome information. Explain why this pattern is suspicious, and state what should be audited before celebrating.
 \item Using Table~\ref{tab:minimum-credible-training-report}, sketch a minimum credible training report for a small binary classifier and name the simpler baseline it must beat. If you are carrying one case through the book, use the same case as your structure diagnosis sheet and state which failure pattern justified moving to a neural model.
+\item A project report says only ``two-layer MLP, Adam, 94\% accuracy.'' Name four missing items from the chapter's minimum credible training report that you would need before trusting the result.
 \item Give one example of a task for which a neural network may be justified because representation learning matters, and one example of a task where a simpler model may still be preferable. State what evidence would decide between them.
 \item A training run shows steadily falling training loss but worsening validation performance after epoch 12. Name the failure type, one sensible intervention, and whether the next move should be better regularization, a better baseline comparison, or a transfer-learning workflow from Chapter 7.
+\item A run cannot overfit a batch of 12 examples. Using the chapter's debugging order, name the first three questions you would check before increasing model depth.
 \end{exercises}
 
 \begin{challengeexercises}

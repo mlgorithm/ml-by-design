@@ -51,6 +51,12 @@ The companion code should prefer:
 - `scikit-learn`
 - `PyTorch`
 
+Install the shared dependencies with:
+
+```bash
+python3 -m pip install -r companion/requirements.txt
+```
+
 Avoid making the book depend on:
 
 - vendor SDKs

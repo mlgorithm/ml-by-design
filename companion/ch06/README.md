@@ -20,6 +20,12 @@ What it shows:
 - nearest-neighbor queries in embedding space
 - a direct cosine-vs-Euclidean comparison for one query word
 
+Install shared dependencies first:
+
+```bash
+python3 -m pip install -r companion/requirements.txt
+```
+
 Run it with:
 
 ```bash
@@ -31,7 +37,7 @@ What to notice:
 - words that appear in similar contexts move closer together
 - the geometry comes from context statistics, not from hand-coded meanings
 - nearest neighbors are useful but still depend on the training corpus
-- the notion of "close" changes when you change the metric
+- cosine similarity and Euclidean distance are different notions of "close," even when they sometimes rank neighbors similarly on a tiny example
 
 Prerequisites:
 
@@ -49,6 +55,12 @@ What it shows:
 - a frozen linear probe trained on only a small labeled subset
 - frozen, partial, and full downstream adaptation on a shifted target domain
 - a comparison against a raw-feature logistic-regression baseline
+
+Install shared dependencies first:
+
+```bash
+python3 -m pip install -r companion/requirements.txt
+```
 
 Run it with:
 

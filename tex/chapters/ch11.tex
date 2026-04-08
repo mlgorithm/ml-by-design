@@ -8,10 +8,14 @@
 \item Learn when a system should be redesigned, constrained, or rejected rather than simply tuned harder.
 \end{learninggoals}
 
+\begin{whychaptermatters}
+This chapter turns fairness, robustness, privacy, and safety into one bounded-failure review. After reading it, students should ask for whom the system fails, under what shifts, and which hazards block launch instead of treating reliability as a moral appendix. The reliability review card extends the experiment claim sheet into deployment-facing risk judgment.
+\end{whychaptermatters}
+
 The previous chapter argued that experimental results only matter when claims match evidence. Reliability extends that discipline into higher-stakes questions and turns it into a deployment constraint. It asks not only whether a model works on average, but for whom, under what shifts, with what privacy costs, and with what safety margins when failure matters. The chapter therefore moves in a specific order: identify who is unevenly served, test how those failures change under shift, trace what information might leak, bound the failures that are unacceptable, and then decide what monitoring and fallback make deployment defensible. The chapter culminates in a reliability review card, so the early slice dashboards and harm models should be read as preparation for one launch decision rather than as a detached ethics checklist.
 
 \begin{problemsolvinglens}
-This chapter widens the seven-question framework from average performance to bounded failure. The question is no longer only ``does it work?'' but ``for whom, under what changes, and with what unacceptable risks?''
+This chapter asks a broader question than average performance: for whom does the system work, under what changes does it fail, and which risks are serious enough to block deployment?
 \end{problemsolvinglens}
 
 \section{Reliability Is a Pipeline Property}
@@ -47,9 +51,28 @@ To keep the reliability story visibly cross-domain, this chapter also returns to
 \begin{figure}[t]
 \centering
 \resizebox{\linewidth}{!}{\input{figures/ch11-reliability-matrix}}
-\caption{The reliability evaluation matrix shows that each reliability dimension (bias, robustness, privacy, safety) requires specific checks across every pipeline stage. No single metric captures full reliability; systematic assessment across all cells prevents deployment of systems with hidden failure modes.}
+\caption{Reliability review is a matrix of checks, not one aggregate score. Each row names a failure dimension, each column names a pipeline stage, and each cell asks what evidence and fallback are needed there.}
 \label{fig:reliability-matrix}
 \end{figure}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{2.75cm}L{6.55cm}}
+\toprule
+Review field & Early filled example for the course-support assistant \\
+\midrule
+Critical slice & Multilingual or distressed student messages that may require escalation even when routine policy questions are safe \\
+Shift to test & New semester wording, revised policy pages, or changed course-tool terminology \\
+Privacy exposure & Student identifiers, health disclosures, accommodation records, and advisor notes \\
+Severe hazard & The assistant answers a high-risk message directly instead of escalating with evidence attached \\
+Fallback / no-launch rule & Escalate by default on high-risk categories; delay launch if severe-slice failures remain unresolved \\
+\bottomrule
+\end{tabular}
+\caption{A compact filled review card preview makes the chapter's destination concrete before the full card appears later.}
+\label{tab:early-reliability-review-preview}
+\end{table}
 
 \section{Bias as a Full-Pipeline Failure}
 
@@ -83,6 +106,10 @@ These categories overlap, but they are still useful because they keep the reliab
 \begin{practicalnote}
 Ask ``what kind of harm are we trying to rule out?'' before asking ``which metric should we compute?'' Reliability metrics become more meaningful once the harm model is explicit.
 \end{practicalnote}
+
+\begin{minimumtakeaway}
+Reliability review starts with a harm model, not with a metric menu. Until the chapter has named who can be harmed, how, and under what shift or exposure, no single fairness, robustness, privacy, or safety number is informative enough.
+\end{minimumtakeaway}
 
 \subsection{Overall Performance Can Hide Unequal Harm}
 
@@ -171,6 +198,26 @@ P(\hat Y=1\mid A=a)=\mathrm{TPR}_a\,\pi_a+\mathrm{FPR}_a\,(1-\pi_a).
 \]
 If equalized odds holds across groups, then $\mathrm{TPR}_a$ and $\mathrm{FPR}_a$ are the same for each group, so different base rates $\pi_a$ still produce different positive-prediction rates. In that case, demographic parity usually cannot hold at the same time unless the groups have equal base rates or the classifier is trivial.
 \end{advancednote}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{1.08cm}L{1.00cm}L{1.00cm}L{1.00cm}L{1.00cm}L{1.48cm}L{1.56cm}}
+\toprule
+Group & TP & FN & FP & TN & TPR / FPR view & Positive rate \\
+\midrule
+A & 48 & 12 & 4 & 36 & $\mathrm{TPR}=0.80$, $\mathrm{FPR}=0.10$ & $52/100=0.52$ \\
+B & 16 & 4 & 8 & 72 & $\mathrm{TPR}=0.80$, $\mathrm{FPR}=0.10$ & $24/100=0.24$ \\
+\bottomrule
+\end{tabular}
+\caption{Two fairness views can disagree. Here equalized-odds style rates match across groups, but positive-prediction rates do not because the base rates differ.}
+\label{tab:fairness-metrics-disagree}
+\end{table}
+
+\begin{practicalnote}
+Table~\ref{tab:fairness-metrics-disagree} is exactly why the chapter says metrics are tools, not magic. One reviewer may say the system looks balanced under equalized odds. Another may object that service exposure is still very unequal. The right next step is to ask which harm model matters for the deployment, not to hunt for one metric that ends the argument.
+\end{practicalnote}
 
 \begin{example}[Real-World Callout: Aggregate Performance Hid Unequal Failure]
 Buolamwini and Gebru showed that commercial gender-classification systems could look broadly capable while producing substantially higher error rates for darker-skinned women than for lighter-skinned men \citep{buolamwini2018}. That result is exactly why subgroup evaluation matters: an aggregate success story can coexist with a severe failure for a specific population. Fairness metrics such as equal opportunity or equalized odds do not remove the need for judgment, but they make this kind of uneven behavior visible enough to challenge a misleading average-case narrative \citep{hardt2016}.
@@ -292,6 +339,10 @@ Before choosing a privacy method, write one sentence of the form: ``We are tryin
 
 Training data may contain names, messages, health records, locations, or other sensitive content. A model can leak such information by memorizing rare examples, exposing hidden attributes through inference, or enabling linkage across datasets. Even if the model is not explicitly designed to reveal private information, its outputs or internals may still create privacy risk.
 
+\begin{example}[A Small Privacy Failure Before Any Fancy Attack]
+Suppose a course-support team exports $200$ real student messages to a shared spreadsheet so interns can compare prompts. Several messages mention disability accommodations, health events, and visa concerns. No model attack is needed: the sensitive fact is already exposed through the debugging workflow. The first privacy lesson is therefore concrete rather than exotic. Before choosing tools, ask who can see what sensitive field through which ordinary data path.
+\end{example}
+
 \subsection{Common Privacy Responses}
 
 Several technical responses are common:
@@ -378,6 +429,25 @@ For the course-support assistant, one safety case might center on high-risk stud
 
 For the pedestrian detector, the same pattern appears in another domain: the hazard is a missed close-range pedestrian; the trigger condition is glare, rain, or unusual night geometry; the mitigation is stress-tested sensing and conservative policy thresholds; the fallback is slowdown or human takeover; the monitoring signal is rising miss rate under those visibility conditions. The lesson is the same in both domains. Safety is strongest when failure handling is specified before deployment rather than improvised after the first incident.
 
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{2.42cm}L{6.04cm}}
+\toprule
+Safety-case field & Filled support-assistant example \\
+\midrule
+Hazard & high-risk student message is answered directly instead of escalated \\
+Trigger condition & mixed routine wording plus distress, visa, disability, or disciplinary cues \\
+Mitigation & high-risk intent detection, grounded retrieval, conservative answer thresholds, and explicit refusal rules \\
+Fallback & immediate routing to trained human staff with the retrieved evidence attached \\
+Monitoring signal & rise in escalation misses, unsupported direct answers, or overrides on audited high-risk slices \\
+\bottomrule
+\end{tabular}
+\caption{A safety case becomes more usable for undergraduates when one real service is written out field by field rather than only described in prose.}
+\label{tab:filled-safety-case}
+\end{table}
+
 \begin{evidencebox}
 ``The model is accurate'' is not a safety case. A safety case must say what the dangerous failure is, when it is likely, what reduces it, how the system falls back, and what signal would warn the team that the protection is no longer holding.
 \end{evidencebox}
@@ -422,6 +492,14 @@ Evidence for safety should include more than nominal test performance. It should
 
 This is an important professional lesson. Some systems should not be deployed yet. If subgroup failures are severe, privacy risks are unacceptable, or fallback behavior is missing in a high-stakes setting, the correct action may be to redesign the system or refuse deployment. Reliability is not only about mitigation. It is also about knowing when the evidence is not good enough.
 
+\begin{example}[When the Right Review Ends in ``Do Not Deploy'' ]
+Suppose a support assistant shows good routine-message performance, but the multilingual visa slice still has weak routing recall, raw support logs retain sensitive health details for debugging, and the advising office cannot staff the required fallback queue outside business hours. None of those findings is a cosmetic concern. Together they mean the current system cannot bound the harms it would create in real use. The technically correct conclusion is to delay launch, narrow the use case, or redesign the pipeline rather than to deploy and hope monitoring will catch the failures later.
+\end{example}
+
+\begin{decisionbox}
+If a severe slice failure remains, a privacy exposure has no credible mitigation, or the fallback path cannot actually be staffed in the real workflow, the system is not merely ``imperfect.'' It is not yet deployable on honest reliability grounds.
+\end{decisionbox}
+
 \section{Monitoring Reliability After Launch}
 
 Reliability does not end when the model leaves the notebook. Post-deployment monitoring is where many apparently careful systems begin to fail. User populations change, document collections drift, sensors degrade, labels arrive late, and human reviewers work under different load than anticipated. A system that was reliable at launch can become unreliable quietly unless the team watches the right signals. Monitoring is where the earlier harm model, shift scenarios, privacy paths, and safety cases become operational rather than hypothetical.
@@ -461,7 +539,7 @@ By the end of this chapter, the reader should be able to produce a one-page reli
 \toprule
 Review field & What must be written clearly \\
 \midrule
-Seven-question focus & Questions 3, 6, and 7 most directly: what data and deployment conditions create risk, what evidence bounds failure, and what review or fallback keeps the system acceptable \\
+Core focus & The data and deployment conditions that create risk, the evidence that bounds failure, and the review or fallback that keeps the system acceptable \\
 Critical users or slices & Which groups, contexts, or operating conditions must be checked separately \\
 Shift scenarios & Which realistic changes in device, environment, source, or user population could break the system \\
 Spurious-cue or measurement risks & What accidental shortcuts or measurement failures may be carrying the score \\
@@ -487,7 +565,7 @@ For the course-support assistant, a disciplined review card would name critical 
 
 \section{Common Mistakes in Reliability Work}
 
-These mistakes are surface forms of the chapter's main enemy: confusing improved scores with justified explanation. Read them as one reliability checklist rather than five separate mini-topics.
+These mistakes are surface forms of the chapter's main enemy: mistaking average success for bounded, acceptable failure. Read them as one reliability checklist rather than five separate mini-topics.
 
 \begin{mistakebox}
 \item \textbf{Reporting only overall metrics.} Overall numbers can hide subgroup failures and robustness weaknesses.
@@ -500,6 +578,8 @@ These mistakes are surface forms of the chapter's main enemy: confusing improved
 \section{Looking Ahead}
 
 This chapter treated reliability as an engineering discipline across the full pipeline. The final chapter asks the launch question that follows from that discipline: once contracts, monitoring, fallback behavior, queue limits, and ownership are included, is the whole system actually ready to operate as a real service?
+
+The reliability review card from this chapter becomes the starting document for Chapter 13's system readiness brief: once bounded failure is explicit, the next question is whether the whole service is ready to operate.
 
 \begin{chaptersummary}
 \item Reliability is a property of the full pipeline, not just the trained model.
@@ -531,6 +611,7 @@ This chapter treated reliability as an engineering discipline across the full pi
 \item Describe a deployment situation in which robustness to distribution shift matters more than clean benchmark accuracy.
 \item For a support assistant or a dashboard-camera pedestrian detector, list one subgroup slice, one shift scenario, one privacy exposure, and one severe hazard that should appear on the reliability review card.
 \item Group A has confusion counts $(TP=45, FN=5, FP=30, TN=120)$ and Group B has confusion counts $(TP=18, FN=2, FP=4, TN=56)$. Compute the true positive rate and false positive rate for both groups. Which group faces the higher false-positive burden, and what reliability concern does that raise in a screening or review system?
+\item Using Table~\ref{tab:fairness-metrics-disagree}, explain why equalized-odds style parity can hold while positive-prediction rates still differ sharply. Then say which harm model would make that difference matter most.
 \item Use Table~\ref{tab:reliability-review-card} to sketch a one-page reliability review card for a system of your choice. If you are carrying one case through the book, write it for the same system as your experiment claim sheet and state which empirical claim survives this reliability review unchanged.
 \end{exercises}
 

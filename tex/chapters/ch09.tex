@@ -9,6 +9,10 @@
 \item Produce a sequential design card before making a serious sequential-model claim.
 \end{learninggoals}
 
+\begin{whychaptermatters}
+This chapter makes decision time part of the task definition. After reading it, students should define legal context, horizon, latency, and temporal leakage boundaries before trusting a sequential result. The sequential design card extends the earlier evaluation plan into time-faithful modeling and deployment realism.
+\end{whychaptermatters}
+
 The language chapter treated meaning as sequence structure shaped by context and grounding. Audio and time-series data extend that sequential viewpoint into different signal types and operational constraints. Once time enters the problem, examples stop being static records and become evolving processes. That change makes representation, splitting, latency, and leakage part of the modeling claim itself. The chapter therefore moves in a specific order: fix the decision moment and legal context first, separate the task shapes that sequences can support, choose representations and memory mechanisms that respect that boundary, and only then ask what evaluation and deployment evidence would make the claim honest. The chapter culminates in a sequential design card, so the audit stays tied to a reusable design decision rather than remaining a checklist.
 
 \begin{problemsolvinglens}
@@ -33,6 +37,10 @@ That question makes sequential modeling different from ordinary tabular predicti
 This is why a strong sequential result is not defined only by model accuracy. It is defined by whether the system used only legitimate information at the right time and still performed well.
 
 Keep two running cases in view throughout this chapter. One is a streaming wake-word detector that must fire within a fraction of a second after hearing a target phrase. The other is a one-hour-ahead electricity-demand forecaster for a campus energy system. One consumes audio and the other consumes numeric measurements, but both are governed by the same practical question: what information was really available at the moment a decision had to be made? Those two cases also give the chapter its shape: audio makes representation and latency vivid, while forecasting makes horizon, baselines, and backtesting vivid.
+
+\begin{practicalnote}
+If audio and forecasting feel unrelated at first, line them up under the same four questions: when must the system act, what past context is legal, what future information is forbidden, and how late can the answer arrive? The rest of the chapter keeps returning to those same columns.
+\end{practicalnote}
 
 \section[Problem-Solving Technique: Prediction-Time Audit]{Problem-Solving Technique:\linebreak Prediction-Time Audit}
 
@@ -183,6 +191,49 @@ One way to build a spectrogram is to take short overlapping windows of the wavef
 
 Depending on the construction, those values may be magnitude, power, or log-power rather than raw energy.
 
+\begin{figure}[t]
+\centering
+\definecolor{c10wave}{RGB}{56,103,170}
+\definecolor{c10specLo}{RGB}{220,233,251}
+\definecolor{c10specHi}{RGB}{254,242,214}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm,y=1cm,font=\small]
+%% ── Top panel: waveform view ─────────────────────────────────────────────
+\draw[->,black!70] (0,4.2) -- (10.9,4.2) node[right] {time};
+\node[anchor=east, font=\footnotesize\bfseries] at (-0.2,4.95) {waveform};
+\draw[gray!30, dashed] (5.2,3.55) -- (5.2,5.25);
+\node[font=\footnotesize, black!65] at (2.6,5.35) {first second};
+\node[font=\footnotesize, black!65] at (7.9,5.35) {second second};
+\draw[c10wave, line width=1.1pt]
+  plot[smooth] coordinates {(0.2,4.2)(0.55,4.78)(0.9,4.2)(1.25,3.62)(1.6,4.2)(1.95,4.78)(2.3,4.2)(2.65,3.62)(3.0,4.2)(3.35,4.78)(3.7,4.2)(4.05,3.62)(4.4,4.2)(4.75,4.78)(5.1,4.2)};
+\draw[c10wave, line width=1.1pt]
+  plot[smooth] coordinates {(5.35,4.2)(5.55,4.82)(5.75,3.58)(5.95,4.82)(6.15,3.58)(6.35,4.82)(6.55,3.58)(6.75,4.82)(6.95,3.58)(7.15,4.82)(7.35,3.58)(7.55,4.82)(7.75,3.58)(7.95,4.82)(8.15,3.58)(8.35,4.82)(8.55,3.58)(8.75,4.82)(8.95,3.58)(9.15,4.82)(9.35,3.58)(9.55,4.82)(9.75,3.58)(9.95,4.82)(10.15,4.2)};
+\node[font=\footnotesize, c10wave] at (2.6,3.25) {slower oscillation};
+\node[font=\footnotesize, c10wave] at (7.9,3.25) {faster oscillation};
+%% ── Bottom panel: spectrogram-style view ────────────────────────────────
+\draw[->,black!70] (0,0) -- (10.9,0) node[right] {time};
+\draw[->,black!70] (0,0) -- (0,2.5) node[above] {frequency};
+\node[anchor=east, font=\footnotesize\bfseries] at (-0.2,1.2) {spectrogram-like view};
+\foreach \x in {0,1.3,2.6,3.9,5.2,6.5,7.8,9.1,10.4} {
+  \draw[gray!15] (\x,0) -- (\x,2.2);
+}
+\foreach \y in {0.55,1.10,1.65,2.20} {
+  \draw[gray!15] (0,\y) -- (10.4,\y);
+}
+\foreach \x in {0,1.3,2.6,3.9} {
+  \fill[c10specLo] (\x,0.25) rectangle (\x+1.05,0.8);
+}
+\foreach \x in {5.2,6.5,7.8,9.1} {
+  \fill[c10specHi] (\x,1.45) rectangle (\x+1.05,2.0);
+}
+\node[font=\footnotesize, blue!55!black] at (2.6,1.0) {energy low in frequency, early in time};
+\node[font=\footnotesize, orange!70!black] at (7.8,1.0) {energy high in frequency, later in time};
+\end{tikzpicture}%
+}
+\caption{The same sound can be read in two ways. The waveform shows the raw oscillation, while a spectrogram-like view makes the shift from lower to higher frequency visible over time.}
+\label{fig:waveform-to-spectrogram}
+\end{figure}
+
 \begin{prereqbridge}
 You do not need full Fourier-analysis machinery to use the idea of a spectrogram. The practical picture is enough: take a short chunk of sound, ask which frequencies are strong, slide forward a little, and repeat. The result shows how frequency content changes over time.
 \end{prereqbridge}
@@ -203,6 +254,10 @@ If the analysis window has duration $T$, then time localization improves as $T$ 
 
 \begin{example}[Window Choice Depends on the Decision]
 For the running wake-word case, short windows may preserve the onset of consonants and brief timing cues that matter for fast detection, while longer windows may smear those cues even if they give cleaner frequency estimates. The right representation is therefore tied not only to the signal, but to the timing of the action the system must take.
+\end{example}
+
+\begin{example}[A Minimal Wake-Word Pipeline]
+Suppose the task is to trigger on ``hey campus'' in a streaming audio feed. The raw waveform arrives continuously. The system cuts it into short overlapping windows, converts each window into a compact spectrogram-like patch, and feeds a short recent sequence of those patches to a classifier that scores whether the wake word is active now. The action policy then requires several consecutive high-scoring frames before firing, so one noisy burst does not trigger the device by accident. Evaluation must keep speakers, microphones, and recording sessions separated across train and test, and the held-out audio should be replayed in time order so that the detector never benefits from future frames. That full pipeline makes the chapter's point concrete: representation choice, latency, and split logic are all part of the same claim.
 \end{example}
 
 \subsection{Time-Frequency Tradeoffs}
@@ -336,9 +391,30 @@ Suppose a predictor only retains the last $m$ observations, so its state at time
 For keyword spotting, the last second of audio may matter most. For electricity demand, the same hour on previous days may matter strongly. For clinical monitoring, sudden short-term changes may matter more than long-run averages. Different tasks reward different notions of memory.
 \end{example}
 
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{L{1.68cm}L{1.78cm}L{2.05cm}L{2.02cm}L{1.67cm}}
+\toprule
+Family & What memory looks like & Best matched context & Common failure mode & Useful toy task \\
+\midrule
+HMM / structured state & explicit latent state plus transition rules & staged or regime-like processes where hidden state is interpretable and memory is fairly local & state assumptions too rigid for rich long-range context & machine mode changes or short phoneme-like segments \\
+RNN / LSTM & compressed hidden state updated step by step & moderate sequential context with online processing and a need to summarize the past compactly & forgetting distant cues or bottlenecking too much information into one state & compare the current tone with one heard several steps earlier \\
+Transformer & direct access to many earlier positions through attention & long-range or irregular dependencies where the relevant earlier event may be far away & excess complexity or latency when the decisive context is short and local & match the current event to a distant earlier event in the same sequence \\
+\bottomrule
+\end{tabular}
+\caption{Sequence models can be taught as different memory stories rather than as a list of brand names. The best choice depends on what past information must remain accessible at prediction time.}
+\label{tab:memory-choice-comparison}
+\end{table}
+
 \begin{center}
 \emph{Sequence architectures differ mainly in how they represent and access memory.}
 \end{center}
+
+\begin{thinkingtool}
+\textbf{Memory-choice sanity check.} Ask three questions in order: how far back the decisive information lives, whether the system must act online or can read a fuller sequence, and whether the task is best thought of as explicit state, compact running summary, or long-range lookup. If the answer is ``only the recent past matters,'' do not buy the complexity of a long-range model just because it is fashionable.
+\end{thinkingtool}
 
 \section{Evaluation That Respects Time}
 
@@ -457,7 +533,7 @@ Three common regimes appear often:
 
 None of these is universally best. The right regime depends on the deployment cadence. If the real forecasting service retrains every week on the latest semester of data, then a one-shot historical split is not the most faithful evaluation. If the real system is updated rarely, an expanding-window simulation may overstate adaptation. Backtesting is therefore part of the operational claim, not just part of the statistical protocol.
 
-Horizon belongs in the same sentence. A one-hour-ahead model and a day-ahead model may need different baselines, different context windows, and different retraining schedules even when they use the same raw signal. ``This model works for forecasting'' is too broad a claim. A scientifically honest sentence is closer to: ``under weekly expanding-window retraining, the model improves one-hour-ahead demand forecasts, but the gain shrinks sharply at the 24-hour horizon.'' That is a usable operational claim.
+The claim itself should name the horizon. A one-hour-ahead model and a day-ahead model may need different baselines, different context windows, and different retraining schedules even when they use the same raw signal. ``This model works for forecasting'' is too broad a claim. A scientifically honest sentence is closer to: ``under weekly expanding-window retraining, the model improves one-hour-ahead demand forecasts, but the gain shrinks sharply at the 24-hour horizon.'' That is a usable operational claim.
 
 \begin{decisionbox}
 Choose the backtesting regime by asking how the deployed system will actually be refreshed. Then state the horizon in the claim itself, because a win at one horizon does not automatically transfer to another.
@@ -511,7 +587,7 @@ By the end of this chapter, the reader should be able to write down not only whi
 \toprule
 Card field & What must be written clearly \\
 \midrule
-Seven-question focus & Questions 1, 3, 4, 6, and 7: what decision or action moment matters, what information is really available then, what sequential representation is legal, what evaluation is honest through time, and how latency shapes action \\
+Core focus & The decision moment, the information truly available then, the sequential representation the task allows, the evaluation plan that respects time order, and the latency limits that shape action \\
 Decision time & The moment the system must act or emit a prediction \\
 Horizon & How far into the future the prediction or detection target lies \\
 Allowed context window & What past observations, frames, or tokens are legitimately available \\
@@ -562,6 +638,8 @@ The mistakes in this chapter are surface forms of one deeper error:
 
 This chapter treated sequences as processes, so evaluation had to respect prediction time. The next chapter generalizes that discipline into experiment claims themselves: once the protocol stops cheating through time, we still have to ask what any score actually justifies and what rival explanation survives.
 
+The sequential design card from this chapter becomes the starting document for Chapter 11's experiment claim sheet: once decision time and legal context are fixed, the next question is what evidence justifies any reported gain.
+
 \begin{chaptersummary}
 \item Sequential modeling begins by asking what was known at the decision moment rather than by choosing an architecture by habit.
 \item A prediction-time audit clarifies horizon, allowed context, forbidden future information, latency, and temporal structure before modeling begins.
@@ -592,6 +670,8 @@ This chapter treated sequences as processes, so evaluation had to respect predic
 \item Explain why a model with strong clean-audio accuracy might still fail under realistic deployment noise.
 \item For a one-hour-ahead demand forecast, write one illegal future feature and one legal feature that might look superficially similar. Explain the difference in timing.
 \item A team wants to forecast next-hour electricity demand using the past 24 hours of demand, the current temperature, and a full day-ahead weather forecast published each morning at 06:00. Which features are legal for predictions made at 05:00, which become legal at 07:00, and what simple naive baseline should the model have to beat?
+\item A forecasting service is retrained every Monday on the most recent semester of data and predicts the next week of demand. Decide whether a single holdout, an expanding-window backtest, or a sliding-window backtest is the most faithful evaluation, and explain why the others are weaker fits.
+\item Sketch a legal wake-word pipeline from waveform to trigger. Name one representation choice, one latency constraint, and one split rule that keeps the evaluation faithful to streaming deployment.
 \item Use Table~\ref{tab:sequential-design-card} to sketch a one-page sequential design card for a streaming or forecasting task of your choice. If you are carrying one case through the book, state what changed in the earlier framing and evaluation artifacts once decision time, legal context, and latency became central.
 \end{exercises}
 
@@ -599,5 +679,6 @@ This chapter treated sequences as processes, so evaluation had to respect predic
 \item A forecasting model performs much better under a random split than under a chronological split. Give three technically plausible explanations, and state what additional experiment would test each one.
 \item Explain carefully why the same audio representation might be useful for keyword spotting but insufficient for speaker verification, or vice versa.
 \item A lab reports excellent anomaly-detection performance on a rare-event dataset. Describe an evaluation protocol that would convince you the result is real rather than an artifact of leakage, class imbalance, or unstable labeling.
+\item Compare a structured-state model, an LSTM-style model, and a transformer-style model on two toy tasks: one depends mostly on the last two steps, and the other depends on a tone heard eight steps earlier. For each task, say which memory story is most natural and what failure you would test first.
 \item Design a sequential design card for a streaming medical alert system and explain which fields are hardest to specify honestly.
 \end{challengeexercises}

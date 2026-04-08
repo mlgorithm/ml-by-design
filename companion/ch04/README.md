@@ -18,6 +18,12 @@ What it shows:
 - a k-nearest-neighbor example whose prediction changes after sensible feature scaling
 - one full k-means assignment-and-recompute iteration
 
+Install shared dependencies first:
+
+```bash
+python3 -m pip install -r companion/requirements.txt
+```
+
 Run it with:
 
 ```bash
@@ -32,7 +38,13 @@ What it shows:
 
 - logistic regression, decision tree, random forest, gradient boosting, and k-nearest-neighbor comparison on a nonlinear classification dataset
 - a tree-depth sweep with train and validation performance
-- k-means clustering plus PCA on synthetic blobs
+- k-means clustering plus PCA from four dimensions down to two on synthetic blobs
+
+Install shared dependencies first:
+
+```bash
+python3 -m pip install -r companion/requirements.txt
+```
 
 Run it with:
 

@@ -43,8 +43,14 @@ Prerequisites:
 What it shows:
 
 - a unigram logistic-regression baseline on an order-sensitive text task
-- a unigram-plus-bigram logistic-regression model
+- a unigram-plus-bigram logistic-regression model selected against the unigram baseline on validation data
 - a small GRU sequence classifier
+
+Install shared dependencies first:
+
+```bash
+python3 -m pip install -r companion/requirements.txt
+```
 
 Run it with:
 
