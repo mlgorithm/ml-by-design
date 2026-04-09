@@ -18,12 +18,6 @@ What it shows:
 - short-window Fourier analysis over time
 - dominant frequency estimates for successive windows
 
-Install shared dependencies first:
-
-```bash
-python3 -m pip install -r companion/requirements.txt
-```
-
 Run it with:
 
 ```bash
@@ -51,12 +45,6 @@ What it shows:
 - a synthetic forecasting problem with trend, seasonality, and a regime shift
 - a naive persistence baseline
 - the same linear forecasting model under random-split and chronological evaluation
-
-Install shared dependencies first:
-
-```bash
-python3 -m pip install -r companion/requirements.txt
-```
 
 Run it with:
 

@@ -40,20 +40,10 @@ def classification_demo():
     print(
         f"train={len(y_train)} validation={len(y_validation)} test={len(y_test)}"
     )
-    best_name = None
-    best_model = None
-    best_validation_accuracy = -1.0
     for name, model in models:
         model.fit(x_train, y_train)
-        validation_accuracy = accuracy_score(y_validation, model.predict(x_validation))
-        print(f"  {name}: validation_accuracy={validation_accuracy:.3f}")
-        if validation_accuracy > best_validation_accuracy:
-            best_validation_accuracy = validation_accuracy
-            best_name = name
-            best_model = model
-    selected_test_accuracy = accuracy_score(y_test, best_model.predict(x_test))
-    print(f"  selected_on_validation={best_name}")
-    print(f"  test_accuracy_after_selection={selected_test_accuracy:.3f}")
+        test_accuracy = accuracy_score(y_test, model.predict(x_test))
+        print(f"  {name}: test_accuracy={test_accuracy:.3f}")
     print()
 
     print("Decision-tree depth sweep")
@@ -89,11 +79,7 @@ def classification_demo():
 def clustering_demo():
     x, _ = make_blobs(
         n_samples=150,
-        centers=[
-            (-2.0, 0.0, 0.5, 1.0),
-            (1.5, 1.0, -1.0, 0.0),
-            (3.0, 4.0, 1.5, -0.5),
-        ],
+        centers=[(-2.0, 0.0), (1.5, 1.0), (3.0, 4.0)],
         cluster_std=[0.6, 0.9, 0.7],
         random_state=7,
     )
@@ -110,7 +96,6 @@ def clustering_demo():
         print(f"  center_{idx}={rounded}")
     explained = [round(float(value), 3) for value in pca.explained_variance_ratio_]
     print(f"  pca_explained_variance_ratio={explained}")
-    print(f"  original_dimension={x.shape[1]} projected_dimension={projection.shape[1]}")
     first_projection = [round(float(value), 2) for value in projection[0]]
     print(f"  first_projected_point={first_projection}")
 

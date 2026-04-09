@@ -68,33 +68,17 @@ def main():
     print("  bob helped alice -> label 0")
     print()
 
-    best_label = None
-    best_vectorizer = None
-    best_classifier = None
-    best_val_accuracy = -1.0
-
     for label, ngrams in [("Unigram logistic regression", (1, 1)), ("Unigram+bigram logistic regression", (1, 2))]:
         vectorizer = CountVectorizer(ngram_range=ngrams)
         x_train_features = vectorizer.fit_transform(x_train)
-        x_val_features = vectorizer.transform(x_val)
+        x_test_features = vectorizer.transform(x_test)
 
         classifier = LogisticRegression(max_iter=5000)
         classifier.fit(x_train_features, y_train)
-        accuracy = accuracy_score(y_val, classifier.predict(x_val_features))
+        accuracy = accuracy_score(y_test, classifier.predict(x_test_features))
         print(f"{label}")
-        print(f"  validation_accuracy={accuracy:.3f}")
+        print(f"  test_accuracy={accuracy:.3f}")
         print()
-        if accuracy > best_val_accuracy:
-            best_val_accuracy = accuracy
-            best_label = label
-            best_vectorizer = vectorizer
-            best_classifier = classifier
-
-    x_test_features = best_vectorizer.transform(x_test)
-    selected_test_accuracy = accuracy_score(y_test, best_classifier.predict(x_test_features))
-    print(f"Selected n-gram baseline: {best_label}")
-    print(f"  test_accuracy_after_validation_selection={selected_test_accuracy:.3f}")
-    print()
 
     vocabulary = {
         token: index + 1 for index, token in enumerate(sorted(set(" ".join(texts).split())))

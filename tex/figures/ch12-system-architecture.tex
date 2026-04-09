@@ -1,66 +1,76 @@
 \begin{tikzpicture}[
   font=\footnotesize,
-  service/.style={draw, rounded corners, align=center, minimum width=2.7cm, minimum height=0.8cm, fill=blue!10},
-  store/.style={draw, cylinder, shape border rotate=90, align=center, minimum width=1.65cm, minimum height=0.7cm, fill=yellow!18},
-  ops/.style={draw, rounded corners, align=center, minimum width=2.35cm, minimum height=0.8cm, fill=red!12},
-  ext/.style={draw, align=center, minimum width=2.1cm, minimum height=0.7cm, fill=gray!15},
-  arrow/.style={-Latex, thick, black!65},
-  dataflow/.style={-Latex, thick, blue!65!black},
-  feedback/.style={-Latex, thick, dashed, red!70!black}
+  component/.style={draw, rectangle, rounded corners, align=center, minimum width=2.0cm, minimum height=0.8cm, fill=blue!10},
+  datastore/.style={draw, cylinder, shape border rotate=90, align=center, minimum width=1.5cm, minimum height=0.6cm, fill=yellow!15},
+  external/.style={draw, rectangle, align=center, minimum width=1.8cm, minimum height=0.6cm, fill=gray!15},
+  monitor/.style={draw, rectangle, rounded corners, align=center, minimum width=1.8cm, minimum height=0.6cm, fill=red!15},
+  arrow/.style={-Latex, thick},
+  dataflow/.style={-Latex, thick, blue},
+  feedback/.style={-Latex, dashed, red},
+  alertflow/.style={-Latex, thick, red}
 ]
 
-% Core service path
-\node[ext]     (user)     at (0,6.6) {User request};
-\node[service] (contract) at (0,5.2) {Input contract\\and validation};
-\node[service] (context)  at (0,3.8) {Build served context\\or retrieve evidence};
-\node[service] (model)    at (0,2.4) {Model score\\or answer draft};
-\node[service] (policy)   at (0,1.0) {Policy, threshold,\\and escalation rule};
-\node[ext]     (auto)     at (-2.8,-0.6) {Automated\\response};
-\node[ext]     (review)   at (2.8,-0.6) {Human review\\queue};
+% Input Layer
+\node[external] (user) at (0,8) {Student\\Message};
+\node[component] (validate) at (0,6.5) {Input Contract\\\& Validation};
 
-% Data stores
-\node[store]   (sources)  at (-4.4,3.8) {Approved\\sources};
-\node[store]   (rules)    at (4.4,1.0) {Policy\\rules};
-\node[store]   (logs)     at (4.4,3.0) {Event\\log};
+% Core Pipeline
+\node[component] (preprocess) at (0,5) {Preprocessing\\\& Feature Eng};
+\node[component] (model) at (0,3.5) {Model\\Inference};
+\node[component] (threshold) at (0,2) {Threshold\\\& Policy};
 
-% Operations lane
-\node[ops]     (monitor)  at (7.0,3.0) {Monitoring\\and alerts};
-\node[ext]     (owner)    at (7.0,1.0) {Owner and\\rollback};
+% Decision Layer
+\node[component] (decide) at (0,0.5) {Route Decision};
+\node[external] (autoresponse) at (-2.5,0.5) {Automated\\Response};
+\node[external] (humanreview) at (3,0.5) {Human\\Review Queue};
 
-% Improvement loop
-\node[service] (feedbackbox) at (-3.0,1.0) {Feedback, overrides,\\and outcomes};
-\node[service] (update)      at (-4.4,-0.6) {Model or policy\\update};
+% Data Stores
+\node[datastore] (knowledge) at (-4.5,3.5) {Knowledge\\Base};
+\node[datastore] (policies) at (4,2.5) {Policies \&\\Rules};
+\node[datastore] (logs) at (2,5) {Event\\Logs};
 
-% Main flow
-\draw[arrow] (user) -- (contract);
-\draw[arrow] (contract) -- (context);
-\draw[arrow] (context) -- (model);
-\draw[arrow] (model) -- (policy);
-\draw[arrow] (policy) -- (auto);
-\draw[arrow] (policy) -- (review);
+% Monitoring & Control
+\node[monitor] (monitor) at (6,6) {Monitoring\\\& Alerts};
+\node[monitor] (dashboard) at (6,4) {Performance\\Dashboard};
+\node[external] (owner) at (6,1) {System\\Owner};
 
-% Evidence and rule access
-\draw[dataflow] (sources) -- (context);
-\draw[dataflow] (rules) -- (policy);
+% Feedback & Control Loops
+\node[component] (feedback) at (-2.5,2) {Feedback\\Collection};
+\node[component] (retraining) at (-4.5,0.5) {Model\\Updates};
 
-% Logging and operations
-\draw[dataflow, rounded corners=4pt] (contract.east) -| (logs);
-\draw[dataflow, rounded corners=4pt] (model.east) -| (logs);
-\draw[dataflow, rounded corners=4pt] (policy.east) -| (logs);
+% Main forward flow
+\draw[arrow] (user) -- (validate);
+\draw[arrow] (validate) -- (preprocess);
+\draw[arrow] (preprocess) -- (model);
+\draw[arrow] (model) -- (threshold);
+\draw[arrow] (threshold) -- (decide);
+\draw[arrow] (decide) -- (autoresponse);
+\draw[arrow] (decide) -- node[above, font=\tiny] {Escalate} (humanreview);
+
+% Data access
+\draw[dataflow] (knowledge) -- (model);
+\draw[dataflow] (policies) -- (threshold);
+
+% Logging flows - right-angle routing keeps arrows east of pipeline boxes
+\draw[dataflow, rounded corners=5pt] (validate.east) -| (logs);
+\draw[dataflow, rounded corners=5pt] (model.east) -| (logs);
+
+% Monitoring flows
 \draw[dataflow] (logs) -- (monitor);
-\draw[arrow] (monitor) -- (owner);
+\draw[alertflow] (monitor) -- (dashboard);
+\draw[alertflow] (dashboard) -- (owner);
 
-% Feedback loops
-\draw[feedback] (review) -- (feedbackbox);
-\draw[feedback] (auto.west) to[out=180,in=20] (feedbackbox.north);
-\draw[feedback] (feedbackbox) -- (update);
-\draw[feedback] (owner.west) -- (policy.east);
-\draw[feedback] (owner.west) to[out=165,in=0] (contract.east);
+% Control feedback loops
+\draw[feedback] (owner.west) -- (threshold.east);
+\draw[feedback] (feedback) -- (retraining);
+\draw[feedback] (autoresponse) to[out=120,in=240] (feedback);
 
-% Lane labels
-\node[font=\tiny, gray!70] at (-4.9,6.0) {\textbf{inputs}};
-\node[font=\tiny, blue!65!black] at (0.8,6.0) {\textbf{service path}};
-\node[font=\tiny, red!70!black] at (7.1,4.1) {\textbf{operations}};
-\node[font=\tiny, black!65] at (-3.9,1.9) {\textbf{improvement loop}};
+% Rollback capability
+\draw[feedback, very thick] (owner) to[out=150,in=60] (decide);
+
+% Labels for system boundaries
+\node[font=\tiny, gray] at (-5.5,7) {\textbf{External}};
+\node[font=\tiny, blue] at (1,7.4) {\textbf{Core Pipeline}};
+\node[font=\tiny, red] at (7,7) {\textbf{Operations}};
 
 \end{tikzpicture}

@@ -18,13 +18,7 @@ What it shows:
 - ordinary least squares on a small synthetic housing-style dataset
 - ridge-style regularization in a NumPy implementation
 - logistic regression trained with gradient descent on a small student-support dataset
-- directly interpretable coefficients for linear regression and standardized coefficient comparisons for logistic regression
-
-Install shared dependencies first:
-
-```bash
-python3 -m pip install -r companion/requirements.txt
-```
+- interpretable coefficients for both tasks
 
 Run it with:
 
@@ -41,12 +35,6 @@ What it shows:
 - `scikit-learn` versions of the same two model families
 - train/test evaluation
 - coefficient inspection after feature scaling for logistic regression
-
-Install shared dependencies first:
-
-```bash
-python3 -m pip install -r companion/requirements.txt
-```
 
 Run it with:
 
