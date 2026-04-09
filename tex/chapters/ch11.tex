@@ -142,6 +142,10 @@ Imagine two groups of support messages. In Group A, messages scored at confidenc
 If a model's confidence is used to decide escalation, triage, or human review, calibration becomes part of the system contract rather than a cosmetic diagnostic.
 \end{practicalnote}
 
+\begin{practicalnote}
+Statistical fairness metrics such as demographic parity and equalized odds measure \emph{observed} disparities in model outputs. They do not answer the causal question: would the outcome change if the protected attribute were different, all else being equal? When fairness requires causal evidence---for example, demonstrating that a hiring model does not penalize candidates \emph{because of} their gender---the tools of Chapter~10's causal-inference section become essential. The distinction matters because a model can satisfy a statistical fairness criterion while still encoding a causal pathway through a proxy variable.
+\end{practicalnote}
+
 \section{Robustness Under Change}
 
 \begin{definition}[Robustness]
@@ -216,6 +220,8 @@ The chapter's broader lesson is that robustness tests should be justified by a d
 
 \begin{advancednote}
 The distribution shifts discussed above arise naturally (sensor change, population drift). A distinct concern is \emph{adversarial robustness}: small, deliberately crafted perturbations---often imperceptible to humans---that cause confident misclassification. Adversarial attacks exploit model geometry rather than data drift, and defenses (adversarial training, certified bounds) are an active research area. This book focuses on natural shift, but adversarial robustness matters whenever the deployment environment includes motivated adversaries.
+
+Natural distribution shift occurs when the deployment environment differs from training---for example, testing a daytime detector at dusk. Adversarial perturbations are different: they are deliberate, often imperceptible modifications designed to cause misclassification. A model that generalizes well under natural shift may still be vulnerable to adversarial attack. Defending against both requires different strategies: domain adaptation and data collection for natural shift; certified defenses, adversarial training, or input preprocessing for adversarial perturbations.
 \end{advancednote}
 
 \section{Privacy as a Modeling Constraint}
@@ -238,7 +244,7 @@ A \emph{threat model} is a structured statement of what sensitive asset is being
 \item \textbf{the consequence}: embarrassment, discrimination, financial loss, legal exposure, or physical risk.
 \end{itemize}
 
-For the support-assistant case, one threat model might say: sensitive student records and messages are the asset; internal debugging access and long-lived prompt logs are the path; unauthorized staff or compromised tooling are the observer; and the consequence is exposure of disability, immigration, or health information. For the pedestrian-detector case, the asset may be identifiable faces or movement patterns; the path may be retained video and annotation tooling; and the consequence may be long-term surveillance or unconsented secondary use.
+For the support-assistant case, one threat model might say: sensitive student records and messages are the asset; internal debugging access and long-lived prompt logs are the path; unauthorized staff or compromised tooling are the observer; and the consequence is exposure of disability, immigration, or health information. For the pedestrian-detector case, the asset may be identifiable faces or movement patterns; the path may be retained video and annotation tooling; and the consequence may be long-term surveillance or unconsented secondary use. Dashboard cameras continuously record public spaces, creating re-identification risk: a pedestrian's face, gait, or clothing pattern may be linkable across frames or cameras, enabling tracking even without deliberate identification. Mitigations include processing frames on-device and discarding raw imagery after bounding-box extraction, retaining only detection metadata. When raw frames must be stored for debugging or retraining, faces and license plates should be blurred or replaced with synthetic identifiers before human review.
 
 \begin{decisionbox}
 Before choosing a privacy method, write one sentence of the form: ``We are trying to stop \emph{this observer} from learning \emph{this sensitive fact} through \emph{this data path}.'' If that sentence is vague, the privacy design is probably vague too.

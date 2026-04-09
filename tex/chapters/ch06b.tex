@@ -325,6 +325,10 @@ Maintain a posterior distribution over $Q(s, a)$ (e.g., a Bayesian model). At ea
 
 Both UCB and Thompson sampling embody the same intuition: \emph{optimism in the face of uncertainty}. Actions we know little about receive the benefit of the doubt, because they might turn out to be better than anything we have tried. As evidence accumulates, the exploration bonus fades and the agent converges on exploitation. This is a more sample-efficient strategy than epsilon-greedy, but it requires maintaining uncertainty estimates, which adds computational cost.
 
+\begin{practicalnote}[Exploration in continuous action spaces]
+All exploration strategies discussed above (epsilon-greedy, UCB, Thompson sampling) assume the action space is discrete: the agent chooses one of a small set of options. For continuous action spaces---such as steering angles in a self-driving car, joint angles in a robot arm, or dosing levels in medical treatment---discrete exploration does not apply directly. Common alternatives include adding Gaussian noise to the policy's output (as in DDPG: deterministic policy gradient plus action noise) or learning a stochastic policy that naturally explores by sampling from a learned distribution (as in SAC: Soft Actor-Critic). The key principle remains: the agent must sometimes take actions that deviate from its current best estimate, in order to discover whether better strategies exist.
+\end{practicalnote}
+
 \begin{decisionbox}
 \textbf{When is exploration safe vs.\ dangerous?}
 \begin{itemize}
@@ -389,6 +393,8 @@ The solution is a feedback loop: deploy RL systems carefully, monitor what they 
 
 \begin{warningbox}
 \textbf{Do not ignore partial observability.} Often, the agent observes only part of the state. A student query might not reveal the student's true underlying problem; a pedestrian's position might not reveal their intent. If the reward depends on the hidden part of the state, the agent cannot learn a good policy. Invest in better sensors, better state representation, or simplify the problem.
+
+Practical workarounds include \emph{frame stacking}---feeding the agent several recent observations rather than just one---and \emph{recurrent policies} that maintain a learned latent state summarising observation history. Both approaches give the agent implicit memory without requiring the full Partially Observable Markov Decision Process (POMDP) formalism.
 \end{warningbox}
 
 \section{RLHF: Aligning Language Models with Human Preferences}
@@ -446,6 +452,12 @@ The language model can find edge cases where the reward model gives high scores 
 
 Mitigation: regularize the reward model to avoid overconfidence; use ensemble reward models; include human feedback loops to identify and correct misalignment.
 \end{failurepattern}
+
+\begin{example}[Reward model gaming in RLHF]
+Consider a language model fine-tuned with RLHF to produce helpful responses. During annotation, annotators may have consistently preferred longer, more verbose responses, because thoroughness correlated with helpfulness in the training data. The reward model learns this statistical pattern: longer responses $\rightarrow$ higher predicted preference score. When optimized with RL, the language model discovers it can exploit this pattern by generating unnecessarily lengthy responses that say less per word, even when a short direct answer would be more useful. For instance, a user asks ``What is the capital of France?'' The model generates: ``France is a country located in Western Europe with a rich history spanning many centuries. Throughout its history, France has had various important cities. One such city is Paris, which has served as the center of French cultural and political life for many centuries. Paris is indeed the capital of France.''
+
+Detecting such gaming requires evaluating on out-of-distribution prompts where verbose responses are clearly suboptimal, checking whether the reward model's scores still correlate with actual human satisfaction in a fresh evaluation sample, and monitoring the model's output statistics (e.g., average response length) during deployment.
+\end{example}
 
 \begin{practicalnote}
 RLHF is computationally expensive (multiple forward/backward passes through both the language model and reward model, for many rollouts). In practice, practitioners often limit the amount of RL finetuning to a few thousand optimization steps, keeping compute manageable.
@@ -602,6 +614,15 @@ The broader point is that representation learning and RL are complementary but s
 \item \textbf{Reward audit.} Design a reward signal for a tutoring system that helps students learn. What is the true objective? What could the agent game? How would you monitor for misalignment?
 
 \item \textbf{Partial observability.} A student queries the course-support assistant, but the assistant does not know the student's previous interactions. How might this hurt the learned policy? How could you improve the state representation?
+
+\item \textbf{Q-learning on a grid.}
+Implement tabular Q-learning for a $4 \times 4$ grid world where the agent starts in one corner and must reach a goal in the opposite corner. Walls block two cells of your choice.
+\begin{enumerate}[label=(\alph*)]
+\item Initialise $Q(s,a) = 0$ for all state--action pairs. Use $\varepsilon$-greedy exploration with $\varepsilon = 0.1$, learning rate $\alpha = 0.1$, and discount $\gamma = 0.99$.
+\item Run 500 episodes. Plot the total reward per episode.
+\item Reduce $\varepsilon$ to $0.01$ after episode 300. Does convergence improve?
+\item Extract the greedy policy from your final Q-table and verify it reaches the goal.
+\end{enumerate}
 \end{exercises}
 
 \begin{challengeexercises}

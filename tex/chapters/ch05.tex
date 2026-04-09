@@ -480,7 +480,7 @@ The second prediction is not only correct but confidently correct, so it receive
 
 \subsection{Multiclass Outputs}
 
-Later chapters will repeatedly use multiclass classification, so it is worth seeing the standard pattern now. A multiclass output layer usually produces one raw score per class, called a \emph{logit}, before those scores are normalized into probabilities. Softmax converts those logits into probabilities:
+Later chapters will repeatedly use multiclass classification, so it is worth seeing the standard pattern now. A multiclass output layer usually produces one raw score per class, called a \emph{logit}, before those scores are normalized into probabilities. In this book, \emph{logit} refers to the raw output of a linear layer before any activation is applied. We sometimes use \emph{score} informally when the distinction does not matter. Softmax converts those logits into probabilities:
 \[
 \mathrm{softmax}(s)_k = \frac{e^{s_k}}{\sum_j e^{s_j}}.
 \]
@@ -647,6 +647,10 @@ for epoch in range(num_epochs):
 \subsection{Learning Rate}
 
 The learning rate controls step size. If it is too small, training can become painfully slow. If it is too large, optimization can overshoot good regions and become unstable. This is one reason neural training is partly a modeling problem and partly an optimization problem. The architecture may be sound while the training procedure is poor.
+
+\begin{practicalnote}
+In practice, the learning rate is rarely held constant. Common schedules include \emph{step decay} (halving the rate every $k$ epochs), \emph{cosine annealing} (smoothly decreasing to near zero), and \emph{warmup} (starting small and ramping up before decaying). The right schedule depends on the problem; the key insight is that the best rate for early training is often too large for fine-tuning near a minimum.
+\end{practicalnote}
 
 \begin{figure}[t]
 \centering
@@ -922,7 +926,7 @@ Backpropagation is the efficient procedure for computing how the loss changes wi
 Conceptually, backpropagation solves one clear problem: when the network makes an error, which earlier computations deserve credit or blame, and by how much?
 
 \begin{practicalnote}
-Backpropagation is efficient because it requires only one forward pass and one backward pass to compute the gradient with respect to every parameter in the network. The alternative---numerical differentiation---would require a separate forward pass for each parameter, making it orders of magnitude slower for models with millions of weights.
+Backpropagation is efficient because it requires only one forward pass and one backward pass to compute gradients for \emph{every} parameter simultaneously. The naive alternative---perturbing each parameter individually and measuring the change in loss---would require one forward pass per parameter, making it impractical for networks with millions of weights.
 \end{practicalnote}
 
 \begin{figure}[t]
@@ -1408,7 +1412,22 @@ This chapter explained neural networks as learned feature pipelines whose flexib
 \end{studyquestions}
 
 \begin{exercises}
+\item \textbf{Learning rate by hand.}
+Consider a one-dimensional loss $L(w) = (w - 3)^2$ with initial weight $w_0 = 0$.
+\begin{enumerate}[label=(\alph*)]
+\item Compute the gradient $\frac{dL}{dw}$ at $w_0$.
+\item Perform three gradient-descent updates with learning rate $\eta = 0.1$. Record $w$ and $L(w)$ after each step.
+\item Repeat with $\eta = 1.5$. What happens?
+\item What learning rate would reach $w = 3$ in exactly one step?
+\end{enumerate}
 \item Given a learning curve where training loss decreases steadily but validation loss begins increasing after epoch 10, identify the failure type and propose two interventions.
+\item \textbf{Reading a learning curve.}
+A colleague shows you a plot where training loss decreases steadily, but validation loss stops improving at epoch~10 and then rises.
+\begin{enumerate}[label=(\alph*)]
+\item Name the failure pattern.
+\item Propose two interventions, one that changes the model and one that changes the data.
+\item If \emph{both} training and validation loss remain high and flat, what different failure does that suggest?
+\end{enumerate}
 \item Compute the forward pass of a one-hidden-layer network with input $x=[1,2]$, hidden unit $h=\mathrm{ReLU}(2x_1-x_2-1)$, and output score $s=1.5h-0.5$. Give the final score and the sigmoid probability.
 \item Evaluate sigmoid, $\tanh$, and ReLU at $z=-2$, $z=0$, and $z=2$. What qualitative differences do you observe?
 \item Suppose the true label is $1$ and two models predict probabilities $0.55$ and $0.95$. Compute the binary cross-entropy loss for both and explain why the difference matters even though both predictions are correct at a $0.5$ threshold.
