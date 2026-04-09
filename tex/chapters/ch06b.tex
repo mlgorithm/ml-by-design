@@ -5,6 +5,10 @@
 \chapter{Learning from Interaction: Reinforcement Learning}
 \label{ch:reinforcementlearning}
 
+The previous chapters built systems that learn from labeled examples (supervised learning) or from the structure of the data itself (representation learning). In both cases, the model receives a static dataset and fits a function to it. But many real problems require something more: the system must \emph{act}, observe the consequences of that action, and then decide what to do next. A course-support assistant does not merely predict what a good reply looks like---it sends a reply, and the student's subsequent behavior reveals whether the reply actually helped. A campus shuttle does not merely classify a pedestrian as present or absent---it must decide when to brake, and the outcome depends on what happens over the following seconds.
+
+Reinforcement learning (RL) formalizes this kind of problem. The agent interacts with an environment, receives feedback in the form of rewards, and improves its behavior over time. This chapter introduces the core framework---Markov Decision Processes, value functions, and policy optimization---and then turns to the problem that makes RL hardest in practice: specifying a reward signal that actually captures what we care about. It ends with RLHF, a modern technique that connects RL to the foundation-model workflows introduced in the previous chapter, and with an artifact---the Interaction Design Card---that forces practitioners to document the assumptions baked into any RL system before deployment.
+
 \begin{learninggoals}
 \item Understand when prediction alone is insufficient and why agents must learn from interaction.
 \item Formalize the reinforcement learning problem using states, actions, rewards, and the Markov Decision Process framework.
@@ -38,11 +42,32 @@ Both systems share a structure absent from pure prediction:
 \item The agent must improve its policy (decision rule) based on that feedback, often without being told the ``correct'' action.
 \end{itemize}
 
-This is reinforcement learning (RL): \emph{learning to act by interacting with an environment and observing the consequences}.
+This is reinforcement learning (RL): \emph{learning to act by interacting with an environment and observing the consequences} \citep{sutton1998}.
 
 Unlike supervised learning, there is no large labeled dataset of ``correct actions.'' The agent learns through trial and error, guided by rewards or penalties that arrive after decisions are made. This creates new challenges: \emph{credit assignment} (which actions caused which outcomes?), \emph{exploration} (trying new actions to discover better strategies), and \emph{alignment} (ensuring the reward signal captures what we truly care about).
 
 In this chapter, we formalize the RL problem, introduce key concepts and algorithms, and confront the hardest problem in RL: getting the reward signal right.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  node distance=3.5cm,
+  box/.style={rectangle, draw, rounded corners=4pt, minimum width=2.4cm, minimum height=1cm, font=\small\bfseries, align=center},
+  arr/.style={-Latex, thick},
+  lbl/.style={font=\footnotesize, midway, fill=white, inner sep=2pt}
+]
+\node[box] (agent) {Agent};
+\node[box, right of=agent] (env) {Environment};
+
+\draw[arr] ([yshift=6pt]agent.east) -- node[lbl, above] {action $a_t$} ([yshift=6pt]env.west);
+\draw[arr] ([yshift=-6pt]env.west) -- node[lbl, below] {state $s_{t+1}$, reward $r_t$} ([yshift=-6pt]agent.east);
+
+\node[below=0.6cm of agent, font=\footnotesize, text width=2.8cm, align=center] {policy $\pi(a|s)$\\value estimates};
+\node[below=0.6cm of env, font=\footnotesize, text width=2.8cm, align=center] {transition $P(s'|s,a)$\\reward $R(s,a)$};
+\end{tikzpicture}
+\caption{The agent--environment loop. At each step the agent observes a state, selects an action according to its policy, and receives a reward and a new state from the environment. The agent's goal is to learn a policy that maximizes cumulative reward.}
+\label{fig:rl-loop}
+\end{figure}
 
 \section{The Reinforcement Learning Problem}
 
@@ -86,7 +111,7 @@ Passive: fit a function to data & Active: learn by interacting \\
 
 In supervised learning, we assume we have access to a large dataset of correct input-output pairs. The learning problem is \emph{passive}: fit a function that minimizes prediction error on unseen examples.
 
-In RL, the agent must \emph{actively explore} to discover which actions are good. This comes with trade-offs. Exploration can be expensive (a wrong action might cause harm or waste resources), and feedback is delayed (we might not know for weeks whether the student's issue was truly resolved).
+In RL, the agent must \emph{actively explore} to discover which actions are good. This comes with trade-offs that have no analogue in supervised learning. Exploration can be expensive---a wrong action might cause harm or waste resources. Feedback is delayed---we might not know for weeks whether the student's issue was truly resolved. And the data distribution is not fixed: the agent's own policy determines which states it visits, so a change in behavior changes the training data. These three properties---costly exploration, delayed reward, and non-stationary data---are what make RL fundamentally harder than fitting a function to a static dataset.
 
 \begin{example}[Course-support assistant, MDP framing]
 Let the state space be the student's query and past interactions: $s \in \mathcal{S}$ = \{encoded query, student profile\}. The action space is a discrete set of templated responses: $a \in \mathcal{A}$ = \{response 1, response 2, $\ldots$\}.
@@ -165,14 +190,14 @@ The quantity $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ is called the \emph{T
 TD learning is elegant because it updates $V$ at every step, based on immediate feedback, rather than waiting for an episode to finish. It propagates credit backward: if state $s_t$ led to a surprisingly good outcome in $s_{t+1}$, we learn that $s_t$ is valuable.
 
 \begin{example}[Shuttle braking, credit assignment]
-The shuttle observes a pedestrian at distance $d = 50$ meters, traveling forward at speed $v = 10$ m/s. It estimates the state's value: $V(d, v) = 0.95$ (safe---unlikely to crash). The driver must decide: brake or continue?
+Define the reward as $r = +1$ for each time step the shuttle remains safe (no collision) and $r = -100$ for a collision. Under this reward, the value $V(s)$ is the expected cumulative discounted reward from state $s$---roughly, how much safe-operation time the agent expects from here onward.
 
-Suppose the shuttle continues, and after 1 second, $d = 40$ meters. The new reward is $r = 0$ (no crash), and the value of the new state is $V(40, 10) = 0.90$ (slightly less safe). The TD error is:
+The shuttle observes a pedestrian at distance $d = 50$\,m, traveling forward at speed $v = 10$\,m/s. Current estimate: $V(50, 10) = 95$ (many safe steps expected). The shuttle continues without braking. After one second, $d = 40$\,m. The step reward is $r = 1$ (no crash this step), and the new estimate is $V(40, 10) = 90$ (fewer safe steps expected, because the pedestrian is closer). The TD error is:
 \[
-\delta = 0 + 0.99 \times 0.90 - 0.95 = -0.01.
+\delta = 1 + 0.99 \times 90 - 95 = 1 + 89.1 - 95 = -4.9.
 \]
 
-Negative error: the state was worse than expected. The action of continuing (not braking) led to slightly worse safety. This small signal propagates backward, reducing the value of the original state and discouraging the ``continue'' action in similar situations.
+Negative error: the outcome was worse than expected. The action of continuing (not braking) led to a state with lower expected return. This signal propagates backward, reducing the estimated value of the original state and making the agent less likely to choose ``continue'' in similar future situations.
 \end{example}
 
 \section{From Values to Policies}
@@ -191,18 +216,18 @@ Given estimates $\hat{Q}(s, a)$, the \emph{greedy policy} is:
 i.e., always choose the action with the highest estimated value.
 \end{definition}
 
-\begin{thinkingtool}[Q-Learning sketch]
-\emph{Q-learning} is an off-policy algorithm that learns $Q(s, a)$ by:
+\begin{advancednote}
+\textbf{Q-Learning.} The most widely known value-based algorithm is \emph{Q-learning} \citep{watkins1992}. It is an off-policy algorithm: the agent may explore (taking random actions), but it learns the value of the \emph{greedy policy} (the policy that always picks the best action). The update rule is:
 \begin{enumerate}
-\item Take an action $a$ (possibly exploring), observe $r$ and $s'$.
+\item Take an action $a$ (possibly exploring), observe reward $r$ and next state $s'$.
 \item Compute the TD target: $y = r + \gamma \max_{a'} \hat{Q}(s', a')$.
 \item Update: $\hat{Q}(s, a) \leftarrow \hat{Q}(s, a) + \alpha (y - \hat{Q}(s, a))$.
 \end{enumerate}
 
-The algorithm is ``off-policy'' because the agent might explore (taking random actions), but it learns the value of the \emph{greedy policy} (the policy that always picks the best action). This is powerful: a single episode of exploration can teach the agent the optimal policy.
+The key idea is the $\max$ in step 2: regardless of which action the agent actually took for exploration, the target uses the value of the \emph{best} next action. This separates the behavior policy (which explores) from the target policy (which is greedy), allowing the agent to learn an optimal policy even while exploring suboptimal actions.
 
-For large state spaces (e.g., raw images), we use a neural network to approximate $Q$: $\hat{Q}(s, a) = f_\theta(s, a)$. Training a neural network Q-function is called \emph{Deep Q-Learning}.
-\end{thinkingtool}
+For large state spaces (e.g., raw images), $Q$ cannot be stored in a table. Instead, we approximate it with a neural network: $\hat{Q}(s, a) = f_\theta(s, a)$. \citet{mnih2015} demonstrated that this approach---\emph{Deep Q-Networks} (DQN)---could learn to play Atari games directly from pixels, a landmark result that revived interest in deep RL. The key stabilization tricks were experience replay (storing past transitions and sampling from them uniformly) and a target network (a slowly updated copy of $Q$ used to compute targets, preventing the moving-target problem).
+\end{advancednote}
 
 \subsection{Policy-Based Methods}
 
@@ -214,12 +239,12 @@ Instead of learning $Q$, we can directly learn a policy $\pi_\theta(a | s)$ by o
 J(\theta) = \mathbb{E}_{s \sim \rho, a \sim \pi_\theta(\cdot|s)} \left[\sum_t \gamma^t r_t\right].
 \]
 
-The policy gradient theorem shows that:
+The policy gradient theorem \citep{sutton2000policy} shows that:
 \[
 \nabla_\theta J(\theta) = \mathbb{E}\left[\nabla_\theta \log \pi_\theta(a | s) \cdot Q^\pi(s, a)\right].
 \]
 
-In words: increase the log-probability of actions with high Q-values, decrease the log-probability of actions with low Q-values. This naturally encourages exploration early (when $Q$ estimates are uncertain) and exploitation later (when we are confident).
+In words: increase the log-probability of actions that led to high returns; decrease the log-probability of actions that led to low returns. Note that this gradient does not inherently encourage exploration---it simply reinforces what worked and penalizes what did not. Exploration must be added separately (e.g., by entropy regularization or by maintaining a stochastic policy). Without explicit encouragement to explore, policy gradient methods can converge prematurely to a narrow set of actions.
 \end{mathlens}
 
 \begin{example}[Course-support assistant, policy gradient]
@@ -241,7 +266,9 @@ Value-based and policy-based methods have complementary strengths. Actor-critic 
 \item The \emph{critic} is the value function $V_\phi$ (how good is this state).
 \end{itemize}
 
-The critic provides a low-variance estimate of $Q(s, a)$; the actor uses the critic's signal to improve. This is more stable than learning $Q$ directly (which can overestimate with function approximation) and more stable than pure policy gradient (which has high variance).
+The training loop works as follows: the actor takes an action, the environment returns a reward and next state, the critic evaluates how much better or worse the outcome was compared to its prediction (the TD error from Section~3), and the actor adjusts its policy to favor actions that the critic rated positively. Over time, the critic's estimates improve (because it sees more data), and the actor's policy improves (because the critic's signal becomes more accurate).
+
+This combination is more stable than either component alone. Pure value-based methods like Q-learning can overestimate action values when combined with function approximation, because the $\max$ operator amplifies approximation errors. Pure policy gradient methods have high variance, because each gradient estimate depends on the noisy return of a single episode. The critic reduces that variance by providing a learned baseline, while the actor avoids the instability of the $\max$ by directly parameterizing the policy.
 
 \begin{decisionbox}
 \textbf{Choosing between value-based, policy-based, and actor-critic:}
@@ -280,6 +307,8 @@ The simplest exploration strategy: with probability $\epsilon$, take a random ac
 Epsilon-greedy is easy to implement and often effective for problems with small action spaces. For problems where random actions are dangerous (e.g., autonomous driving), use exploration strategies that generate actions closer to the current policy.
 \end{practicalnote}
 
+Epsilon-greedy has a clear limitation: when the agent explores, it chooses a random action with no regard for how informative that action might be. A more principled approach is to explore actions that are \emph{uncertain}---actions we have tried fewer times and therefore know less about.
+
 \begin{definition}[Upper Confidence Bound (UCB)]
 Instead of $\arg\max_a \hat{Q}(s, a)$, choose:
 \[
@@ -291,13 +320,15 @@ UCB is principled: it balances known good actions with actions that could plausi
 \end{definition}
 
 \begin{definition}[Thompson Sampling]
-Maintain a posterior distribution over $Q(s, a)$ (e.g., a Bayesian model). At each step, sample from the posterior and act greedily according to the sample. This naturally explores actions that could plausibly be optimal given the uncertainty.
+Maintain a posterior distribution over $Q(s, a)$ (e.g., a Bayesian model). At each step, sample from the posterior and act greedily according to the sample. This naturally explores actions that could plausibly be optimal given current uncertainty, and automatically reduces exploration as uncertainty shrinks.
 \end{definition}
+
+Both UCB and Thompson sampling embody the same intuition: \emph{optimism in the face of uncertainty}. Actions we know little about receive the benefit of the doubt, because they might turn out to be better than anything we have tried. As evidence accumulates, the exploration bonus fades and the agent converges on exploitation. This is a more sample-efficient strategy than epsilon-greedy, but it requires maintaining uncertainty estimates, which adds computational cost.
 
 \begin{decisionbox}
 \textbf{When is exploration safe vs.\ dangerous?}
 \begin{itemize}
-\item \textbf{Safe exploration:} Supervised learning (no feedback loop), offline RL (learning from logs), simulation. Use more aggressive exploration (larger $\epsilon$).
+\item \textbf{Safe exploration:} Simulation, offline RL (learning from historical logs without live interaction), or low-stakes domains where bad actions are merely wasteful, not dangerous. Use more aggressive exploration (larger $\epsilon$).
 \item \textbf{Dangerous exploration:} Real-time control systems (shuttle), medical treatment decisions. Use conservative strategies: small $\epsilon$, prior knowledge, or always maintain a safe fallback.
 \item \textbf{Mixed:} Many real systems. Quantify the cost of bad exploration; use that to set exploration bounds.
 \end{itemize}
@@ -364,7 +395,7 @@ The solution is a feedback loop: deploy RL systems carefully, monitor what they 
 
 Large language models (Chapter 6) are trained on next-token prediction, which does not directly optimize for user satisfaction. A model can be fluent but unhelpful, biased, or unsafe.
 
-Reinforcement Learning from Human Feedback (RLHF) is a modern technique that finetunes a language model to maximize human preferences, using RL to align the model's outputs with human values.
+Reinforcement Learning from Human Feedback (RLHF) is a modern technique that finetunes a language model to maximize human preferences, using RL to align the model's outputs with human values \citep{christiano2017,ouyang2022}.
 
 \subsection{The RLHF Pipeline}
 
@@ -376,7 +407,7 @@ Reinforcement Learning from Human Feedback (RLHF) is a modern technique that fin
 
 \item \textbf{Train a reward model.} Learn a function $r_\theta(s, a)$ that predicts which of two outputs a human would prefer. This is supervised learning: $s$ is a prompt, $a$ is the model's response, and the label is the human's preference.
 
-\item \textbf{Optimize the policy with PPO.} Use the learned reward model as the RL objective. Run an RL algorithm (e.g., Proximal Policy Optimization, PPO) to finetune the language model to maximize the reward model's predictions.
+\item \textbf{Optimize the policy with PPO.} Use the learned reward model as the RL objective. Run an RL algorithm such as Proximal Policy Optimization \citep[PPO;][]{schulman2017} to finetune the language model to maximize the reward model's predictions.
 
 \end{enumerate}
 
@@ -499,8 +530,8 @@ This card forces you to articulate: What are we learning from interaction? Why? 
 
 \section{Common Mistakes}
 
-\begin{failurepattern}[Reward hacking / specification gaming]
-You optimize the reward and the metric goes up, but the actual objective is missed. Cause: the reward does not capture the true goal. Mitigation: audit the reward signal; monitor proxy metrics; iterate.
+\begin{failurepattern}[Skipping the baseline policy]
+Jumping straight to RL without first testing a simple heuristic or rule-based policy. A hard-coded ``always brake when distance $< 10$ meters'' might already solve 90\% of shuttle scenarios. Without that baseline, you cannot tell whether the RL agent's complexity is justified or whether it is merely rediscovering simple rules at great computational cost. Mitigation: always deploy and measure a non-learned baseline before investing in RL training.
 \end{failurepattern}
 
 \begin{failurepattern}[Ignoring partial observability]
@@ -525,19 +556,19 @@ The environment changes over time (e.g., student preferences shift, pedestrian b
 
 \section{Looking Ahead: From RL to Modalities}
 
-This chapter has focused on RL as an abstract problem: an agent learning from interaction in an environment. But real agents must perceive their environment and act in rich, high-dimensional worlds.
+This chapter treated RL as an abstract problem: states, actions, rewards, and policies without specifying what the agent perceives or how it acts in a particular domain. Part III makes that concrete by focusing on \emph{modalities}---vision, language, and structured sequences---where the representation questions from Chapter~6 meet the decision-making questions from this chapter.
 
-Part III (Chapters 7--9) shifts focus to \emph{modalities}: vision (images), language (text), and sequences (time series). In each case, representation learning (Chapter 6) is essential, but so is interaction.
+The connections are not uniform. Some modalities intersect deeply with RL; others touch it only lightly.
 
 \begin{itemize}
-\item \textbf{Vision + interaction (Chapter 7):} The shuttle's camera captures images; the pedestrian detector (CNN, Chapter 5) processes them. But the shuttle's braking decision is itself an action that changes what the camera sees next. How do we learn policies that perceive and act in visual environments?
+\item \textbf{Vision (Chapter 7):} The pedestrian detector produces a perception signal; the braking decision that follows is an RL action. More broadly, deep RL systems that act in visual environments (robotics, autonomous driving, game-playing) require learned visual representations as input to the policy. Chapter~7 focuses on the representation side---convolutional architectures, data augmentation, transfer---but the shuttle running case will remind us that perception feeds into action.
 
-\item \textbf{Language + interaction (Chapter 8):} Language models (Chapter 6) are trained on next-token prediction. But in the real world, an agent (assistant, chatbot, etc.) takes language actions (generates responses) and observes the consequences (user satisfaction, new queries). Chapter 8 revisits language in this interactive context.
+\item \textbf{Language (Chapter 8):} This is where RL ideas recur most directly. RLHF, covered in this chapter, is now a standard step in training conversational models. Chapter~8 covers the language-modeling foundations (tokenization, attention, generation) that RLHF builds on, and revisits alignment as a design question: what objective should a language system optimize, and who decides?
 
-\item \textbf{Sequences + interaction (Chapter 9):} Many real-world problems involve time series: financial markets, biological signals, weather. Agents must act in sequential environments and learn from the consequences of those actions.
+\item \textbf{Sequences and structured data (Chapter 9):} Time series and graph-structured problems are sequential, but most are addressed with supervised methods (forecasting, node classification) rather than RL. The RL connection is thinner here: it arises mainly when the system must \emph{intervene}---for example, deciding when to issue an alert based on a physiological time series---rather than merely predict.
 \end{itemize}
 
-Throughout Part III, we will see that representation learning (embeddings, attention, transformers) and RL (learning from interaction) are complementary. Good representations enable efficient RL; and RL provides the true learning signal that representation learning should optimize for.
+The broader point is that representation learning and RL are complementary but serve different roles. Good representations make RL feasible by compressing high-dimensional observations into useful state descriptions. RL, in turn, provides the learning signal that tells us whether those representations are useful \emph{for acting}, not just for predicting.
 
 \begin{chaptersummary}
 \item \textbf{Reinforcement learning} is learning to act by interacting with an environment and observing consequences. Unlike supervised learning, the agent must explore to discover good actions.
