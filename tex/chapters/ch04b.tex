@@ -1,0 +1,562 @@
+\chapter{Designing the Dataset}
+
+The previous chapters framed the learning problem, chose metrics, protected evaluation, and diagnosed structural gaps. But one critical question was deferred: how should the training data itself be designed? Data is not a given---it is a design choice. The same task can be addressed with different collections of examples, with different labeling schemes, with different class distributions, and with different quality standards for the labels themselves. Each choice changes both what the model can learn and how it will behave in the world.
+
+This chapter treats dataset construction as a modeling decision, not as a preprocessing step. Who labels the data? What counts as a valid label when annotators disagree? How should class imbalance be handled? When should a team invest more in collecting additional examples versus cleaning existing labels versus curating better examples? When labels are expensive, which examples should be labeled next? When is synthetic data helpful, and when is it misleading? The answers to all of these questions shape the learning problem itself.
+
+By the end of this chapter, the reader should be able to state what data-design choices their task requires, defend those choices on grounds of coverage and quality, and construct a data design card that documents the assumptions baked into the dataset.
+
+\begin{problemsolvinglens}
+Data design is not optional cleanup work done before the real modeling begins. It is part of the model. The examples labeled, the labels themselves, and their distribution are all deliberate design choices that constrain what the model can learn and where it will fail.
+\end{problemsolvinglens}
+
+\begin{thinkingtool}
+\textbf{Data as design.} When evaluating a model, always ask: what does the dataset tell the model is important? What important structure or distribution is absent from the training set? What gaps exist between the labeled data and the deployment population?
+\end{thinkingtool}
+
+\begin{learninggoals}
+\item Recognize that dataset construction is a modeling decision, not a preprocessing step
+\item Identify and mitigate common sources of label noise and annotator disagreement
+\item Choose strategies for class imbalance based on the task, not by default
+\item Decide when to invest in more data vs. better data vs. better labels
+\item Apply active learning intuition: label strategically when labeling is expensive
+\item Evaluate when synthetic data helps and when it misleads
+\item Document data design choices in a reusable format
+\end{learninggoals}
+
+\section{Data as a Design Decision}
+
+The dataset encodes assumptions about the world. What you include, exclude, label, and measure shapes the model as much as the architecture. A model trained only on examples from September to November will never see winter-specific behavior. A student-support system trained on cases labeled by one kind of advisor will learn a different definition of ``risk'' than one trained on cases labeled by advisors with different philosophies. A pedestrian detector trained only on sunny weather will fail at dusk.
+
+These are not minor problems to be fixed later through validation. They are fundamental limits on what the model can learn.
+
+\subsection{Two Running Cases}
+
+Keep two settings in view throughout this chapter. Both have seen previous mention; now they become frameworks for data-design decisions.
+
+\textbf{Case 1: Course-Support Assistant.} A university builds an early-warning system to flag students who may need additional support. The system needs labeled historical data. But which messages get labeled? Does every submission receive annotation, or only high-uncertainty submissions? Do labels come from a single trained expert advisor, or from multiple advisors with different standards? If two advisors disagree about whether a message indicates ``urgent need for support,'' is that disagreement noise or information? The answer shapes the dataset and the model.
+
+\textbf{Case 2: Pedestrian Detector.} A campus shuttle system uses computer vision to detect pedestrians on campus. The model needs labeled video frames. Which video frames should be included? Only clear daylight footage, or also dawn, dusk, and night? Should the training set include all weather conditions? Which camera angles? What about occlusions---should a partially visible pedestrian be labeled as present or absent? These choices determine what the model learns about pedestrian detection.
+
+In both cases, someone must decide what examples matter, how to label them, and what quality standard to enforce. These are dataset-design decisions, not merely cleanup tasks.
+
+\begin{figure}[t]
+\centering
+\definecolor{c4bdataInclude}{RGB}{210,238,220}
+\definecolor{c4bdataExclude}{RGB}{254,216,216}
+\definecolor{c4bdataLabel}{RGB}{220,233,251}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm, font=\small]
+%% Panel A: what examples to include
+\begin{scope}
+  \node[font=\small\bfseries, black!75] at (2.0, 4.0) {What to include};
+  \node[draw, fill=c4bdataInclude, rounded corners, align=center,
+        minimum height=0.7cm, minimum width=3.2cm]
+    at (2.0, 2.9) {All semesters or\\only recent?};
+  \node[draw, fill=c4bdataInclude, rounded corners, align=center,
+        minimum height=0.7cm, minimum width=3.2cm]
+    at (2.0, 1.9) {All weather or\\sunny only?};
+  \node[draw, fill=c4bdataInclude, rounded corners, align=center,
+        minimum height=0.7cm, minimum width=3.2cm]
+    at (2.0, 0.9) {All camera angles\\or frontal only?};
+\end{scope}
+%% Panel B: labeling choices
+\begin{scope}[xshift=6.5cm]
+  \node[font=\small\bfseries, black!75] at (2.0, 4.0) {How to label};
+  \node[draw, fill=c4bdataLabel, rounded corners, align=center,
+        minimum height=0.7cm, minimum width=3.2cm]
+    at (2.0, 2.9) {One expert or\\multiple raters?};
+  \node[draw, fill=c4bdataLabel, rounded corners, align=center,
+        minimum height=0.7cm, minimum width=3.2cm]
+    at (2.0, 1.9) {Majority vote or\\soft labels?};
+  \node[draw, fill=c4bdataLabel, rounded corners, align=center,
+        minimum height=0.7cm, minimum width=3.2cm]
+    at (2.0, 0.9) {Hard boundaries or\\continuous scores?};
+\end{scope}
+\end{tikzpicture}%
+}
+\caption{Data design has two main dimensions: what examples to collect and how to label them. Each choice affects what the model learns.}
+\label{fig:data-design-dimensions}
+\end{figure}
+
+\section{Annotation Protocols and Label Quality}
+
+Collecting labels is not as simple as hiring someone to point and click. The labeling process itself is a design decision.
+
+\subsection{Annotation Guidelines and Consistency}
+
+The first step is to write clear annotation guidelines. These guidelines specify:
+\begin{itemize}[leftmargin=*]
+\item What examples should be labeled and which should be skipped
+\item What each label means and what behavior or feature it identifies
+\item How to handle edge cases and borderline examples
+\item How to resolve ambiguity
+\end{itemize}
+
+For the course-support system, a guideline might say:
+
+\begin{codeexample}[caption={Sample annotation guideline for student messages}]
+Label URGENT if:
+- Student mentions missing deadline or financial hardship
+- Student indicates suicidal ideation or severe mental health crisis
+- Student reports discrimination or safety concern
+
+Label CONCERNING if:
+- Multiple late submissions in one week
+- Sudden drop in engagement or attendance
+- Student reports confusion about course mechanics
+
+Label ROUTINE otherwise
+\end{codeexample}
+
+Good guidelines reduce annotator variation and make the labeling task reproducible. But they cannot eliminate disagreement entirely.
+
+\subsection{Inter-Annotator Agreement and Soft Labels}
+
+When multiple annotators label the same example, they often disagree. This disagreement is usually treated as noise, but it is sometimes information. When two trained advisors disagree about whether a student message indicates ``urgent'' need, that disagreement reflects genuine ambiguity in the task, not one ``right answer'' that one rater found and another missed.
+
+\begin{definition}[Inter-Annotator Agreement]
+Inter-annotator agreement is the degree to which independent annotators assign the same labels to the same examples, typically measured by Cohen's kappa, Fleiss's kappa, or Krippendorff's alpha.
+\end{definition}
+
+Low agreement signals that either the guidelines are unclear, the task is inherently ambiguous, or the annotators need more training. Any of these is a problem worth investigating before treating disagreement as noise to be averaged away.
+
+Three common strategies exist:
+
+\textbf{Majority vote.} Give each example to multiple raters, and assign the label that most raters chose. This is simple and works well when agreement is high and annotators are reasonably reliable. It discards disagreement information and is brittle to systematic annotator bias.
+
+\textbf{Adjudication.} Give disagreed-upon examples to a senior expert who makes a final call. This handles edge cases well but introduces a single-expert bottleneck and does not capture the underlying ambiguity.
+
+\textbf{Soft labels.} Record the fraction of annotators who assigned each label. Instead of a single ``URGENT'' or ``ROUTINE'' label, record that 0.7 of raters chose URGENT and 0.3 chose ROUTINE. This preserves the disagreement and allows models to learn that some examples are genuinely uncertain.
+
+\begin{example}[Soft Labels for Student Messages]
+Two advisors each label ten student messages. For one message about a missed assignment, one advisor chooses CONCERNING and the other chooses ROUTINE. With majority vote, the model sees a hard label that is arbitrary. With soft labels, the model sees $[0.5, 0.5]$, correctly representing that this example is ambiguous. A model trained on soft labels will learn to output a moderate confidence for similar cases rather than being forced to pick a side.
+\end{example}
+
+\begin{practicalnote}
+If annotation guidelines are short and the task feels objective (like ``does this image contain a car?''), majority vote is often sufficient. If guidelines are long, the task is subjective or ambiguous (like ``is this message urgent?''), soft labels or adjudication preserve more information. Measure inter-annotator agreement before committing to one strategy.
+\end{practicalnote}
+
+\section{Label Noise and Its Effects}
+
+Labels are often imperfect. Noise can be random, or it can be systematic (e.g., one annotator systematically mislabels a particular class). The effect of label noise differs significantly across models.
+
+\subsection{Types of Label Noise}
+
+\begin{definition}[Symmetric Noise]
+Symmetric label noise flips each label to a random wrong label with equal probability. A positive example becomes negative with probability $p$, and vice versa, randomly.
+\end{definition}
+
+\begin{definition}[Asymmetric Noise]
+Asymmetric label noise has a preferred direction. For example, positive examples might be mislabeled as negative 10\% of the time, while negative examples are mislabeled as positive only 2\% of the time. This often reflects annotator bias or systematic confusion.
+\end{definition}
+
+\subsection{Noise Robustness Across Model Families}
+
+Different model families tolerate label noise differently.
+
+\textbf{Decision trees.} Trees are relatively robust to small amounts of random label noise because they partition the input space and make local decisions. Outliers and noise in one region do not necessarily affect splits in other regions. However, trees can still overfit to noise, especially at deep depths.
+
+\textbf{Linear models.} Linear models are sensitive to label noise because each training example contributes directly to the gradient and the final coefficients. Outliers and mislabeled examples are felt globally.
+
+\textbf{Neural networks.} Neural networks are quite sensitive to label noise early in training but can eventually memorize noisy labels given enough capacity. This memorization looks like overfitting: the model fits the noise perfectly on the training set but generalizes poorly.
+
+The key insight is that no model is immune to noise. The question is what kind of noise your model can afford, and whether cleaning labels or using noise-robust losses is the right response.
+
+\begin{warningbox}
+Systematic mislabeling is much worse than random noise. If all positive examples of a certain type are mislabeled as negative due to annotator confusion, the model will learn the wrong boundary in that region. Random noise averages out to some degree; systematic noise teaches the wrong pattern.
+\end{warningbox}
+
+\subsection{Label-Noise Strategies}
+
+When labels are noisy, several strategies exist:
+
+\textbf{Clean the labels.} Have a senior expert audit and correct a sample of labels. This is expensive but effective if the noise is mostly systematic.
+
+\textbf{Use noise-robust losses.} Some loss functions are less sensitive to label noise. For example, the focal loss down-weights examples the model is already confident about, which reduces the impact of mislabeled examples that the model would otherwise try hard to memorize.
+
+\textbf{Estimate noise rates.} If you can estimate the rate at which each class is mislabeled, you can adjust the loss function to account for it. This requires a clean validation set or a held-out sample to estimate noise rates.
+
+\textbf{Threshold and filter.} Train the model and remove or down-weight examples that the model is highly confident were mislabeled (e.g., examples where the model's prediction strongly contradicts the given label).
+
+\begin{evidencebox}
+Northcutt et al.\ studied label errors in the CIFAR-10 benchmark dataset, a widely used image classification benchmark, and found that approximately 3.3\% of labels were wrong. They showed that training on cleaned labels improved model accuracy and that models trained on the original dataset had learned to compensate for the noise rather than learning the true underlying pattern. This demonstrates that cleaning important datasets is not busy work---it directly improves the generalization of trained models.
+\end{evidencebox}
+
+\begin{thinkingtool}
+\textbf{Noise investigation.} When validation performance is worse than expected, before blaming the model, ask whether label noise is the culprit. Sample and hand-inspect a small random subset of training labels to estimate noise rates.
+\end{thinkingtool}
+
+\section{Class Imbalance: Problem or Design Choice?}
+
+The most common advice about class imbalance is to ``balance the classes.'' This is usually wrong. The right question is: what does the deployment distribution look like?
+
+\begin{definition}[Class Imbalance]
+Class imbalance occurs when one class appears much more frequently than another in the training set. A 95--5 split is heavily imbalanced; a 60--40 split is mildly imbalanced.
+\end{definition}
+
+The default concern is that the model will learn to predict the majority class and ignore the minority. This is a real risk if evaluated on a standard metric like accuracy, which is dominated by the majority class. But it is not inherent to imbalanced data. It is an evaluation and loss-design problem.
+
+\subsection{Imbalance in Context}
+
+If the deployment scenario is also 95--5 (95\% negative, 5\% positive), then training on a 95--5 distribution is appropriate. The model should predict the majority class frequently, just as the deployment requires.
+
+If the deployment scenario is 50--50 (e.g., a binary decision where both outcomes are equally likely or operationally important), then training on a 95--5 distribution is a mistake. The model will never learn rich decision boundaries for the minority class because that class appears so rarely.
+
+\subsection{Addressing Imbalance}
+
+When the training distribution does not match the deployment distribution, several strategies exist:
+
+\textbf{Oversampling the minority class.} Duplicate minority examples or generate similar ones until the classes are balanced. This increases the influence of minority examples. The risk is that the model sees the same minority examples multiple times and overfits to them.
+
+\textbf{Undersampling the majority class.} Remove majority examples until the classes are balanced. This discards potentially informative examples and works only when you have so much majority data that removal is inconsequential.
+
+\textbf{Class-weighted loss.} Assign a higher loss weight to minority-class examples so that making an error on a minority example costs more than making an error on a majority example. This is computationally efficient and preserves all the data, but it indirectly makes stronger assumptions about deployment importance.
+
+\textbf{Threshold adjustment.} Train on the original imbalanced distribution but adjust the decision threshold to reflect the deployment distribution. This is effective when the model outputs a well-calibrated score but requires knowing the deployment distribution and score distribution in advance.
+
+\begin{decisionbox}
+\textbf{When to balance the classes:}
+\begin{itemize}
+\item Training and deployment distributions are different, and the minority class matters operationally
+\item You need the model to learn rich decision boundaries for both classes
+\item You care equally about minority and majority recall or want balanced F1 score
+\end{itemize}
+\textbf{When to keep the imbalance:}
+\begin{itemize}
+\item The training and deployment distributions match (both imbalanced the same way)
+\item The majority class is truly less important and mistakes on it are cheaper
+\item You have evaluation metric that handles imbalance (e.g., ROC-AUC instead of accuracy)
+\end{itemize}
+\end{decisionbox}
+
+\begin{example}[Imbalance in Pedestrian Detection]
+A campus shuttle's pedestrian detector is trained on all video frames collected during data gathering. 99\% of frames contain no pedestrians; only 1\% contain pedestrians. If the deployment camera sees a similar 99--1 split (because pedestrians are indeed rare), training on the 99--1 distribution is fine; the model should correctly predict ``no pedestrian'' most of the time. But if the model is deployed during times and places where pedestrians are more common (e.g., outside a busy building), the 99--1 training distribution is misleading, and the model will be too conservative about detecting pedestrians. Reweighting or threshold adjustment would be appropriate in that scenario.
+\end{example}
+
+\section{More Data, Better Data, or Better Labels?}
+
+Data-centric ML is the philosophy that modeling progress often comes not from better algorithms but from better data. The practical question is therefore: should a team invest limited resources in collecting more examples, cleaning existing examples, or improving label quality?
+
+\subsection{When More Data Helps}
+
+More data is most valuable when:
+\begin{itemize}[leftmargin=*]
+\item The current model exhibits high variance: training error is low but validation error is high
+\item The current dataset does not cover the full diversity of the deployment population
+\item The task is well-defined, labels are reliable, and the bottleneck is lack of examples
+\end{itemize}
+
+Collecting more random examples is least helpful when label noise is the primary problem or when the data distribution is far from deployment.
+
+\subsection{When Better Labels Help}
+
+Better labels matter most when:
+\begin{itemize}[leftmargin=*]
+\item Label noise is high: multiple validation samples show disagreement or suspicious labels
+\item The current model exhibits high bias: both training and validation error are high
+\item Annotation guidelines are unclear or inconsistently applied
+\end{itemize}
+
+Cleaning and improving labels is often cheaper than collecting more examples and can provide immediate performance gains.
+
+\subsection{When Better Coverage Helps}
+
+Better coverage or data augmentation is most valuable when:
+\begin{itemize}[leftmargin=*]
+\item The training distribution has systematic gaps (e.g., no night-time pedestrian frames)
+\item The model systematically fails on a slice of the deployment data (e.g., very crowded scenes)
+\item Existing examples are not diverse enough to train the model on the true variation in the deployment environment
+\end{itemize}
+
+\begin{figure}[t]
+\centering
+\definecolor{c4bvarianceColor}{RGB}{56,103,170}
+\definecolor{c4bbiasColor}{RGB}{180,40,40}
+\definecolor{c4bnoisColor}{RGB}{184,92,16}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=2.2cm, y=1.4cm, font=\small]
+%% Axis labels
+\node[black!70, font=\small] at (-0.4, 2.3) {need};
+%% Row 1: High variance (more data helps)
+\node[anchor=east, black!70, font=\small] at (-0.2, 2.0) {High variance};
+\node[draw, fill=c4bvarianceColor!10, rounded corners, align=center,
+      minimum height=0.5cm, minimum width=1.8cm]
+  at (0.9, 2.0) {More data};
+\node[draw, fill=white, rounded corners, align=center,
+      minimum height=0.5cm, minimum width=1.8cm]
+  at (3.0, 2.0) {Better labels};
+\node[draw, fill=white, rounded corners, align=center,
+      minimum height=0.5cm, minimum width=1.8cm]
+  at (5.1, 2.0) {Better coverage};
+%% Row 2: High bias (better labels or coverage helps)
+\node[anchor=east, black!70, font=\small] at (-0.2, 1.2) {High bias};
+\node[draw, fill=white, rounded corners, align=center,
+      minimum height=0.5cm, minimum width=1.8cm]
+  at (0.9, 1.2) {More data};
+\node[draw, fill=c4bbiasColor!10, rounded corners, align=center,
+      minimum height=0.5cm, minimum width=1.8cm]
+  at (3.0, 1.2) {Better labels};
+\node[draw, fill=c4bbiasColor!10, rounded corners, align=center,
+      minimum height=0.5cm, minimum width=1.8cm]
+  at (5.1, 1.2) {Better coverage};
+%% Row 3: Label noise (better labels helps)
+\node[anchor=east, black!70, font=\small] at (-0.2, 0.4) {Label noise};
+\node[draw, fill=white, rounded corners, align=center,
+      minimum height=0.5cm, minimum width=1.8cm]
+  at (0.9, 0.4) {More data};
+\node[draw, fill=c4bnoisColor!10, rounded corners, align=center,
+      minimum height=0.5cm, minimum width=1.8cm]
+  at (3.0, 0.4) {Better labels};
+\node[draw, fill=white, rounded corners, align=center,
+      minimum height=0.5cm, minimum width=1.8cm]
+  at (5.1, 0.4) {Better coverage};
+\end{tikzpicture}%
+}
+\caption{Data investment decisions should depend on whether the bottleneck is variance (too few examples), bias (gaps in coverage), or noise (unreliable labels).}
+\label{fig:data-investment-choice}
+\end{figure}
+
+\begin{thinkingtool}
+\textbf{Data investment triage.} Before collecting new data, diagnose the model's failure mode. If training error is much lower than validation error, the problem is variance. If both are high, the problem is bias or coverage. If labels look unreliable, the problem is noise. Invest accordingly.
+\end{thinkingtool}
+
+\section{Active Learning: Labeling Strategically}
+
+When labeling is expensive---because it requires expert annotation or manual review---labeling every available example is wasteful. Active learning addresses this: which examples should be labeled next to improve the model most?
+
+\subsection{Core Active Learning Strategies}
+
+\textbf{Uncertainty sampling.} Label the examples for which the current model is least confident. If the model is a probabilistic classifier, this means examples where the predicted probability is closest to 0.5 (for binary classification) or where the probability is most spread across multiple classes. The intuition is that the model has already learned what it can from confident examples; uncertain examples are most informative.
+
+\textbf{Diversity sampling.} Label examples that are most different from those already labeled. This can be measured through clustering, embedding distance, or other diversity metrics. The intuition is that diversity prevents the model from learning only about clusters of similar examples.
+
+\textbf{Expected model change.} Estimate how much labeling each unlabeled example would change the model parameters if it were labeled and the model were retrained. Label the examples with highest expected change. This requires training multiple candidate models or estimating gradient impact.
+
+\subsection{When Active Learning Pays Off}
+
+Active learning is most valuable when:
+\begin{itemize}[leftmargin=*]
+\item Labeling is genuinely expensive (requires expert time, not just crowdsourcing)
+\item You have a large pool of unlabeled examples
+\item The model's uncertainty is informative (it reflects genuine task difficulty, not just poor calibration)
+\item You have time to iterate: label a batch, retrain, select the next batch
+\end{itemize}
+
+Active learning is least useful when labeling is cheap, the unlabeled pool is small, or the model is poorly calibrated.
+
+\begin{example}[Active Learning for Course Support]
+A university starts with 100 randomly labeled student messages. The early-warning model performs reasonably but could be improved. Instead of randomly labeling 100 more messages, the team uses uncertainty sampling: they ask the model for the 100 unlabeled messages where it is least confident. A domain expert (student advisor) labels only those 100 high-uncertainty messages. With 200 total labels but 100 of them strategically chosen, the model improves more than if 200 random labels had been collected. The team saved expert time by avoiding examples the model was already confident about.
+\end{example}
+
+\begin{practicalnote}
+Active learning requires discipline: the model must be retrained after each labeling round, and the uncertainty estimates must be reliable. If the model is overconfident or poorly calibrated, uncertainty sampling can select uninformative examples. Test active learning on a small batch first before committing to a full labeling campaign.
+\end{practicalnote}
+
+\section{Data Augmentation as a Modeling Decision}
+
+Data augmentation generates new training examples from existing ones by applying transformations. Every augmentation encodes a claim: ``the model should be invariant to this transformation.''
+
+\subsection{Augmentation by Modality}
+
+\textbf{Text augmentation.} Common techniques include:
+\begin{itemize}[leftmargin=*]
+\item \emph{Paraphrase}: rewrite a sentence to mean the same thing (e.g., ``the student is struggling'' $\to$ ``the student is having difficulty'')
+\item \emph{Back-translation}: translate to another language and back to introduce variation (e.g., English $\to$ French $\to$ English)
+\item \emph{Token replacement}: replace words with synonyms or similar words
+\item \emph{Cutoff and mixup}: remove or interpolate between texts
+\end{itemize}
+
+For the course-support system, augmentation could paraphrase student messages to simulate the same underlying intent phrased differently.
+
+\textbf{Vision augmentation.} Common techniques include:
+\begin{itemize}[leftmargin=*]
+\item \emph{Rotation, crop, and flip}: rotate or flip the image; crop to different regions
+\item \emph{Brightness, contrast, hue adjustment}: vary lighting and color
+\item \emph{Noise injection}: add random noise
+\item \emph{Geometric transformation}: apply affine or perspective transformations
+\end{itemize}
+
+For the pedestrian detector, rotation and brightness adjustment make sense because a pedestrian can appear in different lighting and at different angles. Flipping may also be appropriate: the model should detect pedestrians facing left or right equally.
+
+\textbf{Tabular augmentation.} Techniques like SMOTE (Synthetic Minority Over-sampling Technique) generate synthetic minority examples by interpolating between existing minority examples. Simpler approaches include adding noise, permuting values, or other local perturbations.
+
+\subsection{Augmentation Risks}
+
+Not all transformations are valid for all tasks. An augmentation is valid only if the true label is preserved under the transformation.
+
+\begin{warningbox}
+Consider a student-message classifier that predicts whether a message indicates urgent need. Paraphrasing is a valid augmentation: ``I missed the deadline'' and ``I couldn't meet the deadline'' should have the same label. But removing portions of the text (cutoff) might not be valid: removing the word ``suicide'' from a longer message changes what it is. Be explicit about which augmentations preserve the task semantics.
+\end{warningbox}
+
+\begin{example}[Augmentation Mistakes]
+A team building a sentiment analysis model for student feedback augments training texts by removing punctuation and shortening them. Some sentences like ``I hate this---the worst!'' become ``I hate this the worst,'' which still conveys negative sentiment. But the sentence ``The class is not engaging'' becomes ``The class is not engaging,'' which has the opposite sentiment if a period disappears in front of ``engaging''---this is a rare case but demonstrates that augmentation can change meaning. The team should have inspected augmented examples and validated that sentiment was preserved.
+\end{example}
+
+\section{Synthetic Data: Promise and Pitfalls}
+
+Synthetic data is generated rather than observed. It can address data scarcity, privacy constraints, and rare events. But it comes with serious risks.
+
+\subsection{When Synthetic Data Helps}
+
+Synthetic data is valuable for:
+\begin{itemize}[leftmargin=*]
+\item \emph{Rare events}: if the real data contains very few traffic accidents or security breaches, synthetic data can supplement real examples to help the model learn the pattern
+\item \emph{Privacy constraints}: if you cannot share real patient or financial data, synthetic data lets you build models without exposing sensitive information
+\item \emph{Cost reduction}: if generating data through simulation is cheap (e.g., rendering images from a game engine) but collecting real data is expensive, synthetic data can reduce labeling costs
+\item \emph{Controlled testing}: synthetic data lets you test the model on edge cases and failure modes that would be rare in real data
+\end{itemize}
+
+\subsection{When Synthetic Data Misleads}
+
+Synthetic data is risky because it can encode unrealistic assumptions.
+
+\textbf{Distribution mismatch.} Synthetic data generated from a simulation may not match the real-world distribution. A pedestrian detector trained on game-engine-rendered pedestrians may fail on real photographs because the textures, lighting, and pose distributions are different. This is called the ``sim-to-real'' gap.
+
+\textbf{Mode collapse.} A generative model may produce synthetic data that is too similar, covering only a narrow slice of the possible variation. If a generative adversarial network (GAN) generates pedestrian images, it might produce only frontal poses and miss side views.
+
+\textbf{False confidence.} A model trained entirely on synthetic data may perform well on held-out synthetic test data but fail on real data. If the model is evaluated against synthetic data, the numbers look good. But real-world deployment reveals the gap. This is why evaluation discipline is critical: synthetic data must be validated against real held-out performance, never against itself.
+
+\begin{evidencebox}
+In autonomous driving research, simulators like CARLA are used to generate training data because real driving data is expensive to collect and label. However, models trained in simulation often fail on real roads. Zahavy et al.\ and others have documented this sim-to-real gap: the distribution of rendered scenes differs enough from real camera imagery that simulation-trained models do not transfer well. The lesson is that synthetic data should be viewed as a starting point, not as a complete replacement for real data.
+\end{evidencebox}
+
+\begin{advancednote}
+Some recent work uses large pre-trained generative models to synthesize training data that is more realistic. However, the same evaluation discipline applies: the synthetic-augmented model must be validated on a real held-out test set, not only on synthetic test data. The false confidence problem persists.
+\end{advancednote}
+
+\subsection{Evaluation Discipline for Synthetic Data}
+
+When using synthetic data, enforce these rules:
+\begin{itemize}[leftmargin=*]
+\item Train and validate on a mix of real and synthetic data if possible
+\item Always hold out a real-data test set; never evaluate only on synthetic test data
+\item Report separate performance on real and synthetic held-out data to expose any gap
+\item If possible, measure domain adaptation metrics or transfer performance to understand the mismatch
+\end{itemize}
+
+\begin{decisionbox}
+\textbf{Synthetic data decision checklist:}
+\begin{itemize}
+\item Is real data genuinely scarce or expensive, or could more be collected?
+\item Is the synthetic-data generator reliable and realistic, or does it make simplifying assumptions?
+\item Can you hold out real data for testing, or will you evaluate only on synthetic data?
+\item How much of a sim-to-real gap is acceptable for your use case?
+\item If performance on synthetic test data is high but real-world performance is poor, what will you do?
+\end{itemize}
+\end{decisionbox}
+
+\section{The Data Design Card}
+
+A data design card is a structured document that records the data-design choices made when building a dataset. It serves as institutional memory and makes assumptions explicit. This is the chapter artifact.
+
+\subsection{Data Design Card Structure}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{p{2.5cm}p{7.88cm}}
+\toprule
+Card field & What must be documented \\
+\midrule
+Data source and collection method & Where the data came from, how it was collected, what dates or time periods it covers, and what population it represents \\
+Data extent & Total number of examples, splits (train/val/test sizes and dates), and coverage of important subgroups or conditions \\
+Labeling protocol and annotators & Who labeled the data, what guidelines they followed, how long training took, and their background or expertise \\
+Annotator agreement & Inter-annotator agreement scores (kappa, alpha, or agreement percentage) and any examples of disagreement \\
+Known gaps and limitations & What subgroups or conditions are underrepresented, what distribution shifts are known to exist between training and deployment, and what edge cases may be missing \\
+Class distribution and imbalance strategy & The class balance in the dataset, how it compares to the deployment distribution, and what strategy was used to handle imbalance (reweighting, resampling, threshold adjustment, etc.) \\
+Augmentation claims & What augmentations were applied, what transformations they represent, and why those transformations preserve label validity \\
+Synthetic data usage & What synthetic data was included, how it was generated, and what real-data validation was performed to confirm sim-to-real performance \\
+Noise and cleaning & Estimated label-noise rates, what cleaning or validation was performed, and confidence in label quality \\
+Version and refresh plan & The current version, when the data was last updated, how often it will be refreshed, and who owns the dataset \\
+\bottomrule
+\end{tabular}
+\caption{A data design card documents all design choices so the dataset's assumptions and limitations are clear to future users.}
+\label{tab:data-design-card}
+\end{table}
+
+\subsection{Filled Example: Course-Support Dataset}
+
+\begin{example}[Data Design Card for Student Early Warning]
+
+\textbf{Data source and collection method.} Student messages and submission records from a first-year undergraduate course offered at a large public university in fall semesters 2021--2023. Data collected from the learning management system (Canvas). No additional manual collection beyond the system's normal logging.
+
+\textbf{Data extent.} 12,480 student messages from 840 unique students across three semesters. 7,480 messages from fall 2021--2022 (training), 2,500 messages from fall 2023 (validation), 2,500 from fall 2024 (test). Covers two course sections: in-person (60\%) and hybrid (40\%); all first-year students.
+
+\textbf{Labeling protocol and annotators.} Messages labeled by three trained academic advisors using standardized guidelines. Labels: URGENT (student mentions mental health crisis, financial hardship, or family emergency), CONCERNING (multiple late submissions in one week, sudden engagement drop), ROUTINE (all others). Annotators trained for 4 hours on 50 messages before labeling began.
+
+\textbf{Annotator agreement.} Fleiss's kappa = 0.72 (substantial agreement). Disagreements most common between ROUTINE and CONCERNING (14\% of examples); disagreements between URGENT and others rare (2\%). URGENT labels rarely disagreed because guidelines are clearest. ROUTINE vs. CONCERNING reflects genuine ambiguity about ``concerning enough to flag.''
+
+\textbf{Known gaps and limitations.} Dataset covers only one institution and one course. No non-native English speakers' data. No messages from summer sessions or condensed courses. Advisor background: two advisors have counseling training, one does not, which may bias URGENT labeling. Advisors may have unconscious bias toward certain student names or demographics.
+
+\textbf{Class distribution.} ROUTINE: 70\% (8,736 examples), CONCERNING: 22\% (2,738), URGENT: 8\% (996). Deployment is expected to have similar distribution (advisors report these ratios). No rebalancing applied; class-weighted loss used during training to give higher weight to URGENT examples (weight = 3.0) and CONCERNING (weight = 1.5).
+
+\textbf{Augmentation claims.} No augmentation applied. Student messages are real examples; paraphrasing them would risk changing intent or urgency markers.
+
+\textbf{Synthetic data usage.} None. Real student data is available and was deemed preferable to synthetic data.
+
+\textbf{Noise and cleaning.} No automated cleaning applied. Two messages flagged as potential noise: one appeared to be spam and one was a system notification rather than a student message. These were retained in the training set (not enough to worry about) but are documented. Estimated label-error rate: 2\% based on spot-checking.
+
+\textbf{Version and refresh plan.} Version 1.0, created June 2024. Planned refresh annually to include new semester data. Owned by the Academic Support office.
+
+\end{example}
+
+\begin{practicalnote}
+A data design card is not merely documentation. It is a forcing function. Writing one reveals gaps in your own understanding of the data. If you cannot fill the ``annotator agreement'' field, you should probably measure inter-annotator agreement before building a model. If you cannot describe the ``known gaps'' field clearly, you should probably investigate your data more carefully.
+\end{practicalnote}
+
+\section{Common Mistakes in Data Design}
+
+Several mistakes recur when building datasets. The first is treating the data as fixed and given rather than as a design choice. The second is ignoring annotator agreement or treating disagreement purely as noise. A third is assuming that balancing classes is always right without considering deployment distribution. A fourth is collecting synthetic or augmented data without validating against real held-out data. Finally, too many teams build models without documenting data assumptions, making it impossible for others to know what the model has been trained on or what its limitations are.
+
+\section{Looking Ahead}
+
+This chapter made dataset construction explicit: collection, annotation, labeling protocol, class imbalance, active learning, and augmentation are all design decisions that shape what the model learns. With the data now designed and documented, the next chapter returns to model architecture. But with better understanding of data, the conversation about architecture can be more sophisticated: not ``which model family is stronger?'' but ``what does this data allow the model to learn?''
+
+\section*{Chapter Summary}
+
+Dataset construction is a design choice, not preprocessing. The examples collected, the labels assigned, their distribution, and their quality determine what the model can learn. Labeling protocols, inter-annotator agreement, and whether to use soft or hard labels are decisions that reflect the ambiguity or clarity of the task. Class imbalance should be handled based on the deployment distribution, not by defaulting to balance. The choice between collecting more data, cleaning existing labels, or improving coverage depends on whether the bottleneck is variance, bias, or noise. Active learning lets teams label strategically when labeling is expensive. Augmentation and synthetic data are powerful but require careful validation to avoid false confidence. A data design card documents all choices and makes assumptions explicit, protecting future users from discovering problems after the model is deployed.
+
+\begin{studyquestions}
+\item Why is dataset construction a modeling decision rather than just preprocessing?
+\item When is inter-annotator disagreement information rather than noise?
+\item How should the choice between soft labels and hard labels be made?
+\item What does asymmetric label noise do to model learning?
+\item When is balancing classes the right choice, and when is it wrong?
+\item How do you decide whether to invest in more data, better labels, or better coverage?
+\item When is active learning valuable, and when is it wasteful?
+\item What claim does every data augmentation encode?
+\item What is the sim-to-real gap, and why does it matter?
+\item Why should synthetic data be validated against real held-out data?
+\item What should a data design card accomplish?
+\end{studyquestions}
+
+\begin{exercises}
+\item Write annotation guidelines for either student-support messages or another classification task. Include at least three label categories and guidance on edge cases.
+\item Compute inter-annotator agreement by hand for a small dataset where two annotators labeled the same five examples. Use the simple agreement percentage and discuss what mismatch you observe.
+\item For a classification task in your domain, sketch what class imbalance looks like and decide whether the training set should match the deployment distribution or be deliberately rebalanced.
+\item Design an active learning experiment: specify the task, the model that will make uncertainty estimates, and the query strategy (uncertainty, diversity, or expected model change).
+\item Propose two sensible data augmentations for either text, image, or tabular data in your domain. For each, argue why the augmentation preserves label validity.
+\item Create a data design card (Table~\ref{tab:data-design-card}) for a dataset in a domain you know or have researched. If carrying one case through the book, use the same case as your framing memo and evaluation plan so the three documents can be read together.
+\item For a public dataset like CIFAR-10 or ImageNet, research what label errors or distribution shifts have been documented. Write a paragraph explaining what was found and what impact it had on models trained on that dataset.
+\end{exercises}
+
+\begin{challengeexercises}
+\item A team builds a pedestrian detector trained on mostly clear daytime frames. At deployment, it underperforms at dusk and in rain. Argue whether the problem is likely more data, better labels, or better coverage. What data-design changes would you recommend?
+\item A dataset has a 90--10 class imbalance. A baseline majority-class classifier achieves 90\% accuracy. The team balances the dataset and trains a model that achieves 75\% accuracy on the balanced training set but 85\% accuracy on the imbalanced test set. Explain this result and argue whether balance was the right choice.
+\item Suppose you are given student messages labeled by advisors with 65\% inter-annotator agreement (Cohen's kappa). Should you average disagreements into soft labels or adjudicate? Argue both sides.
+\item Design a synthetic data experiment for a task where real data is scarce. State how you would generate the synthetic data, what validation you would perform, and how you would measure sim-to-real gap.
+\end{challengeexercises}
+
+\begin{chaptersummary}
+\item Data design comprises collection, annotation, labeling protocol, class distribution, and quality decisions
+\item Inter-annotator disagreement often reflects task ambiguity and can be preserved as soft labels
+\item Label noise affects different models differently; trees are more robust than neural networks to random noise
+\item Class balance should be chosen based on deployment, not by defaulting to balance
+\item More data, better labels, and better coverage address different bottlenecks (variance, noise, bias)
+\item Active learning selects high-value examples to label when labeling is expensive
+\item Data augmentation claims invariance; every augmentation must preserve label validity
+\item Synthetic data must be validated against real held-out performance to avoid false confidence
+\item A data design card documents all choices so limitations are clear and assumptions are explicit
+\end{chaptersummary}

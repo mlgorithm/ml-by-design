@@ -1,52 +1,21 @@
 \chapter{Structure Beyond Linearity}
 
-\begin{learninggoals}
-\item Explain how a failed linear baseline can reveal different kinds of missing structure rather than merely ``insufficient complexity.''
-\item Diagnose whether the next useful model family should come from recursive partitioning, geometry in the current representation, or unlabeled organization.
-\item Understand decision trees and ensembles as models for conditional logic and region-specific rules.
-\item Recognize when a margin-based classifier is the better answer than a tree or neighbor method.
-\item Understand nearest-neighbor methods as models whose behavior is determined by representation and distance.
-\item Distinguish clustering and dimensionality reduction as exploratory tools for unlabeled structure rather than as automatic discovery devices.
-\item Produce a structure diagnosis sheet before moving beyond the linear baseline.
-\end{learninggoals}
+A failed linear baseline does not merely say that the task is harder than expected. More often, it says something specific about the kind of structure that is missing. Sometimes the missing structure is conditional and region-specific, sometimes it is local and geometric, and sometimes the real task is not supervised prediction at all but exploratory organization. This chapter is about reading that failure correctly so that the next model family is chosen for a structural reason rather than out of habit.
 
-\begin{whychaptermatters}
-This chapter teaches students to read a failed linear baseline as evidence about missing structure. After reading it, they should justify the next model family by branching logic, geometry, or unlabeled organization instead of method shopping. The structure diagnosis sheet extends the first baseline design sheet by recording why a new family is warranted.
-\end{whychaptermatters}
-
-The previous chapter ended with a linear baseline. Sometimes that baseline is good enough. Sometimes it fails for a reason.
-
-When it fails, the next move depends on what kind of structure is missing. A single weighted sum may miss branching logic because different regions need different rules. It may miss useful geometry because neighborhoods or margins matter in the current feature space. Or it may be answering the wrong question entirely because there are no labels and the real goal is to organize or compress the data.
-
-Those failures do not all call for the same method. A tree helps when the logic is region-specific. Geometry-based methods help when distance or margin matters. Unsupervised methods help when the task is to summarize structure rather than predict a label.
-
-A structure diagnosis sheet keeps the judgment explicit: what failed, what kind of structure now seems missing, and which family deserves to be tried next.
-
-\begin{problemsolvinglens}
-When a linear baseline fails, ask what kind of missing structure the failure suggests. Does the task need conditional thresholds and interactions, geometric structure in the current representation, or unlabeled organization? If geometry is the issue, the next question is whether the signal is local similarity or a more robust wide-margin separator. The methods in this chapter are direct answers to that diagnosis.
-\end{problemsolvinglens}
-
-\begin{practicalnote}
-In practice, the diagnosis can stay compact: state what the linear model is getting wrong, name the likely structural hypothesis, choose the next candidate family, and state what evidence would justify moving forward.
-\end{practicalnote}
+The central task is diagnostic. Trees, ensembles, support vector machines, nearest neighbors, clustering, and dimensionality reduction are presented here not as a bag of methods, but as different responses to different structural deficits. By the end, the reader should be able to name what the linear model missed and justify the next family for that reason.
 
 \section{Opening Question: What Kind of Structure Is Missing?}
 
-Return to that same early student-support setting. Suppose a university wants to identify students who may need extra support. One group of at-risk students may have very low attendance but acceptable quiz scores. Another may attend regularly but miss many deadlines. A single weighted sum may blur those patterns together. A branching rule can describe them more naturally:
-\begin{itemize}[leftmargin=*]
-\item if attendance is very low, flag the student;
-\item otherwise, if late submissions are frequent, flag the student;
-\item otherwise, do not flag the student.
-\end{itemize}
+Return to that same early student-support setting. Suppose a university wants to identify students who may need extra support. One group of at-risk students may have very low attendance but acceptable quiz scores. Another may attend regularly but miss many deadlines. A single weighted sum may blur those patterns together. A branching rule can describe them more naturally: if attendance is very low, flag the student; otherwise, if late submissions are frequent, flag the student; otherwise, do not flag the student.
 
 That rule is not just ``nonlinear.'' It is region-specific. Different logic applies in different parts of the feature space. That is one possible answer to a failed baseline.
 
-But it is not the only answer. Sometimes the right story is geometric: similar examples should borrow judgment from one another, or the current features already admit a stable separating margin. Sometimes it is that labels are absent and the job is exploratory organization rather than supervised prediction.
+But it is not the only answer. Sometimes the right story is that similar examples should borrow judgment from one another. Sometimes it is that labels are absent and the job is exploratory organization rather than supervised prediction.
 
 The opening question of the chapter should therefore be stated brutally clearly:
 
 \begin{center}
-\emph{When the linear baseline fails, is the missing structure mainly conditional thresholds and interactions, geometric structure, or unlabeled organization?}
+\emph{When the linear baseline fails, is the missing structure mainly conditional thresholds and interactions, local similarity, or unlabeled organization?}
 \end{center}
 
 Everything that follows should be read as one answer to that question.
@@ -55,14 +24,7 @@ Everything that follows should be read as one answer to that question.
 
 Before naming model families, it helps to name the diagnostic.
 
-\begin{thinkingtool}
-\textbf{Structure diagnosis.} Before changing model families, state what structural mismatch the baseline has revealed.
-\begin{itemize}[leftmargin=*]
-\item If the task sounds like branching logic, think trees.
-\item If geometry in the current representation matters, think neighbors for local similarity or SVMs for a robust wide-margin separator.
-\item If labels are absent and you are looking for organization or compression, think clustering or dimensionality reduction.
-\end{itemize}
-\end{thinkingtool}
+Before changing model families, state what structural mismatch the baseline has revealed. If the task sounds like branching logic, think trees. If prediction should come from nearby similar cases, think neighbors. If labels are absent and you are looking for organization or compression, think clustering or dimensionality reduction.
 
 \begin{table}[t]
 \centering
@@ -73,67 +35,25 @@ Before naming model families, it helps to name the diagnostic.
 Structural mismatch & Natural next family & What the family contributes \\
 \midrule
 Conditional thresholds and interactions & Trees and tree ensembles & Different rules in different regions of feature space \\
-Geometric structure in the current representation & Nearest neighbors, SVMs, and related geometry-based methods & Borrow prediction from neighborhoods or choose a robust separator in the current feature space \\
+Local similarity & Nearest neighbors and related geometry-based methods & Borrow prediction from nearby examples under a chosen similarity notion \\
 Unlabeled organization & Clustering and dimensionality reduction & Summarize groupings, directions of variation, or lower-dimensional views without labels \\
 \bottomrule
 \end{tabular}
-\caption{A failed linear baseline usually points toward one of three broad kinds of missing structure. The point is not to memorize method names, but to connect model families to structural mismatch.}
+\caption{This chapter is one diagnostic with three answers. The point is not to memorize method names, but to connect model families to structural mismatch.}
 \label{tab:structure-map}
 \end{table}
 
-\begin{decisionbox}
-\textbf{Which family next?}
-\begin{itemize}[leftmargin=*]
-\item Different rules in different regions? Choose a tree.
-\item Nearby cases should borrow labels? Choose k-NN, but defend the distance metric and scaling first.
-\item The current features already look separable and you want a more robust boundary? Choose an SVM.
-\item No labels and you want grouping or compression? Choose clustering or PCA.
-\item The splits feel brittle or overfit quickly? Prefer an ensemble over a single tree.
-\item The distance metric feels arbitrary? Fix the representation before trusting neighbors.
-\end{itemize}
-\end{decisionbox}
+Keep one tiny student-profile cloud in mind throughout the chapter. Students A and B have around 50{,}000 clicks and at most one late submission and look safe; students C and D have around 20{,}000 clicks and four or five late submissions and look risky. Trees read that cloud as threshold logic, k-NN reads it as distance, k-means reads it as grouping, and PCA reads it as a dominant direction of variation. The better question is therefore not ``Which stronger model should we try next?'' but ``What specific structure did the baseline miss: branching logic, local similarity, or unlabeled organization?''
 
-\begin{thinkingtool}
-\textbf{Shared cloud.} Keep one tiny student-profile cloud in mind throughout the chapter:
-\begin{itemize}[leftmargin=*]
-\item A: 50{,}000 clicks, 0 late submissions, safe
-\item B: 52{,}000 clicks, 1 late submission, safe
-\item C: 20{,}000 clicks, 4 late submissions, risk
-\item D: 22{,}000 clicks, 5 late submissions, risk
-\end{itemize}
-Trees read that cloud as threshold logic, k-NN reads it as distance, k-means reads it as grouping, and PCA reads it as a dominant direction of variation.
-\end{thinkingtool}
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.1cm}L{3.0cm}L{1.9cm}L{2.3cm}}
-\toprule
-Method on the same cloud & What it notices first & Likely call on the query \((51{,}000,5)\) & Main lesson \\
-\midrule
-Linear baseline on raw features & One global tradeoff between clicks and lateness & often safe & One weighted sum can blur region-specific logic \\
-Shallow tree & A threshold such as ``late submissions $> 2$'' & risk & Branching rules capture conditional structure directly \\
-1-NN on raw features & Raw Euclidean distance dominated by clicks & safe & Units and scaling are already part of the model \\
-1-NN after scaling & Local similarity after clicks are rescaled & risk & Changing geometry changes the prediction \\
-Linear SVM on a defended representation & The widest separating boundary in the current feature space & safe or risk, depending on the chosen scaling & If the current representation already separates the classes, robustness of the boundary becomes the main question \\
-\bottomrule
-\end{tabular}
-\caption{A comparative mini-lab on one tiny cloud helps students see that different families do not merely produce different numbers. They answer different structural questions about the same data.}
-\label{tab:shared-cloud-comparison}
-\end{table}
-
-\begin{thinkingtool}
-\textbf{Wrong question $\rightarrow$ better question.} Wrong: ``Which stronger model should we try next?'' Better: ``What specific structure did the baseline miss: region-specific logic, geometry, or unlabeled organization?''
-\end{thinkingtool}
+The chapter should therefore be read left to right as a diagnostic tree: first identify the missing structure, then choose the family that naturally expresses it.
 
 \section{Method Selection by Missing Structure}
 
-Moving beyond the linear baseline is not a choice to make at random. It is a diagnostic response to a specific structural deficit. When a linear model falls short, it usually does so in one of three broad ways, and each way points toward a different family of methods.
+Moving beyond the linear baseline is not a choice to make at random. It is a diagnostic response to a specific structural deficit. When a linear model falls short, it usually does so in one of three identifiable ways, and each way points toward a different family of methods.
 
 \paragraph{Conditional thresholds and interactions.} If the decision rule sounds like branching logic---``if this condition holds \emph{and} that other condition holds, then the outcome changes''---then a linear model will fail because it cannot express regions. Trees are the natural response. They partition the input space recursively, and each leaf can express a different rule. This is the right structure for problems like loan approval, customer segmentation, or academic risk scoring, where the relevant factors interact nonlinearly across subgroups.
 
-\paragraph{Geometry in the current representation.} If the crucial issue is geometric rather than partitioned, there are two common follow-up stories. If prediction should come from nearby examples---because similar students, similar products, or similar sensor readings tend to have similar outcomes---then nearest-neighbor methods are the natural response. If the current features already make the classes look roughly separable and the main concern is robustness of the separator, then an SVM is the natural response. Both methods treat the representation as central; they simply use that geometry differently.
+\paragraph{Local similarity.} If prediction should come from nearby examples---because similar students, similar products, or similar sensor readings tend to have similar outcomes---then the relevant structure is geometric rather than partitioned. Nearest-neighbor methods are the natural response. They delegate intelligence to the geometry of the feature space rather than building a global rule. This is the right structure when the decision boundary is irregular but local smoothness is plausible.
 
 \paragraph{No labels: organization or compression.} If labels are absent and the goal is to discover natural groups, reduce dimensions for visualization, or build a compact intermediate representation, then clustering or dimensionality reduction is the right response. These methods ask different questions than supervised methods do, and they should be chosen when the task is genuinely exploratory rather than predictive.
 
@@ -146,8 +66,7 @@ Moving beyond the linear baseline is not a choice to make at random. It is a dia
 Structural deficit observed & Method family & What it contributes \\
 \midrule
 Threshold interactions, region-specific rules & Trees and ensembles & Different rules in different parts of feature space \\
-Geometry should drive prediction locally & Nearest neighbors & Borrow labels from nearby examples under a chosen metric \\
-Geometry already supports a robust separator & SVM & Choose a wide-margin boundary in the current representation \\
+Local similarity should drive prediction & Nearest neighbors & Borrow labels from nearby examples under a chosen metric \\
 No labels; seek grouping or compression & Clustering, PCA & Organize or compress without a target label \\
 \bottomrule
 \end{tabular}
@@ -445,7 +364,7 @@ Several controls are common:
 \item pruning branches that do not improve validation performance
 \end{itemize}
 
-The same validation discipline from Chapter 3 still applies. A tree that keeps improving training accuracy is not necessarily improving the model we want. Validation performance determines whether additional branching is helping or merely memorizing.
+This is where Chapter 3 returns. A tree that keeps improving training accuracy is not necessarily improving the model we want. Validation performance determines whether additional branching is helping or merely memorizing.
 
 \begin{figure}[t]
 \centering
@@ -470,6 +389,18 @@ The same validation discipline from Chapter 3 still applies. A tree that keeps i
 \caption{Single trees make overfitting visible quickly. Depth increases flexibility, but after a point the training gain is mostly memorization.}
 \label{fig:tree-depth-curves}
 \end{figure}
+
+\begin{example}[Validation-Based Post-Pruning]
+A simple validation-based post-pruning scheme is a practical way to control depth. The logic is simple:
+\begin{enumerate}
+\item Grow the tree to full depth on the training set, allowing it to fit as closely as possible.
+\item Starting from the leaves and working upward toward the root: for each internal node, consider replacing the entire subtree rooted at that node with a single leaf that predicts the majority class (for classification) or the mean value (for regression).
+\item If validation error does not increase after this replacement, keep the pruned version; otherwise restore the subtree.
+\item Repeat until no further pruning improves validation performance.
+\end{enumerate}
+
+The key insight is that the validation set, not the training set, decides which branches are worth keeping. A branch that improved training accuracy may have been fitting noise rather than signal. If validation accuracy stays the same or improves when the branch is removed, the branch did not carry useful information.
+\end{example}
 
 \begin{failurebox}
 A single decision tree is often unstable. Small changes in the data can produce different root splits, different branches, and therefore different stories about what matters. This is one reason tree interpretation should be treated as useful but not absolute.
@@ -496,7 +427,7 @@ Boosted trees & Trees trained sequentially to correct earlier errors & Often ver
 \label{tab:tree-ensemble-comparison}
 \end{table}
 
-\subsection{Why Averaging Helps: Variance Without Bias}
+\subsection{Why Averaging Mainly Reduces Variance}
 
 A single decision tree is a low-bias model: given enough depth it can represent almost any boundary in its training data. But it is also high-variance. A small change in the training sample, perhaps a few swapped examples, can produce an entirely different root split, different branches, and a different story about what matters. The tree reacts strongly to the particular accidents of the data it saw.
 
@@ -561,7 +492,7 @@ Averaging $T$ uncorrelated estimators reduces variance by a factor of $T$ while 
 
 \paragraph{Diversity is what makes averaging work.} The variance-reduction argument above rests on one critical assumption: the trees must not all be making the same mistakes. If every tree in the ensemble produces the same error on the same examples, averaging changes nothing. The average of ten identical wrong answers is still a wrong answer.
 
-This is why random forests introduce two sources of randomness deliberately. First, each tree is trained on a bootstrap resample of the data, so trees see overlapping but different subsets of examples. Second, each split considers only a random subset of features, so trees cannot all latch onto the same dominant feature and must find different evidence.
+This is why random forests introduce two sources of randomness deliberately. First, each tree is trained on a bootstrap resample of the data, meaning a training sample drawn with replacement so that some examples repeat and others are left out, and trees therefore see overlapping but different subsets of examples. Second, each split considers only a random subset of features, so trees cannot all latch onto the same dominant feature and must find different evidence.
 
 Boosted trees achieve diversity differently and more carefully: each new tree is trained to correct the specific errors of the trees already in the ensemble. Early trees handle the easy cases; later trees focus on the residual. This sequential structure means boosted trees do not rely on random diversity. They build complementarity by design.
 
@@ -569,14 +500,7 @@ Boosted trees achieve diversity differently and more carefully: each new tree is
 Suppose a training set has a systematic labeling error: all examples from a particular sensor type are mislabeled. Every tree in the ensemble trains on that same biased data. The average of their predictions inherits the same bias. Ensemble methods reduce variance arising from random sample fluctuations. They do not reduce bias arising from structural problems in the data itself. This is one reason error analysis on the full ensemble is still essential even when the ensemble is strong on average.
 \end{example}
 
-\begin{decisionbox}
-\textbf{Random forest vs.\ boosted trees: which to prefer?}
-\begin{itemize}[leftmargin=*]
-\item Prefer a \textbf{random forest} when you want a robust default on tabular data with minimal tuning. It is harder to badly overfit and easier to parallelize.
-\item Prefer \textbf{boosted trees} when you need the strongest possible accuracy on structured data and are willing to tune carefully. Boosting can squeeze out more performance, but it is more sensitive to the number of rounds, tree depth, and learning rate.
-\item If the dataset is small or noisy, lean toward random forests; boosting can amplify noise when pushed too far.
-\end{itemize}
-\end{decisionbox}
+If you want a robust default on tabular data with minimal tuning, prefer a random forest: it is harder to badly overfit and easier to parallelize. Prefer boosted trees when you need the strongest possible accuracy on structured data and are willing to tune carefully, since boosting can squeeze out more performance but is more sensitive to the number of rounds, tree depth, and learning rate. On small or noisy datasets, the safer prior is often the random forest because aggressive boosting can amplify noise when pushed too far.
 
 \begin{figure}[t]
 \centering
@@ -601,7 +525,7 @@ Suppose a training set has a systematic labeling error: all examples from a part
 ]
 %% ---- Bagging panel ----
 \begin{scope}
-  \node[black!70, font=\small\bfseries] at (3.0, 2.2) {Bagging};
+  \node[black!70, font=\small\bfseries] at (3.0, 2.2) {Bagging / random forest};
   %% Three parallel samples - spacing 2.5cm so boxes (2.0cm wide) never touch
   \node[bagbox] (sample1) at (0.5, 0.8) {sample 1};
   \node[bagbox] (sample2) at (3.0, 0.8) {sample 2};
@@ -630,7 +554,7 @@ Suppose a training set has a systematic labeling error: all examples from a part
 \end{scope}
 \end{tikzpicture}%
 }
-\caption{Bagging and boosting both use trees, but they organize them differently. Bagging reduces variance through diverse parallel trees; boosting adds trees sequentially to correct mistakes. Random forests build on the bagging idea by also randomizing the features each split can consider.}
+\caption{Random forests and boosting both use trees, but they organize them differently. One reduces variance through diverse parallel trees; the other adds trees sequentially to correct mistakes.}
 \label{fig:bagging-vs-boosting}
 \end{figure}
 
@@ -682,52 +606,17 @@ Boosting is powerful, but it also requires careful tuning. If the trees are too 
 NOAA-supported work on storm-scale severe-weather guidance has compared tree ensembles with logistic baselines in the Warn-on-Forecast setting \citep{flora2021}. That is a good structured-ensemble example because the data is structured, the interactions are real, and the ensemble story is not hype-driven. The model family is chosen because the problem structure rewards it.
 \end{example}
 
+Tree ensembles keep the branching story and reduce its instability. The next family addresses a different situation: the representation already makes the classes look roughly separable, and the main question becomes how to place a robust boundary rather than how to build region-specific rules.
+
 \section{Margin-Based Classification: Support Vector Machines}
 
 Trees handle region-specific logic. Nearest neighbors handle local similarity. Margin-based classification handles a different geometric story: the classes already look roughly linearly separable in the current representation, and the best separator is the one that stays as far as possible from the nearest training points. In that sense, SVMs are the geometric continuation of the global-separator idea from the linear baseline, but with a stricter robustness preference.
 
 \begin{definition}[Support Vector Machine]
-A support vector machine is a classifier that chooses a separating hyperplane with the largest margin between classes. When perfect separation is not realistic, the soft-margin version allows some violations and penalizes them.
+A support vector machine is a classifier that chooses a separating hyperplane with the largest margin between classes. The \emph{support vectors} are the training points closest to the boundary, so they are the examples that actually determine that margin. When perfect separation is not realistic, the \emph{soft-margin} version allows some violations and penalizes them instead of demanding zero mistakes.
 \end{definition}
 
 The geometric idea is simple. Many separating lines may correctly classify the same data. An SVM prefers the line that is most robust to small perturbations. The closest points to that line are the \emph{support vectors}; they are the points that actually define the margin.
-
-\begin{figure}[t]
-\centering
-\definecolor{c4svmBlue}{RGB}{56,103,170}
-\definecolor{c4svmAmber}{RGB}{197,111,43}
-\definecolor{c4svmMargin}{RGB}{92,92,92}
-\begin{tikzpicture}[x=0.95cm,y=0.95cm,font=\small]
-  \draw[c4svmMargin, dashed, line width=1.0pt] (0.4,3.6) -- (3.6,0.4);
-  \draw[black!80, line width=1.4pt] (0.4,4.2) -- (4.2,0.4);
-  \draw[c4svmMargin, dashed, line width=1.0pt] (1.0,4.2) -- (4.2,1.0);
-
-  \fill[c4svmBlue] (1.0,1.0) circle (2.5pt);
-  \fill[c4svmBlue] (1.2,1.8) circle (2.5pt);
-  \fill[c4svmBlue] (2.0,2.0) circle (3pt);
-  \draw[c4svmBlue, line width=1pt] (2.0,2.0) circle (5.5pt);
-
-  \draw[c4svmAmber, line width=1.1pt] (2.4,2.8) circle (3pt);
-  \draw[c4svmAmber, line width=1pt] (2.4,2.8) circle (5.5pt);
-  \draw[c4svmAmber, line width=1.1pt] (3.2,2.5) circle (2.5pt);
-  \draw[c4svmAmber, line width=1.1pt] (3.0,3.0) circle (2.5pt);
-
-  \node[anchor=south east, font=\footnotesize, text=c4svmMargin] at (0.55,3.75)
-    {margin};
-  \node[anchor=west, font=\footnotesize, text=black!80] at (4.28,0.42)
-    {separator};
-  \node[anchor=west, font=\footnotesize, text=c4svmMargin] at (3.25,1.2)
-    {margin};
-  \node[anchor=south east, font=\footnotesize, text=c4svmBlue] at (1.85,2.12)
-    {support vector};
-  \node[anchor=west, font=\footnotesize, text=c4svmAmber] at (2.58,2.92)
-    {support vector};
-\end{tikzpicture}
-\caption{Many separators can classify the same points correctly. The SVM prefers the separator centered between the nearest opposing points, and those support vectors determine the margin.}
-\label{fig:svm-margin}
-\end{figure}
-
-Figure~\ref{fig:svm-margin} is the picture to keep in mind: classification is not enough by itself. The wide-margin separator is preferred because the decision stays farther from the nearest fragile cases.
 
 \begin{mathlens}
 For binary labels \(y_i \in \{-1,+1\}\) and a linear score \(f(x)=w^\top x+b\), the hard-margin SVM solves
@@ -737,33 +626,49 @@ For binary labels \(y_i \in \{-1,+1\}\) and a linear score \(f(x)=w^\top x+b\), 
 \text{subject to} \quad &y_i f(x_i) \ge 1 \text{ for all } i.
 \end{aligned}
 \]
-The soft-margin form adds slack variables \(\xi_i\) and a regularization weight \(\lambda\):
+The soft-margin form adds slack variables \(\xi_i\) and a penalty:
 \[
 \begin{aligned}
-\min_{w,b,\xi} \quad &\frac{\lambda}{2}\|w\|_2^2 + \sum_i \xi_i \\
+\min_{w,b,\xi} \quad &\frac{1}{2}\|w\|_2^2 + C\sum_i \xi_i \\
 \text{subject to} \quad &y_i f(x_i) \ge 1-\xi_i,\ \xi_i \ge 0.
 \end{aligned}
 \]
 This is equivalent in spirit to minimizing a regularized hinge-loss objective:
 \[
-\frac{\lambda}{2}\|w\|_2^2 + \sum_i \max(0, 1-y_i f(x_i)).
+\frac{1}{2}\|w\|_2^2 + C\sum_i \max(0, 1-y_i f(x_i)).
 \]
-The first term prefers a wide margin. The second term charges a cost when an example falls inside the margin or on the wrong side of the boundary.
+The first term prefers a wide margin. The second term is the \emph{hinge loss}: it is zero when an example is safely beyond the margin and grows linearly when that example falls inside the margin or on the wrong side of the boundary.
 \end{mathlens}
+
+\begin{theorem}[Maximum margin is minimum norm under canonical scaling]
+If a separating hyperplane is written in canonical scaling so that
+\[
+\min_i y_i(w^\top x_i+b)=1,
+\]
+then its geometric margin is $1/\|w\|_2$. Therefore maximizing the geometric margin is equivalent to minimizing $\|w\|_2^2$ under the canonical SVM constraints \citep{cortes1995}.
+\end{theorem}
+
+\begin{proof}
+The geometric margin of the separator is
+\[
+\min_i \frac{y_i(w^\top x_i+b)}{\|w\|_2}.
+\]
+Under canonical scaling, the numerator's minimum is exactly $1$, so the margin becomes $1/\|w\|_2$. A separator with larger geometric margin therefore has smaller norm, and minimizing the norm under the same constraints maximizes the margin.
+\end{proof}
 
 \begin{example}[A One-Dimensional Margin Choice]
 Suppose the negative class lies at \(x=0\) and \(x=1\), while the positive class lies at \(x=3\) and \(x=4\). Any threshold between 1 and 3 separates the classes. A threshold at \(x=1.5\) is valid, but the nearest points are only 0.5 away. A threshold at \(x=2\) is also valid, and the nearest points are 1 unit away. The second separator has the larger margin, so it is the better SVM-style choice.
 \end{example}
 
-\begin{codeexample}[caption={A hinge-loss style training sketch for a linear SVM}]
+\begin{codeexample}[caption={A subgradient-style hinge-loss sketch for a linear SVM}]
 initialize w and b
 for each pass over the data:
     for each example (x_i, y_i):
         margin = y_i * (dot(w, x_i) + b)
         if margin < 1:
             # inside the margin or on the wrong side
-            w = (1 - eta * lambda) * w + eta * y_i * x_i
-            b = b + eta * y_i
+            w = (1 - eta * lambda) * w + eta * C * y_i * x_i
+            b = b + eta * C * y_i
         else:
             # only the margin term applies
             w = (1 - eta * lambda) * w
@@ -772,19 +677,9 @@ for each pass over the data:
 # widen the margin, but pay for violations.
 \end{codeexample}
 
-\begin{decisionbox}
-\textbf{When does an SVM fit?}
-\begin{itemize}[leftmargin=*]
-\item Use it when the current representation already makes the classes look close to linearly separable and you want a robust, wide-margin boundary.
-\item Use it when small perturbations should not flip the decision easily.
-\item Prefer a tree or tree ensemble when the task is really region-specific threshold logic or different subgroups obey different rules.
-\item Prefer learned representations first when the geometry itself is poor; an SVM cannot invent missing features or repair a bad embedding.
-\end{itemize}
-\end{decisionbox}
+This is intentionally a subgradient-style sketch for intuition, not a production SVM solver. Its job is to make the update direction legible, not to reproduce the exact optimization routines used in mature libraries.
 
-\begin{practicalnote}
-On the same tiny dataset, different follow-up methods can all be honest for different reasons. A tree is the honest next move when the real story sounds like thresholds or region-specific rules. k-NN is the honest next move when nearby points in the current feature space should genuinely behave alike. An SVM is the honest next move when the current, properly scaled representation already separates the classes reasonably well and the main goal is a robust boundary. Clustering or PCA is the honest next move only when the task is exploratory, unlabeled, or aimed at geometric summary rather than prediction.
-\end{practicalnote}
+An SVM fits when the current representation already makes the classes look close to linearly separable and you want a robust, wide-margin boundary that should not flip under small perturbations. A tree or tree ensemble is the better choice when the task is really region-specific threshold logic or when different subgroups obey different rules. If the geometry itself is poor, learned representations come first; an SVM cannot invent missing features or repair a bad embedding.
 
 \begin{failurebox}
 An SVM is not a replacement for representation learning. If the problem needs many local rules, structured interactions, or a better geometry before any separator makes sense, a tree-based model or a learned representation can be the more honest next step.
@@ -942,7 +837,7 @@ Euclidean distance is not sacred either. Manhattan distance, cosine similarity, 
 
 \section{Scale, Similarity, and the Curse of Dimensionality}
 
-Geometry can be the right inductive bias, but only when the representation deserves that trust. Poor scaling, weak similarity choices, or high-dimensional sparsity can make geometric methods look principled while quietly breaking their neighborhoods.
+The previous section gives the positive story: geometry can be the right inductive bias. This section gives the warning: geometry is fragile if the representation is poor.
 
 As the number of features grows, distances often become less informative. Many points begin to look similarly far away, and local neighborhoods become harder to define meaningfully. This is one form of the curse of dimensionality.
 
@@ -977,6 +872,8 @@ Nearest-neighbor methods are cheap to ``train'' because they mostly store the da
 \end{complexitylens}
 
 This warning also creates a natural bridge forward. Later chapters on learned representations matter partly because they improve the geometry itself. A poor representation makes neighborhood methods brittle. A better representation can make geometry useful again.
+
+The same geometric questions remain when labels disappear, but the task changes from prediction to organization. At that point the issue is no longer how nearby cases should vote, but what grouping or low-dimensional summary is worth inspecting in the first place.
 
 \section{Unsupervised Structure: Organization Without Labels}
 
@@ -1024,7 +921,7 @@ Setting the gradient to zero gives
 \[
 c=\frac{1}{m}\sum_{i=1}^m x_i.
 \]
-So the mean is not an arbitrary convention. It is the point that minimizes squared distance to the assigned cluster members.
+So the mean is not an arbitrary convention. It is the point that minimizes squared distance to the assigned cluster members. This also explains the method's geometric bias: because the mean minimizes squared distance, k-means naturally prefers compact, roughly spherical clusters under Euclidean geometry.
 \end{mathlens}
 
 K-means is appealing because it is simple and fast. But its assumptions are strong. It works best when clusters are roughly compact and separable under the chosen distance metric. If the structure is elongated, nested, imbalanced, or highly nonconvex, k-means can mislead badly.
@@ -1102,7 +999,7 @@ A sports-analytics clustering exercise is a good reminder that the hard part is 
 \end{example}
 
 \begin{failurebox}
-Clusters are model-dependent summaries, not discovered natural kinds. Treating them as objective human categories is one of the most common mistakes in applied machine learning.
+Clusters are model-dependent summaries, not discovered natural kinds. Treating them as objective human categories is a frequent source of overconfident claims in applied machine learning, especially when moving from exploration to policy.
 \end{failurebox}
 
 \begin{claimdefense}
@@ -1135,20 +1032,19 @@ Rerun clustering after changing feature scaling, random initialization, or a sma
     plot[smooth cycle] coordinates {(3.3,1.1)(4.0,0.7)(4.7,1.1)(5.1,2.0)(4.7,2.8)(4.0,3.2)(3.3,2.7)(2.9,1.9)};
   \node[black!70,font=\small\bfseries] at (2.7,4.3) {nonconvex clusters in the world};
 \end{scope}
-%% Panel B: nearest-centroid partition
+%% Panel B: k-means rectangular partition
 \begin{scope}[xshift=7.3cm]
-  \fill[c4kmfPart1] (0.5,0.5) rectangle (2.55,3.6);
-  \fill[c4kmfPart2] (2.55,0.5) rectangle (4.5,3.6);
+  \fill[c4kmfPart1] (0.5,0.5) rectangle (2.4,3.2);
+  \fill[c4kmfPart2] (2.6,0.6) rectangle (4.5,3.1);
   \draw[->,black!70] (0,0) -- (4.3,0) node[right] {$x_1$};
   \draw[->,black!70] (0,0) -- (0,4.0) node[above] {$x_2$};
-  \draw[black!55,thick] (2.55,0.5) -- (2.55,3.6);
-  \filldraw[fill=white,draw=c4kmfTrue1,line width=0.9pt] (1.55,2.1) circle (2.2pt);
-  \filldraw[fill=white,draw=c4kmfTrue2,line width=0.9pt] (3.55,2.1) circle (2.2pt);
-  \node[black!70,font=\small\bfseries] at (2.5,4.3) {Voronoi-style partition};
+  \draw[c4kmfTrue1,thick] (0.5,0.5) rectangle (2.4,3.2);
+  \draw[c4kmfTrue2,thick] (2.6,0.6) rectangle (4.5,3.1);
+  \node[black!70,font=\small\bfseries] at (2.5,4.3) {k-means style partition};
 \end{scope}
 \end{tikzpicture}%
 }
-\caption{K-means is not a universal clustering truth machine. When cluster shape matters, the method's geometric bias can force a misleading nearest-centroid partition.}
+\caption{K-means is not a universal clustering truth machine. When cluster shape matters, the method's geometric bias can force a misleading partition.}
 \label{fig:kmeans-failure}
 \end{figure}
 
@@ -1174,10 +1070,6 @@ An e-commerce team clusters purchasing histories into five groups and labels the
 
 The right habit is to treat any cluster as provisional until three questions are answered: Is the partition stable under small perturbations of the data and initialization? Does the partition support the operational decisions it will be used to justify? And what external evidence would be needed before a causal or social interpretation could be defended?
 
-\begin{practicalnote}
-A good first clustering workflow is short and explicit. First, defend the features and scaling, because those choices define the geometry. Second, run the clustering more than once across different random seeds, nearby values of $K$, and small resamples of the data. Third, summarize each cluster by measurable properties before naming it. Fourth, connect the partition to one downstream question: what decision, analysis, or follow-up action would become better if this grouping were stable? Without that workflow, a convincing-looking scatter plot is usually less informative than it appears.
-\end{practicalnote}
-
 \begin{thinkingtool}
 \textbf{Cluster naming discipline.} Describe clusters by their measurable properties first: average feature values, distinguishing coordinates, and sample size. Name them by social or causal labels only after external validation. A cluster labeled ``high-risk'' that is defined only geometrically is not a validated risk group. It is a starting hypothesis.
 \end{thinkingtool}
@@ -1186,18 +1078,9 @@ A good first clustering workflow is short and explicit. First, defend the featur
 
 Another unsupervised goal is dimensionality reduction. Rather than grouping examples, we try to represent them with fewer coordinates while preserving important structure. Principal component analysis (PCA) is a standard example. It finds directions in feature space along which the data varies most and projects the data onto those directions.
 
-PCA is best taught here not as a competitor to predictive methods, but as a lens:
-\begin{itemize}[leftmargin=*]
-\item a geometric summary,
-\item a useful preprocessing or inspection tool,
-\item and a reminder that simplified views are still model choices.
-\end{itemize}
+PCA is best taught here not as a competitor to predictive methods, but as a lens: a geometric summary, a useful preprocessing or inspection tool, and a reminder that simplified views are still model choices.
 
 PCA is also scale-sensitive. If one feature is measured in a much larger numerical unit than another, it can dominate the first principal component. Standardize features first when the units are not already comparable. On the shared student-profile cloud, the first component mainly tracks raw clicks unless the features are standardized; after standardization, it can reflect the click-versus-lateness tradeoff.
-
-\begin{example}[Using PCA as a Lens on the Shared Student Cloud]
-If the shared cloud is standardized before PCA, the first principal direction captures the main contrast between the safe students with many clicks and few late submissions and the risky students with fewer clicks and more lateness. A second direction then isolates mismatched profiles, such as a student who is active on the platform but still turns work in late. That is a useful undergraduate picture of what PCA is for: not making the decision, but producing a compressed view that highlights the dominant pattern and the unusual residual cases worth reviewing.
-\end{example}
 
 \begin{mathlens}
 For centered data \(x_1,\ldots,x_n\), a one-dimensional PCA direction \(u\) with \(\|u\|_2=1\) can be found by maximizing the projected variance
@@ -1273,11 +1156,7 @@ So PCA keeps the dominant diagonal component of the point and discards the resid
 \end{example}
 
 \begin{advancednote}
-The unsupervised landscape is broader than k-means and PCA. Alternatives such as DBSCAN, hierarchical clustering, t-SNE, and UMAP answer different needs. The conceptual lesson is enough for this chapter:
-\begin{itemize}[leftmargin=*]
-\item DBSCAN and hierarchical clustering are useful when cluster shape or nested structure matters.
-\item t-SNE and UMAP are mainly visualization tools; they can be very informative, but they are not truth machines.
-\end{itemize}
+The unsupervised landscape is broader than k-means and PCA. DBSCAN and hierarchical clustering are often better when cluster shape or nested structure matters, while t-SNE and UMAP are mainly visualization tools. They can be highly informative, but they should not be treated as truth machines.
 \end{advancednote}
 
 \begin{table}[t]
@@ -1302,7 +1181,7 @@ Clustering/PCA & You have no labels and want organization, grouping, or compress
 
 \section{Chapter Artifact: A Structure Diagnosis Sheet}
 
-By this point, the main question is no longer ``which method sounds stronger?'' It is ``what did the linear baseline miss, and what evidence would justify moving beyond it?'' A good diagnosis sheet makes that answer explicit. Instead of ending with a shopping list of methods, it ends with one defended reason for the next step.
+By the end of this chapter, the reader should be able to explain not only which method they want to try next, but why that method matches the failure pattern of the linear baseline. Chapter 3 named the first serious model to try. This chapter names the reason to leave it. The chapter should end with one diagnosis, not with a shopping list of unrelated methods.
 
 \begin{table}[t]
 \centering
@@ -1322,42 +1201,25 @@ Evidence needed & What validation or inspection result would justify moving beyo
 Interpretation boundary & What the method's output does and does not justify claiming \\
 \bottomrule
 \end{tabular}
-\caption{A good stopping point is a structural diagnosis, not a shopping list of methods.}
+\caption{The chapter should end with a structural diagnosis, not with method shopping.}
 \label{tab:structure-diagnosis-sheet}
 \end{table}
 
 \begin{thinkingtool}
-\textbf{Structure diagnosis sheet.} A clean diagnosis states what the baseline missed, what structural hypothesis now seems plausible, why a tree, neighbor, or unsupervised method matches that hypothesis, and what evidence would justify the move.
+\textbf{Structure diagnosis sheet.} Before changing model families, write down what the baseline missed, what structural hypothesis now seems plausible, why a tree, neighbor, or unsupervised method matches that hypothesis, and what evidence would justify the move.
 \end{thinkingtool}
 
 \section{Common Mistakes with Structural Methods}
 
-\begin{mistakebox}
-\item \textbf{Treating trees as automatically interpretable.} Deep trees and boosted ensembles are not automatically transparent.
-\item \textbf{Treating feature importance as causation.} Importance summarizes predictive usefulness, not causal effect.
-\item \textbf{Ignoring scale in distance-based models.} Geometry depends on feature units.
-\item \textbf{Believing clusters too quickly.} A cluster can be mathematically convenient without being substantively meaningful.
-\item \textbf{Treating a low-dimensional plot as the true data structure.} PCA, t-SNE, and UMAP are views, not reality.
-\item \textbf{Skipping the baseline logic.} Explain what structure the tree or neighbor model captures that a linear baseline misses.
-\item \textbf{Mistaking better fit for better judgment.} Better fit does not automatically mean better decisions.
-\end{mistakebox}
+The recurring mistakes here are conceptual rather than computational. Readers treat trees as automatically interpretable even when depth or boosting has made them opaque; they read feature importance as causation; they ignore scale in distance-based models even though geometry depends on units; they believe clusters too quickly; they treat a low-dimensional plot as the data's true structure; and they skip the baseline logic that should explain what the new family actually captures.
 
 \section{Looking Ahead}
 
-Branches, neighborhoods, and low-dimensional views all broaden the idea of structure beyond one weighted sum. The next step is harder: deciding when that structure should be learned rather than engineered, and how optimization teaches a neural network to build it.
+This chapter broadened structure beyond one weighted sum to branches, neighborhoods, and low-dimensional views. The next chapter makes a conceptual leap: it asks when structure should be learned rather than engineered, and how neural networks learn internal representations and decision rules jointly through optimization. That shift from hand-designed features and splits to learned representations is where modern deep learning begins.
 
-The structure diagnosis sheet from this chapter becomes the starting document for Chapter 6's minimum credible neural training report: the move to learned structure should now be explicit rather than fashionable.
+\section*{Chapter Summary}
 
-\begin{chaptersummary}
-\item When the linear baseline fails, the useful next question is what kind of missing structure that failure reveals.
-\item Trees are models for conditional logic and region-specific rules rather than just ``nonlinear alternatives.''
-\item Ensembles do not replace tree logic; they stabilize or strengthen it.
-\item Support vector machines are the geometric companion to that story: they prefer the widest robust separator when the current representation already looks linearly organized.
-\item Nearest-neighbor methods make geometry the model, which means representation and distance choices become central.
-\item Clustering and dimensionality reduction change the question from supervised prediction to exploratory organization and compression.
-\item Clusters are model-dependent summaries, not discovered natural kinds, and low-dimensional plots are useful views rather than truth machines.
-\item The main deliverable of the chapter is a structure diagnosis sheet that justifies the move beyond the linear baseline.
-\end{chaptersummary}
+This chapter treated model choice as structural diagnosis. When a linear baseline fails, the important question is not merely whether more complexity is needed, but what form that missing structure takes. Trees and ensembles address region-specific decision logic, SVMs address robust geometric separation, nearest-neighbor methods treat similarity itself as the model, and clustering or dimensionality reduction address organization when labels are absent. Across all of these methods, the recurring lesson is that representation still matters: geometry, scaling, impurity, and cluster shape are part of the model, not just preprocessing details.
 
 \begin{studyquestions}
 \item Why is ``what kind of structure is missing?'' a better opening question than ``which classical method comes next?'' 
@@ -1377,12 +1239,9 @@ The structure diagnosis sheet from this chapter becomes the starting document fo
 \item Using the binary-case identity $G=2p(1-p)$, compute the Gini impurity of nodes with positive-class fractions $0.1$, $0.5$, and $0.9$. Explain which node is hardest to split cleanly.
 \item Run one k-means iteration by hand for the two-cluster example in Figure~\ref{fig:kmeans-iteration}. State the assignments and the recomputed centers.
 \item Sketch a small 2D dataset for which a shallow tree should beat a linear model for the right reason. State clearly what threshold or interaction the tree captures.
-\item Use Table~\ref{tab:shared-cloud-comparison} to explain why the same student-profile cloud can justify different method choices. For each row, state what structural assumption is being made and what evidence would make that method honest rather than fashionable.
-\item Take one tiny shared dataset of your own design and answer four separate questions about it: why might a tree be the right next move, why might k-NN be the right next move, why might an SVM be the right next move, and why might clustering or PCA be the right move only if the task is exploratory rather than predictive?
 \item Why might a random forest outperform a single decision tree even though both are built from the same basic building block?
 \item Give one example in which clustering could be useful for exploration and one example in which clustering could be dangerously overinterpreted.
-\item A linear baseline fails on a small admission-risk dataset. You may try a depth-3 decision tree, 1-nearest-neighbor classifier, or a linear SVM. Predictions must be fast, explanations to staff matter, and one numeric feature is measured on a much larger scale than the others. Which method is the best first follow-up, which is the weakest first follow-up, and why?
-\item A clustering run is geometrically tidy under one scaling choice but changes sharply when features are standardized or the random seed is changed. State what geometric claim is still possible, what operational claim would need downstream evidence, and what kind of cluster name is still too strong.
+\item Write language-neutral pseudocode for 1-nearest-neighbor classification using Euclidean distance, then explain how the returned label can change after rescaling one feature.
 \item Use Table~\ref{tab:structure-diagnosis-sheet} to write a one-page diagnosis for a failed linear baseline in either student support, spam filtering, or another application of your choice. If you are carrying one case through the book, extend the baseline design sheet from the previous chapter instead of inventing a fresh failure.
 \end{exercises}
 
@@ -1391,6 +1250,5 @@ The structure diagnosis sheet from this chapter becomes the starting document fo
 \item Suppose a 1-nearest-neighbor classifier gives unstable predictions when one feature is added to the dataset. Give two different explanations for why this could happen.
 \item A team clusters user behavior data into four groups and labels them ``leaders,'' ``followers,'' ``at risk,'' and ``disengaged.'' Explain why this move from mathematical grouping to substantive naming requires additional evidence, and describe what evidence would help.
 \item Give a clustering result that looks convincing on one 2D plot but should still fail a stability sanity check. Explain what change in scaling, initialization, or sampling would reveal the weakness.
-\item A course team wants to use the shared student cloud for intervention design. Write three short sentences in order: one that states only a geometric clustering claim, one that states an operational usefulness claim, and one stronger causal or social naming claim that is still unjustified. The goal is to make the boundary between those three levels explicit.
 \item DBSCAN, hierarchical clustering, t-SNE, and UMAP sit alongside k-means and PCA for different reasons. Give one sentence each on what problem characteristic might make you look beyond k-means.
 \end{challengeexercises}

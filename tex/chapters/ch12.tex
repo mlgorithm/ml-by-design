@@ -1,36 +1,10 @@
 \chapter{From Models to Systems}
 
-\begin{learninggoals}
-\item Understand why a deployed AI system must be designed as a pipeline with requirements, interfaces, monitoring, and fallback behavior rather than as a model checkpoint alone.
-\item Distinguish offline model quality from system quality, including latency, capacity, coverage, calibration, and review workflow constraints.
-\item Explain training-serving skew and why data contracts and feature consistency matter as much as model architecture.
-\item Analyze selective prediction, human review, and threshold choice as system design decisions rather than only model-evaluation details.
-\item Learn when an AI system should be simplified, constrained, or rejected because the full operational setting does not support reliable deployment.
-\end{learninggoals}
+A good model is not yet a good system. Once predictions enter a real workflow, the relevant question changes from whether the model is accurate to whether the service built around it is useful, stable, and governable. Inputs must arrive in the right form, thresholds become operational policies, human review creates queues and bottlenecks, and monitoring must continue after launch. This chapter asks whether the entire decision pipeline improves the real task under real organizational constraints. By the end of the chapter, the reader should be able to write a system-readiness brief that connects model quality to operational reality. A \emph{service-level objective} is a measurable promise about latency, backlog, coverage, or severe-error control, and a \emph{data contract} states what inputs, units, and preprocessing rules must hold before the service may act.
 
-\begin{whychaptermatters}
-This chapter widens the unit of analysis from model to service. After reading it, students should connect objectives, contracts, thresholds, review paths, monitoring, and rollback before calling a system ready. The system readiness brief extends the reliability review card into the book's final launch-or-no-launch artifact.
-\end{whychaptermatters}
+Keep the same running case in view from the earlier language, experiments, and reliability chapters: a grounded course-support assistant that routes student messages, retrieves institutional policy, drafts bounded answers for routine cases, and escalates uncertain or high-risk cases to humans. This chapter asks whether that system is ready to launch as an actual service rather than as an impressive demo.
 
-The previous chapter argued that reliability lives in the full pipeline, not only in the model. Deployment makes that point concrete. A deployed AI system includes data collection, preprocessing, model inference, thresholds, interfaces, logging, monitoring, fallback behavior, human review, and organizational ownership. A model can be mathematically elegant and still fail as a service because one of those surrounding pieces is missing or poorly designed. This systems view matches long-running warnings about hidden technical debt and the software-engineering realities of ML production \citep{sculley2015,amershi2019}.
-
-The question is therefore broader than whether a model learned a useful mapping from inputs to outputs. The real question is whether the whole decision pipeline improves the task under the actual constraints of deployment. That is the habit students need if they want to build trustworthy systems rather than impressive demos.
-
-\begin{problemsolvinglens}
-This chapter asks how a prediction becomes an action inside a real organization. The unit of success is no longer the model checkpoint, but the full system that surrounds it.
-\end{problemsolvinglens}
-
-\begin{thinkingtool}
-\textbf{Pipeline realism.} Ask what would break when a notebook result becomes a service: contracts, preprocessing, thresholds, review queues, monitoring, rollback, ownership, and organizational support.
-\end{thinkingtool}
-
-\begin{thinkingtool}
-\textbf{Common failure mode $\rightarrow$ recovery move.} Failure mode: trying to launch a strong offline model before the system has an input contract, escalation path, monitoring triggers, and a named owner. Recovery move: write the service blueprint first, including validation, thresholds, fallback behavior, review-capacity limits, alert conditions, and rollback authority, then judge the model only inside that operational design.
-\end{thinkingtool}
-
-Keep the same running case in view from the earlier language, experiments, and reliability chapters: a grounded course-support assistant that routes student messages, retrieves institutional policy, drafts bounded answers for routine cases, and escalates uncertain or high-risk cases to humans. The goal now is to judge whether that system is ready to launch as an actual service rather than as an impressive demo.
-
-That language workflow remains the main capstone because contracts, retrieval, escalation, and review paths are easy to see in it. A second contrast case, the dashboard-camera pedestrian detector from Chapter 8, shows that the same systems questions survive outside educational NLP: what objective matters, what inputs are trusted, when automation is allowed, how failure is detected, and who can intervene.
+That language workflow remains the primary capstone because it makes contracts, retrieval, escalation, and review paths easy to see. It also gives the chapter its spine: service objective first, then requirements and contracts, then action policy, then monitoring and launch readiness. But the same systems questions should also survive outside one domain, so this chapter will repeatedly contrast it with the dashboard-camera pedestrian detector from Chapter 8. The aim is to make the systems lesson clearly broader than educational NLP.
 
 \begin{figure}[t]
 \centering
@@ -65,20 +39,8 @@ That language workflow remains the main capstone because contracts, retrieval, e
 \end{figure}
 
 \begin{example}[A First End-to-End Service Sketch]
-For the course-support assistant, the system story can already be written in one pass. Validate the incoming message and context. Retrieve only approved current policy sources. Score whether the case is safe enough to answer automatically. If retrieval is weak, the topic is high risk, or that safety score is too low, escalate to a human instead of answering. Log the decision, the evidence used, and the outcome. Monitor overrides, backlog, and citation failures, and give one named owner the authority to tighten the policy or roll back the service.
+For the course-support assistant, the system story can already be written in one pass. Validate the incoming message and context. Retrieve only approved current policy sources. Score whether the case is routine enough to answer automatically. If retrieval is weak, the topic is high risk, or the automation-safety score is too low, escalate to a human instead of answering. Log the decision, the evidence used, and the outcome. Monitor overrides, backlog, and citation failures, and give one named owner the authority to tighten the policy or roll back the service.
 \end{example}
-
-\begin{example}[Failure Cascade: Good Model, Bad Service]
-Suppose the retrieval contract quietly accepts a stale policy page. The model still produces a confident score, so the threshold layer allows direct answers on routine-looking messages. A small fraction of those answers are now wrong, which triggers more user corrections and human overrides. The override spike overloads the review queue, delays genuinely high-risk cases, and finally forces rollback. Nothing in that cascade required a bad neural model in isolation; it required one broken systems boundary to interact with confidence, policy, and queue capacity.
-\end{example}
-
-\begin{practicalnote}
-Read the rest of the chapter as a slow fill-in of the same service sketch. Requirements sharpen the objective, contracts define valid inputs, thresholds define actions, monitors define warnings, and ownership defines who can stop the system when those pieces drift apart.
-\end{practicalnote}
-
-\begin{minimumtakeaway}
-The system is not the model alone. It is the model plus the input contract, policy layer, review path, monitoring, rollback, and owner. A strong offline score can still sit inside a bad service.
-\end{minimumtakeaway}
 
 \section{Systems Thinking Changes the Question}
 
@@ -92,50 +54,24 @@ Consider the course-support assistant. The institution does not really want conf
 
 \subsection{Service-Level Objectives Make the Objective Operational}
 
-One useful way to make the service objective concrete is to write service-level objectives rather than stopping at general hopes such as ``be accurate'' or ``be helpful.'' A service-level objective states what the workflow must achieve under real operating conditions.
-
-\begin{itemize}[leftmargin=*]
-\item maximum response latency for routine questions,
-\item minimum escalation recall on high-risk messages,
-\item maximum average human-review backlog,
-\item minimum grounded-citation coverage on automated answers,
-\item maximum severe-error rate before rollback is required.
-\end{itemize}
+One useful way to make the service objective concrete is to write service-level objectives rather than stopping at general hopes such as ``be accurate'' or ``be helpful.'' A service-level objective states what the workflow must achieve under real operating conditions: for a support assistant, that may mean maximum response latency for routine questions, minimum escalation recall on high-risk messages, maximum average human-review backlog, minimum grounded-citation coverage on automated answers, and a maximum severe-error rate before rollback is required.
 
 These are not replacements for model metrics. They are the bridge between model behavior and operational value. A model can raise offline answer accuracy slightly while violating the system's response-time or review-capacity objectives. In that case the model improved, but the service did not.
 
-\begin{practicalnote}
-If the team cannot name the service-level objectives, it is still too early to say whether a threshold, model family, or deployment plan is good. The model objective becomes meaningful only when it is tied to a workflow target the organization actually cares about.
-\end{practicalnote}
-
-\begin{decisionbox}
-Before asking ``which model performs best?'', ask ``what decision or workflow is being improved, what capacity exists to act on the output, and what kinds of mistakes are acceptable?'' The model can only be judged inside that broader operational context.
-\end{decisionbox}
-
-\begin{practicalnote}
-A compact deployment workflow is: state the service objective, write the input contract, choose the operating policy and fallback path, test latency and capacity limits, define monitoring and rollback triggers, and only then decide whether launch is justified. A readiness brief simply writes that deployment argument in one place.
-\end{practicalnote}
+If the team cannot name the service-level objectives, it is still too early to say whether a threshold, model family, or deployment plan is good. The model objective becomes meaningful only when it is tied to a workflow target the organization actually cares about. Before asking which model performs best, ask what decision or workflow is being improved, what capacity exists to act on the output, and what kinds of mistakes are acceptable. That sequence is also the chapter order in miniature: state the service objective, write the input contract, choose the operating policy and fallback path, test latency and capacity limits, define monitoring and rollback triggers, and only then decide whether launch is justified. The readiness brief at the end is the written form of that workflow.
 
 \begin{figure}[t]
 \centering
 \resizebox{\linewidth}{!}{\input{figures/ch12-system-architecture}}
-\caption{A full deployment architecture adds approved sources, logging, monitoring, feedback, and rollback around the model path. The model is only one component in the service.}
+\caption{Complete system architecture for production AI deployment. The system includes not only the core ML pipeline but also operational components for monitoring, alerting, feedback collection, and rollback capability. A named system owner can tighten thresholds, update validation rules, and disable the service when alerts indicate that it is drifting out of bounds.}
 \label{fig:complete-system-architecture}
 \end{figure}
 
 \subsection{Success Includes More Than Accuracy}
 
-Several non-accuracy constraints routinely matter:
-\begin{itemize}[leftmargin=*]
-\item \textbf{latency}: how quickly must a prediction be returned?
-\item \textbf{throughput}: how many predictions must the system handle?
-\item \textbf{review capacity}: how many uncertain cases can humans inspect?
-\item \textbf{cost}: what computation, storage, or annotation effort is affordable?
-\item \textbf{stability}: do outputs fluctuate so much that users lose trust?
-\item \textbf{auditability}: can later investigators explain what happened?
-\end{itemize}
+Several non-accuracy constraints routinely matter: latency, or how quickly a prediction must be returned; throughput, or how many predictions the system must handle; review capacity, or how many uncertain cases humans can inspect; cost, or what computation, storage, or annotation effort is affordable; stability, or whether outputs fluctuate enough to make users lose trust; and auditability, or whether later investigators can explain what happened.
 
-These constraints are not secondary implementation details. They change which model class, threshold, interface, or deployment pattern is appropriate. The first deployment question is therefore simple: what must the service achieve before any model can be called good enough?
+These constraints are not secondary implementation details. They change which model class, threshold, interface, or deployment pattern is appropriate. The next section starts with the first deployment question in that workflow: what must the service achieve before any model can be called good enough?
 
 \section{Requirements Before Training}
 
@@ -147,17 +83,27 @@ An operational requirement is a concrete condition that the deployed system must
 
 \subsection{Worked Example: Queue Capacity Changes the Threshold}
 
-Suppose the advising team behind the course-support assistant can manually inspect at most $30$ escalated messages per day. The system assigns each incoming message an \emph{automation-safety score}, where larger values mean stronger evidence that the system can answer safely without human review. On a $200$-message day, a stricter threshold for automatic answering sends $78$ messages to humans. A more permissive threshold sends $26$.
+Suppose the advising team behind the course-support assistant can manually inspect at most $30$ escalated messages per day. The system assigns each incoming message an \emph{escalation score}, where larger values mean stronger reason to defer to a human. On a $200$-message day, a lower escalation threshold sends $78$ messages to humans. A stricter escalation threshold sends $26$.
 
-If the team deploys the stricter policy because it appears safer in isolation, the queue may overload the staff and slow all responses, including the truly urgent ones. The seemingly more cautious threshold can therefore produce the weaker service. The stricter threshold may reduce some automation errors on borderline cases, but it also produces a queue the organization cannot actually process.
+If the team deploys the more aggressive policy because it appears safer in isolation, the queue may overload the staff and slow all responses, including the truly urgent ones. The seemingly more cautious threshold can therefore produce the weaker service. The stricter threshold may let more medium-risk cases stay automated, but it also produces a queue the organization can actually process.
 
 \begin{mathlens}
-Let $q_t$ be the review backlog after day $t$, let $r$ be daily human capacity, and let $a(\tau)$ be the number of cases escalated by automation threshold $\tau$. Then
+As a simple day-by-day toy model, let $q_t$ be the review backlog after day $t$, let $r$ be daily human capacity, and let $a(\tau)$ be the number of cases escalated by threshold $\tau$. Then
 \[
 q_{t+1}=\max\{0,\;q_t+a(\tau)-r\}.
 \]
-An overly strict threshold can destabilize the queue if it makes $a(\tau)>r$, because the backlog then grows instead of clearing.
+In this toy recurrence, a lower escalation threshold destabilizes the queue when it makes $a(\tau)>r$, because the backlog then grows instead of clearing.
 \end{mathlens}
+
+\begin{theorem}[Little's Law links average backlog, arrival rate, and waiting time]
+For a stable system in steady state, the average number of items in the system satisfies
+\[
+L=\lambda W,
+\]
+where \(L\) is the average number of items in the system, \(\lambda\) is the average arrival rate, and \(W\) is the average time an item spends in the system \citep{little1961}.
+\end{theorem}
+
+The toy backlog recurrence above is useful because it makes overload vivid one day at a time. Little's Law adds the more general systems statement: if escalations arrive faster than they can be cleared, then average waiting time must rise because the queue itself becomes part of the service.
 
 This is not a trick example. Many deployments face exactly this issue. The useful prediction is not the one that looks best in isolation. It is the one that leads to the best action process under real constraints.
 
@@ -215,6 +161,8 @@ A practical response is to define data contracts. These specify what features ex
 Many deployment bugs are ordinary software bugs: wrong field order, missing normalization, stale joins, silently changed units, or inconsistent tokenization. Systems engineering matters because these bugs can dominate model quality in production.
 \end{practicalnote}
 
+Once the input contract is fixed, the next systems question is not what the model predicts, but how the service will act on that prediction.
+
 \section{Prediction Is Not the Decision}
 
 One of the most important system lessons is that a model output is not the final decision. Most models return a score, probability, rank, or generated candidate. The deployed system must still decide what action to take with that output. After the service objective, requirements, and input contract are fixed, this is the next design boundary: how does a score become an action in the real workflow?
@@ -225,9 +173,15 @@ Choosing a threshold is not a purely mathematical cleanup step after training. I
 
 \subsection{Queueing, Review Capacity, and Human Bottlenecks}
 
-Once abstention or escalation is available, the threshold also becomes a queueing decision. The same safety score that controls automation coverage also controls review load. If the threshold for automatic answering is raised, more borderline cases move into the human queue. That may reduce some automated mistakes, but it also increases delay, reviewer fatigue, and the chance that urgent cases wait behind routine ones.
+Once abstention or escalation is available, the threshold also becomes a queueing decision. Suppose the course-support assistant handles about $120$ messages on a busy day and the advising team can review at most $20$ escalated cases before the backlog starts harming response time. A lower threshold might escalate $36$ messages, while a stricter threshold escalates $18$.
 
-This is why queueing belongs in the policy discussion rather than in an operations appendix. The right threshold is constrained by both mistake costs and review capacity. A policy that looks safer on isolated examples may still produce a weaker service once backlog and delay are counted as part of the outcome.
+If the lower threshold improves severe-error control only slightly but creates a daily backlog of $16$ unresolved messages, then after five similar days the system accumulates roughly $80$ delayed cases. At that point the system may be statistically cautious and operationally failing. Students should recognize this as a systems error, not merely as a staffing footnote.
+
+\begin{mathlens}
+The same queue can be written as $q_{t+1}=\max\{0,\;q_t+a_t-r\}$, where $a_t$ is the day-$t$ deferral count. Stability requires average arrivals below capacity, $\mathbb{E}[a_t]<r$. If a lower escalation threshold raises deferred cases from $18$ to $36$ while $r=20$, then the expected drift becomes positive and the backlog grows.
+\end{mathlens}
+
+In the toy model, the right threshold is therefore constrained by both mistake costs and queue capacity. Under Little's Law, the same pressure reappears as waiting time: once average deferrals rise, average review delay must rise with them unless the organization adds capacity or narrows automation. A policy that looks safer on isolated examples may therefore produce a weaker service once review load, delay, and reviewer fatigue are counted as part of the outcome.
 
 \begin{decisionbox}
 When human review is part of the system, do not choose the threshold from precision and recall alone. Estimate how many cases the policy will defer per hour or per day, compare that with real review capacity, and ask what backlog the organization can tolerate before service quality degrades.
@@ -247,9 +201,9 @@ The practical consequence is that teams should not monitor only click-through or
 
 Sometimes the right system does not force the model to answer every case. Instead, it allows abstention: confident cases are automated, while ambiguous cases are deferred to humans or alternative procedures \citep{geifman2017}. In the running support-assistant case, the real decision is often among answer, refuse, and escalate rather than simply positive versus negative.
 
-The word \emph{confidence} needs discipline here. It should not mean a vague feeling that the model ``sounds certain.'' It should mean an estimate tied to the action policy. For the support assistant, a useful quantity is an \emph{automation-safety score}: the estimated probability that an automatic answer will stay in scope, remain grounded in approved evidence, and avoid an escalation-worthy mistake.
+The word \emph{confidence} needs discipline here. It should not mean a vague feeling that the model ``sounds certain.'' It should mean an estimate tied to the action policy. For the support assistant, a useful score would be something like the estimated probability that an automatic answer will stay in scope, remain grounded in approved evidence, and avoid an escalation-worthy mistake.
 
-This is the same safety idea used in the earlier service sketches. Larger values mean stronger evidence that automatic answering is acceptable. Lowering the threshold accepts more cases automatically; raising it sends more cases to review.
+This score direction is deliberately different from the earlier queue examples. There the score measured escalation pressure, so a lower threshold produced more human review. Here the score measures automation safety, so a lower threshold accepts more cases for automatic answering.
 
 \begin{mathlens}
 Let $a(x)\in\{0,1\}$ indicate whether the system answers on input $x$, and let $\ell(f(x),y)$ be the loss on answered cases. Then coverage is $\phi=\mathbb{E}[a(x)]$ and selective risk is
@@ -300,6 +254,10 @@ Useful monitoring often includes:
 
 For the course-support assistant, useful monitors would include policy-retrieval hit rate, citation coverage in answered messages, escalation rate by subgroup, advisor override rate, backlog length, and complaint or re-contact rate after automated replies.
 
+\begin{warningbox}
+Deployed models can create feedback loops. A recommendation system that surfaces certain content causes users to engage with it, which then becomes training data that reinforces the same recommendations. A fraud detector that blocks certain transaction patterns causes fraudsters to shift tactics, changing the input distribution. These loops mean that the model's own outputs alter the data it will be trained on next. Monitoring must watch for distributional shifts that the model itself may have caused, not only shifts from external sources.
+\end{warningbox}
+
 \subsection{Delayed Labels Make Monitoring Harder}
 
 Many real systems do not receive immediate ground truth. A support assistant may learn that an answer was inadequate only when an advisor corrects it later, when a student asks again, when a complaint arrives, or when a periodic audit catches a policy mistake. This delay means teams must monitor proxy signals as well as eventual outcomes. A silent increase in retrieval misses, escalation backlog, or answer overrides can be an early warning even before formal labels arrive.
@@ -326,7 +284,11 @@ If shadow results are acceptable, the next step is often a \emph{canary release}
 
 For product changes where randomized exposure is acceptable, online controlled experiments provide the strongest evidence about whether a deployment helps real users. Kohavi et al.\ argue that trustworthy online experiments are valuable precisely because intuition and offline metrics can be misleading once a change reaches live traffic \citep{kohavi2012,kohavi2013}. In this chapter's language, an A/B test is not only a product-growth tool. It is a way to test whether a systems change improves the real workflow without silently degrading something else.
 
-That requires guardrails. A system should not be judged only on one headline metric such as click-through rate, average response time, or overall resolution rate. A rollout scorecard should also track severe failures, subgroup disparities, complaint rate, human-review backlog, safety-rule violations, and any metric that would justify immediate rollback. A small gain on a surface metric does not justify launch if a guardrail metric gets worse.
+\begin{advancednote}
+A/B testing assumes that assigning one user to treatment does not affect another user's outcome (the stable-unit-treatment-value assumption). This assumption breaks in networked settings: if a recommendation shown to one user affects what a second user sees (through social sharing, inventory depletion, or marketplace effects), the measured treatment effect may be biased. In such cases, cluster randomization or switchback designs are safer alternatives.
+\end{advancednote}
+
+That requires guardrails. A \emph{guardrail metric} is any live measure severe enough to block expansion or trigger rollback even when the headline metric improves. A system should not be judged only on one headline metric such as click-through rate, average response time, or overall resolution rate. A rollout scorecard should also track severe failures, subgroup disparities, complaint rate, human-review backlog, safety-rule violations, and any metric that would justify immediate rollback. A small gain on a surface metric does not justify launch if a guardrail metric gets worse.
 
 \begin{decisionbox}
 Do not ship a new model to everyone simply because offline validation improved. Ask what staged release plan will test the change safely: shadow evaluation, canary traffic, randomized comparison, guardrail thresholds, and rollback conditions.
@@ -351,6 +313,96 @@ People can become over-reliant on model outputs, ignore contradictory evidence, 
 \begin{decisionbox}
 Adding a human reviewer does not automatically make a system safe. The review step must have clear triggers, enough time, adequate information, and authority to override the model when necessary.
 \end{decisionbox}
+
+\section{Human-AI Interaction Design}
+
+How a model's output is presented to humans affects decision quality as much as the model's accuracy itself. A system that shows ``87\% likely at risk'' is interpreted differently from one that recommends ``flag this student for review.'' The interface is not cosmetic; it is a design choice with measurable consequences for how users trust and act on system outputs.
+
+\subsection{The Interface Is Part of the System}
+
+The model produces a score or prediction. The interface turns that signal into action. A reinforcement for human oversight, selective prediction, and human-in-the-loop systems is that the display format, information density, and interaction cost all reshape the efficacy of human review. Consider a system that shows ten pieces of evidence, a confidence score, a model recommendation, and a red warning flag. Contrast it with a system that shows only the confidence number. Both rest on the same underlying model, but they will produce different human decisions and different override rates. Teams often focus on model training until launch, then delegate interface design to product teams or UI engineers. The result is that decisions about display format become a free variable, never studied as carefully as model hyperparameters.
+
+\begin{decisionbox}
+The interface design for human review is not a separate product concern. It is part of the ML system's reliability. Changes to what information is shown, how uncertainty is rendered, and how much friction exists in accepting or overriding a model recommendation measurably affect decision quality.
+\end{decisionbox}
+
+\subsection{Presenting Uncertainty}
+
+When the model produces a confidence score or probability, should the human see it? If so, in what form? Research on risk communication shows that humans interpret the same number very differently depending on format: ``70\% likely,'' ``7 out of 10,'' and a filled bar chart convey the same probability but lead to different choices \citep{lipkus2007}. For systems that escalate uncertain cases, the question is more nuanced. If the human cannot practically distinguish between a confidence of $0.70$ and $0.85$ under time pressure, collapsing those scores into three ordered categories---\emph{confident}, \emph{uncertain}, \emph{abstain}---may produce better human decisions than displaying the raw probability. In the course-support assistant, an advisor reviewing a flagged message needs to know whether the model abstained because the retrieved evidence was weak, because the wording was unusual, or because the topic touched on high-risk categories. Showing a bare confidence number often provides less information than showing the rule or mechanism that triggered escalation.
+
+\begin{advancednote}
+Calibrated probabilities help only if the human understands their meaning. Teams sometimes display confidence scores faithfully calibrated to hold uncertainty meaning under realistic conditions, only to have those scores misinterpreted because the interface provided no scale, no reference point, or no context. User studies of whether a probability display actually improves decision-making are more informative than theoretical calibration metrics.
+\end{advancednote}
+
+\subsection{Automation Bias and Overtrust}
+
+A persistent failure mode in human-in-the-loop systems is automation bias: humans tend to accept machine recommendations uncritically, especially under time pressure. A system that is correct $90\%$ of the time may suffer worse automation bias than a system correct only $70\%$ of the time if users expect and trust the correct one. The worse the bias, the less useful the human review step becomes. Several design patterns mitigate this risk. One is to require the human to form an independent judgment before seeing the model's recommendation. Another is to show evidence or reasoning that supports the recommendation, rather than a bare score or yes-no label. A third is to design friction or friction for high-stakes decisions: require confirmation, ask for justification of an override, or require two-person sign-off on severe actions. These are not obstacles to speed. They are mechanisms to ensure the human actually reviews rather than rubber-stamps.
+
+\begin{warningbox}
+Automation bias is worse when the model is usually correct. A highly accurate model can create false confidence in the system, leading humans to stop questioning its output. In that regime, the combined human-plus-model system may be worse than either the model alone or a less automated workflow where humans have more authority.
+\end{warningbox}
+
+\subsection{Explanation and Justification}
+
+When should the system show why it made a decision? The reflexive answer is ``always,'' in the spirit of explainability or transparency. The precise answer is more conditional. High-stakes decisions where humans are expected to understand and critique the recommendation benefit from evidence: why was this case escalated, what features or examples drove the score, what policy rule was triggered? But low-stakes, fully automated decisions that never reach a human do not benefit from explanations, and displaying them only creates compliance burden without improving outcomes. Feature attributions can mislead if they are unstable---minor input perturbations produce major changes in the attributed importance---or if they reflect the model's learned spurious associations rather than true causal drivers. The standard for explanations should be pragmatic: does showing this explanation help the human make a better decision than not showing it? If a pilot study shows that the explanation is ignored, misunderstood, or used inconsistently, remove it rather than shipping a transparency theater.
+
+For the course-support assistant, the relevant explanation is usually context: the student's original message, the retrieved policy passages that inform the answer, and the rule or confidence trigger that caused escalation. These are direct, grounded, and actionable for the advisor. In contrast, a feature-importance vector showing that the word ``dorm'' contributed +0.3 to the score and ``scholarship'' contributed $-0.1$ is less useful for human judgment.
+
+\subsection{Designing for Override}
+
+A human-in-the-loop system only works if humans can realistically disagree with the model. If the interface makes it easy to accept a recommendation (one click, auto-advance) but difficult to override it (five clicks, confirmation dialog, manager approval), the interface is biased toward accepting the model, and the combined system will skew toward the model's errors. Conversely, if override is frictionless, humans may override so frequently that the model becomes a rubber stamp and the escalation signal becomes noise. The override rate is a useful diagnostic. A very low override rate may indicate automation bias or a poorly designed interface that discourages dissent. A very high override rate may indicate that the model is simply not good enough for its task, or that the escalation criteria are too loose. The design challenge is to find a rate that reflects genuine uncertainty or error, not friction or bias.
+
+\begin{example}[Override as Monitoring Signal]
+In a court-support system, suppose escalated cases have a 95\% human override rate: the human reviewer disagrees with the recommendation almost always. This suggests either that the model is poor, the escalation criteria are wrong, or the interface makes overriding easy and accepting hard. The solution is not to trust the model more. It is to investigate whether the escalation rule is filtering out meaningful cases, whether the model is calibrated to the task, or whether the interface should be redesigned to balance acceptance and override friction.
+\end{example}
+
+\subsection{Running Case: Advisor Workflow}
+
+Return to the course-support assistant. When an advisor is asked to review a student's escalated message, should they see the model's routing recommendation first or after reading the message? Seeing the recommendation first risks automation bias; the advisor may anchor on the model's choice before forming an independent judgment. Seeing it only after reading the message preserves human autonomy but delays the information that might help the advisor decide. The solution is context-dependent: show the recommendation only after the advisor has read the student's message and the relevant policy passages, to preserve independence while still providing the model's signal in time to influence action.
+
+In systems with very high volume and limited human capacity, there may be no time for human independence checks. The pedestrian detector from Chapter 8 illustrates this constraint. A car dashboard has perhaps 300 milliseconds to alert the driver to a hazard; there is no time for the driver to form an independent judgment before seeing the alert. In that regime, the interaction design must shift to automatic detection with human monitoring of aggregate behavior. Does the alert rate stay within expected bounds? Are there patterns of false positives that suggest retraining? Does latency stay under 100 milliseconds? Here the human role is not to review each detection but to monitor whether the overall system behavior remains trustworthy.
+
+\section{Bandits, Online Learning, and Adaptive Systems}
+
+The earlier monitoring sections showed how to detect when a deployed system drifts away from its development assumptions. This section asks a complementary question: when should the system adapt automatically to improve its policy, rather than waiting for a human team to retrain and redeploy? This is the explore-exploit tradeoff, a classical problem in online learning and decision-making under uncertainty.
+
+\subsection{From Monitoring to Adaptation}
+
+Monitoring reveals when the system is degrading. The response so far has been human-driven: the team notices a drift alert, investigates the root cause, trains a new model, tests it carefully, and rolls it out. This cycle can take days or weeks, during which the system operates with a suboptimal or failing policy. In some settings this is the right approach, especially for high-stakes decisions where any policy change should be deliberate and reviewed. In other settings---particularly low-risk, high-volume, fast-feedback scenarios---the system could adapt its behavior directly based on live feedback without waiting for human retraining. The question is not whether the system should be adaptive, but when adaptation is safe and beneficial enough to justify the complexity and risks it introduces.
+
+\subsection{The Explore-Exploit Tradeoff}
+
+A system that always exploits its best current policy never discovers better alternatives. A system that always explores wastes time and resources on options that are known to be suboptimal. This tradeoff is the core of the bandit problem and multi-armed bandit algorithms \citep{sutton1998}. In the language of reinforcement learning, exploration means taking an action to learn its value; exploitation means taking the action known to have the highest expected value. The tension is inherent: exploring hurts immediate performance to gain information; exploitation uses current information but may miss a better policy that appears only rarely or early in the data stream.
+
+Consider the course-support assistant. The system currently routes messages using a fixed policy: if retrieval is weak, abstain; if high-risk rules fire, escalate; if confidence is above threshold, answer. This policy was learned once during training. An adaptive system could instead use live feedback to adjust its routing decisions. If a particular class of message---say, housing-related questions---begins to generate more overrides after deployment, the system could gradually increase the routing threshold for housing, so fewer cases are answered automatically. This adapts to the changing feedback without retraining. But if the system is too quick to adapt, it might overfit to noise in the feedback signal or change its policy based on an unusual spike rather than a genuine shift in the task.
+
+\subsection{Contextual Bandits}
+
+When the best action depends on features of the current example, the problem becomes a \emph{contextual bandit}. The system observes context (features of the current student message), chooses an action (answer, escalate, refuse), and observes a reward (was the action correct, was it overridden, how was it received?). Critically, it observes the outcome only for the action it chose, never for the action it did not take. This is the counterfactual problem: if the system answered when it could have escalated, we never learn what would have happened had it escalated instead. Because the training signal is always incomplete, contextual-bandit learning is harder than supervised learning, where the model sees the true label regardless of its prediction.
+
+This partial-feedback structure makes offline policy evaluation difficult. A new routing policy might improve on the current one, but to evaluate it without deploying it, the system would need to estimate what the outcome would have been under the new policy for all the cases it decided under the old policy. This is called \emph{off-policy evaluation} and is approximate by necessity. Chapter 10's discussion of claim discipline applies here: even in adaptive systems, claims about policy performance must be bounded rather than treated as absolute. A system that silently adapts based on weak off-policy evaluation signals may diverge from its original design without warning.
+
+\subsection{When Online Adaptation Is Appropriate}
+
+Adaptive systems make the most sense in low-stakes, high-volume, fast-feedback settings. Recommendation systems are a canonical example: showing a user different movie recommendations generates immediate feedback (did they click?), the stakes are low (a bad recommendation is a minor inconvenience), and the volume is high (millions of recommendations per day). Ad placement is similar. In contrast, adaptation is usually inappropriate in high-stakes settings where exploration has real ethical costs. A medical-treatment recommender should not randomly assign patients to different treatments to explore which works better; the patients are part of the exploration, and the costs to them are severe. Criminal-justice risk assessments should not try different scoring policies on defendants to learn which works better; the individuals are subject to the exploration. Even if the system eventually learns a better policy, the cost to those exposed during the exploration phase is unjustifiable.
+
+There are also settings where adaptation is technically possible but poorly motivated. If feedback arrives weeks or months after the decision (as in many loan-approval or hiring systems), the training signal is too delayed to be useful. A system that adapts to feedback from decisions made six months ago is not learning the current distribution; it is chasing noise in a stale signal. In such cases, occasional full retraining with fresh data is more defensible than continuous online adaptation.
+
+\begin{decisionbox}
+Online adaptation should be chosen deliberately, not default. Ask: Are the stakes low enough that exploration has acceptable cost? Is feedback fast enough that adaptation learns the current distribution, not stale noise? Is the volume high enough that learning from live feedback is more efficient than periodic retraining? If the answer to any of these is ``no,'' keep the system in human-controlled batch retraining mode.
+\end{decisionbox}
+
+\subsection{Logging Policies and Off-Policy Evaluation}
+
+To support both online adaptation and offline evaluation of new policies, the system must log what it did and what happened. When a message arrives, log the features, the action taken, and the outcome (whether the case was overridden, whether the answer was used, eventual audit results). This log becomes a record of the policy in effect and a source of training data for learning a better one.
+
+Off-policy evaluation works by asking: ``Given this log of past decisions under the old policy, how well would a new policy have performed?'' The challenge is that the new policy would have taken different actions on many cases, and we do not know the outcomes of actions we did not take. Various techniques---propensity weighting, doubly robust estimation, partial-information loss---attempt to estimate new-policy performance from the partial-information log, but all are approximate and all make assumptions about the data-generation process. The role of the data scientist is to understand the direction and magnitude of bias in the evaluation, not to treat it as ground truth.
+
+This connects directly to Chapter 10's emphasis on claim discipline. A system that uses off-policy evaluation to adapt its policy without bounds may drift silently from its initial design. A more cautious approach is to treat off-policy evaluation as a screening step: if a new policy looks much worse than the current one, do not deploy it. If it looks similar or slightly better, deploy in shadow mode or a limited canary release and collect direct evidence before full rollout. The system learns from live feedback, but its learning is bounded by skepticism about what offline logs can fairly claim.
+
+\begin{example}[Bandit Algorithms in Course Support]
+The course-support assistant could use a contextual-bandit algorithm to adapt its routing policy over time. For each message, the system logs the routing decision, the advisor's response (was the escalation appropriate? did the advisor override?), and eventual student feedback (did the student find the answer helpful?). A learning algorithm can use this log to estimate which routing thresholds work best for which message types. If messages about housing-related issues consistently generate low override rates and high satisfaction, the system could gradually increase its threshold for housing, answering more such cases automatically. If messages about visa issues generate frequent overrides, the system could lower its threshold, escalating more visa questions to specialists. However, the system should also occasionally explore---answer a few visa questions despite lower confidence, escalate some housing questions despite higher confidence---to test whether its beliefs about those categories are still accurate. The logging and off-policy evaluation ensure that this adaptation does not cause silent drift away from fairness or coverage goals.
+\end{example}
 
 \section{Documentation, Ownership, and Iteration}
 
@@ -377,7 +429,7 @@ Teams often respond to a production issue by making a fast change and hoping for
 
 \section{Chapter Artifact: A System Readiness Brief}
 
-Before a launch decision is credible, the team needs one short document that states who owns the system, what it must achieve, what inputs and policies it relies on, and what would block release. That document is the system readiness brief. It plays the same role for deployment that the framing memo, evaluation plan, claim sheet, and reliability review card played earlier: it turns a broad judgment into something concrete enough to inspect. Production checklists such as the ML test score emphasize many of the same questions \citep{breck2016}.
+By the end of this chapter, the reader should be able to produce a one-page system readiness brief before claiming that a model is deployable. The brief is the deployment counterpart to the earlier framing memo, evaluation plan, claim sheet, and reliability review card: it asks whether those earlier decisions still hold once the model becomes a service. It also condenses the same production questions emphasized by deployment checklists such as the ML test score \citep{breck2016}.
 
 \begin{table}[t]
 \centering
@@ -387,7 +439,7 @@ Before a launch decision is credible, the team needs one short document that sta
 \toprule
 Brief field & What must be written clearly \\
 \midrule
-Core focus & The service decision being supported, the operating evidence required, and the policy that turns predictions into actions \\
+Seven-question focus & All seven questions are reconciled operationally here, especially the decision being supported, the evidence required, and how prediction becomes action \\
 Decision and primary user & Who acts on the output and what workflow is being improved \\
 Operational requirement & Latency, capacity, severe-error bound, or other non-negotiable service constraint \\
 Input contract & What fields, units, preprocessing rules, and validation checks must hold at serving time \\
@@ -399,40 +451,17 @@ Monitoring and rollback & What alerts, drift checks, and disable-or-revert path 
 Owner and no-launch trigger & Who is responsible for the system and what finding would block deployment \\
 \bottomrule
 \end{tabular}
-\caption{A system readiness brief makes the deployment claim concrete as a full service argument rather than a restatement of model quality.}
+\caption{A system readiness brief forces the final chapter to answer the full deployment question, not merely to restate model quality.}
 \label{tab:system-readiness-brief}
 \end{table}
 
-The template becomes easier to imitate when the running case is written in the same format students are expected to produce. Table~\ref{tab:filled-system-readiness-brief} compresses the course-support service into one launch-or-no-launch brief; the later walkthrough then unpacks the same fields in order.
-
-\begin{table}[p]
-\centering
-\footnotesize
-\renewcommand{\arraystretch}{0.94}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{3.15cm}p{7.08cm}}
-\toprule
-Brief field & Course-support assistant brief \\
-\midrule
-Core focus & Answer routine course-policy questions automatically while preserving human review for ambiguous or high-risk cases \\
-Decision and primary user & Student-support staff use the system to handle routine help faster and protect advisor time; students get either a grounded answer or a routed handoff \\
-Operational requirement & In-scope replies must meet service-time targets, review backlog must stay within staffing capacity, and severe unauthorized direct answers on high-risk categories are unacceptable \\
-Input contract & Current message text, course or program context when available, approved policy sources, freshness checks, and schema validation before any answer is produced \\
-Model plus fallback & Retrieval-backed support assistant with a conservative refusal or routing fallback when evidence is weak, stale, incomplete, or out of scope \\
-Operating policy & Answer only when scope, retrieval quality, confidence, and risk checks pass; otherwise escalate to advisors or specialist staff \\
-Release plan & Shadow mode first, then limited canary traffic on routine low-risk questions; expansion stops if citation quality, override rate, or backlog guardrails worsen \\
-Human review path & Escalated cases show the student's message, retrieved passages, draft answer if any, uncertainty trigger, and allowed actions; reviewers can override the system fully \\
-Monitoring and rollback & Monitor source freshness, retrieval hit rate, citation coverage, advisor overrides, subgroup escalation gaps, and backlog growth; disable direct answers if guardrails fail \\
-Owner and no-launch trigger & Student-support and engineering owners share rollback authority; no launch if visa, accommodation, harassment, or crisis slices still show unresolved direct-answer failures \\
-\bottomrule
-\end{tabular}
-\caption{A fully filled system readiness brief for the running course-support service. The value of the artifact is that the deployment claim is now visible in the same structure as the launch decision.}
-\label{tab:filled-system-readiness-brief}
-\end{table}
-
 \begin{thinkingtool}
-\textbf{System readiness brief.} A strong readiness brief names the decision owner, the operational requirement, the input contract, the operating policy, the release plan, the human review path, the monitoring and rollback plan, and the exact finding that would block launch.
+\textbf{System readiness brief.} Before deployment, write down the decision owner, the operational requirement, the input contract, the operating policy, the release plan, the human review path, the monitoring and rollback plan, and the exact finding that would block launch.
 \end{thinkingtool}
+
+\begin{example}[Filled System Readiness Brief]
+For the course-support assistant, a strong readiness brief would identify the primary user as the student-support organization rather than the model team; the operational requirement as bounded response time plus zero tolerance for unauthorized answers on high-risk categories; the input contract as current message text, course or program context when available, approved policy sources, and validated document freshness; the model plus fallback as a retrieval-backed assistant with a rule-based refusal or routing fallback when evidence is weak; the operating policy as ``answer only when retrieval, confidence, and risk checks all pass''; the release plan as shadow mode first, then a limited canary on routine questions only, with rollback on citation-quality or override failures; the human review path as escalation to advisors or specialist staff with the retrieved evidence attached; the monitoring plan as drift checks on message wording, citation coverage, override rate, subgroup gaps, and backlog; and the no-launch trigger as any unresolved failure on severe slices such as visa, accommodation, or crisis-related messages.
+\end{example}
 
 \begin{example}[Real-World Callout: Readiness Is a Launch Gate]
 Breck et al.\ propose the ML test score as a production rubric precisely because offline accuracy is not enough to justify launch \citep{breck2016}. Their checklist asks whether the system has testable data assumptions, serving consistency, monitoring, reproducibility, and operational ownership before users are exposed to it. In this chapter's language, the readiness brief is not classroom paperwork. It is a compact no-launch gate for catching missing rollback paths, broken contracts, or absent owners before deployment turns those omissions into user-facing failures.
@@ -456,7 +485,7 @@ Some settings demand stronger evidence, stronger fallback behavior, or stronger 
 
 \section{Worked System Walkthrough: Course Support}
 
-The grounded course-support pipeline is a good place to see these pieces together because its launch decision depends on contracts, routing, review, and monitoring all at once. What matters is not just whether the model can answer some messages well, but whether the whole service can be launched, monitored, and corrected responsibly.
+To make the full chapter concrete, consider the grounded course-support pipeline developed across the earlier language, experiments, and reliability chapters. The walkthrough follows the same order as the readiness brief so that the chapter ends by assembling one coherent launch argument rather than introducing a separate example.
 
 \subsection{Step 1: Define the Service Objective}
 
@@ -482,28 +511,6 @@ When the system escalates a case, the advisor should not receive only a bare ris
 
 After deployment, the team monitors document freshness, retrieval hit rate, subgroup escalation rates, advisor override frequency, backlog growth, and eventual quality audits. If the percentage of escalated cases rises sharply, that may indicate drift, a source-ingestion bug, or a confidence-calibration failure. The team can then investigate before performance collapses.
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.50cm}L{2.35cm}L{2.10cm}L{2.10cm}}
-\toprule
-Monitoring signal & Why it matters & Guardrail or alert & First response \\
-\midrule
-Document freshness failures & stale policy evidence can make grounded answers unsafe & any approved source older than the release rule & disable direct answers and fall back to retrieval plus escalation \\
-Advisor override rate & rising overrides suggest weak routing, weak evidence, or poor action policy & override rate above the launch baseline for a sustained period & inspect recent cases and tighten thresholds or routing rules \\
-Backlog growth & review capacity may be saturating even if model quality looks fine offline & queue exceeds the staffing budget for more than one reporting window & narrow automation scope or increase fallback staffing \\
-Subgroup escalation gap & one slice may be receiving much worse service or more unsafe automation & subgroup gap crosses the prelaunch tolerance band & run slice audit and consider temporary narrowing for that slice \\
-\bottomrule
-\end{tabular}
-\caption{A mock monitoring dashboard helps undergraduates see what post-launch systems evidence looks like in practice. The useful signals are service signals, not just model scores.}
-\label{tab:systems-monitoring-dashboard}
-\end{table}
-
-\begin{example}[Mini Incident Postmortem]
-Suppose a canary rollout of the course-support assistant looks fine on offline answer quality, but within two days the advisor-review backlog doubles and override rates spike on accommodation questions. A useful first postmortem would not ask only ``which model score moved?'' It would ask which system assumption broke: perhaps the confidence threshold was too low for that slice, the retrieval source mix changed, or the escalation policy routed too many ambiguous cases without enough staffing. The immediate response is to narrow the canary or roll back direct answers on the affected slice, then inspect the backlog trend, override distribution, and recent retrieval evidence before widening again.
-\end{example}
-
 This walkthrough shows the chapter's central point: the useful system is not just the language model or retriever. It is the model plus contracts, routing policy, review interface, monitoring, and organizational ownership.
 
 \subsection{Contrast Case: A Pedestrian-Alert Service}
@@ -525,22 +532,13 @@ Monitoring also looks different without changing the systems logic. Useful signa
 
 \section{Closing Perspective}
 
-By the time a model becomes a service, the earlier course tools should line up. The framing memo says what task is worth doing. The evaluation plan and claim sheet say what evidence would justify the claim. The reliability review card asks where that claim could break. The system readiness brief asks whether the surrounding pipeline is strong enough to let the model act in the real world. Taken together, these are not bureaucratic extras. They are the discipline of building systems that improve the task under real constraints without hiding their limitations.
+This book began with problem framing and ends with system framing. That is a deliberate arc. Learning algorithms matter, but they are not the whole discipline. A mature understanding of AI connects representation, optimization, evaluation, reliability, and deployment into one coherent practice. The framing memo from Chapter 1, the evaluation plan, the claim sheet, the reliability review card, and the system readiness brief are not separate bureaucratic forms. They are the same discipline viewed at progressively more realistic levels, from defining the task to deciding whether the full service should exist at all. The final professional standard is not ``can I train a model?'' It is ``can I build a system that improves the real task under the real constraints without hiding its limitations?''
 
-The system readiness brief closes the artifact chain that began with the framing memo. The book's workflow now reads as one packet: frame the task, choose the judgment rule, protect the evidence, diagnose the model, bound the failure, and decide whether launch is justified.
+It is worth returning to the framing memo from Chapter~1. Does the system readiness brief confirm, narrow, or reject the original vision? If the answer is ``narrow,'' that is usually a sign of honest engineering: the deployed system does less than the initial ambition, but what it does, it does reliably and with bounded claims.
 
-\begin{chaptersummary}
-\item A deployed AI system includes data pipelines, feature contracts, thresholds, interfaces, monitoring, fallback behavior, and ownership in addition to the model itself.
-\item Operational requirements such as latency, review capacity, and severe-error control should be defined before training begins.
-\item Training-serving skew occurs when the deployed input pipeline differs from the evaluated one and can break a system even if the model file is unchanged.
-\item Thresholds and selective prediction are policy choices that trade off automation, workload, and risk.
-\item Ranking and recommendation systems shape future data because what they expose affects later clicks, interactions, and measured feedback.
-\item Monitoring, alerting, and rollback are part of the technical design of a reliable system.
-\item Staged release strategies such as shadow mode, canary rollout, and online experiments help teams learn safely before full launch.
-\item Human-in-the-loop design succeeds only when the review step has clear triggers, adequate information, and real authority.
-\item Some tasks should be simplified, delayed, or rejected because the full system evidence is not strong enough.
-\item A system readiness brief makes the deployment claim explicit before launch.
-\end{chaptersummary}
+\section*{Chapter Summary}
+
+A real AI system includes more than a model: it includes contracts, policies, interfaces, queues, monitoring, staged release, and ownership. System quality depends on whether those pieces work together under real latency, workload, and failure constraints. The final professional standard is not model performance in isolation, but whether the whole service improves the task safely and sustainably.
 
 \begin{studyquestions}
 \item Why can a high-performing offline model still produce a poor deployed system?
@@ -564,7 +562,6 @@ The system readiness brief closes the artifact chain that began with the framing
 \item Sketch one rollout plan that uses shadow mode, canary traffic, or both for a model update of your choice.
 \item Give one case in which a rule-based system would be preferable to a learned model.
 \item For a grounded support assistant or a dashboard-camera pedestrian detector, write one launch rule and one no-launch trigger.
-\item A text classifier is trained on lowercased, punctuation-stripped messages with every URL replaced by \texttt{<URL>}. In production, raw messages are sent directly to the model without those preprocessing steps. Explain why this is training-serving skew, name one likely symptom after launch, and state what you would fix first.
 \item Use Table~\ref{tab:system-readiness-brief} to sketch a one-page system readiness brief for a system of your choice. If you are carrying one case through the book, write it for the same system as your reliability review card and name one sentence from Chapter 1's framing memo that is now confirmed, narrowed, or rejected.
 \end{exercises}
 
@@ -574,5 +571,4 @@ The system readiness brief closes the artifact chain that began with the framing
 \item Compare two failure responses to post-deployment drift: retraining the model immediately versus disabling the model and falling back to a simpler policy. Explain when each is justified and what risks each creates.
 \item A team wants to replace its current model with a new one that improves offline quality but has never seen live traffic. Design the strongest staged-release plan you can, including one guardrail metric that would block expansion.
 \item A university wants to launch a course-support assistant before the start of term, but the latest policy pages are still changing daily. Explain the strongest systems argument for delaying launch or narrowing the use case.
-\item A canary rollout of a support assistant suddenly doubles the advisor-review backlog even though offline answer quality looked strong. Write a short incident analysis that names the most likely system cause, the first rollback or narrowing action you would take, and one monitoring signal you would inspect next.
 \end{challengeexercises}

@@ -1,38 +1,8 @@
 \chapter{Linear Models and Representation}
 
-\begin{learninggoals}
-\item Explain why linear modeling begins with a representation question rather than with a model formula.
-\item Treat feature design as part of the scientific content of a machine learning problem rather than as clerical preprocessing.
-\item Understand linear regression and logistic regression as two versions of the same weighted-sum pipeline.
-\item Read coefficients with language discipline, especially under scaling, correlation, and omitted-variable problems.
-\item Distinguish predictive association from intervention claims, especially when coefficients look tempting to overinterpret.
-\item Use L1 and L2 regularization to keep a linear baseline controlled rather than merely simple.
-\item Produce a first baseline design sheet before moving to more expressive model families.
-\end{learninggoals}
+By this point the book has framed the learning problem and fixed the standard of evidence. The next question is modeling economy: once the task, metric, and evaluation protocol are clear, what is the simplest model that deserves a serious test? Very often the right answer is a linear model, but only if the representation already exposes the structure that matters. This chapter therefore treats linear models not as old formulas to memorize, but as a disciplined test of representation: can a carefully chosen encoding plus one weighted sum already solve the task well enough to justify itself?
 
-\begin{whychaptermatters}
-This chapter asks whether a good representation plus one weighted sum is already enough. After reading it, students should treat feature design, residuals, and coefficient language as part of baseline science rather than clerical preprocessing. The first baseline design sheet extends the evaluation plan into the book's first serious model-family decision.
-\end{whychaptermatters}
-
-The previous two chapters established how model claims should be judged and protected. The next modeling question is now operational: once a task and evaluation plan are in place, what is the simplest serious model family that deserves a real test?
-
-Very often, the answer is a linear model. But that answer is only meaningful if the representation makes the relevant structure visible. A linear model can only add weighted pieces of what it is given. If the important structure has not been encoded, the weighted sum cannot rescue the problem. If the representation is strong, however, one weighted sum can go surprisingly far. The model family is therefore not only a choice of formula. It is a test of whether the representation already exposes the signal we care about.
-
-This chapter is therefore not mainly a tour of linear regression and logistic regression. It is the book's representation chapter and its first real baseline chapter. The real question is:
-
-\begin{center}
-\emph{Can a good representation plus one weighted sum already solve the task? If yes, why? If not, what missing structure does the failure reveal?}
-\end{center}
-
-The chapter's reusable deliverable is a first baseline design sheet. Keep that target in mind while reading: the goal is to make the first serious linear model explicit enough that later model changes become justified rather than impulsive. By the end of the chapter, the reader should be able to say what the model sees, what it predicts, how its coefficients may be read safely, how it will be regularized, and what specific failure would justify leaving linearity.
-
-\begin{thinkingtool}
-\textbf{Artifact preview: first baseline design sheet.} Keep five fields active from the beginning of the chapter: the raw input and chosen feature map, the target type, the first linear family to try, the regularization choices to validate, and the specific failure pattern that would justify leaving linearity.
-\end{thinkingtool}
-
-\begin{problemsolvinglens}
-This chapter tackles the first major modeling dilemma in the book: once the task is framed and the judgment protocol is clear, is a transparent linear baseline already enough? The answer depends less on the fitting rule than on whether the representation makes the relevant structure visible.
-\end{problemsolvinglens}
+The central claim is simple. A strong representation and a controlled linear baseline can often go much farther than beginners expect, and when they fail, the pattern of failure is usually informative. The chapter therefore moves from feature maps to the generic weighted-sum pipeline, then to linear regression, logistic regression, coefficient reading, and regularization. Its concrete deliverable is a first baseline design sheet that states what the model sees, what it predicts, how its coefficients may be read safely, how it will be regularized, and what specific failure would justify leaving linearity.
 
 \section{Opening Dilemma: Is One Weighted Sum Enough?}
 
@@ -55,7 +25,7 @@ CDC guidance for Youth Risk Behavior Survey trend analysis still uses logistic r
 Problem shape & What linear models are usually good for \\
 \midrule
 Structured tabular data & Fast baselines, interpretable coefficients, and surprisingly strong performance when the feature design is careful \\
-Sparse text features & Reliable bag-of-words or TF--IDF baselines where weighted word evidence already carries most of the signal \\
+Sparse text features & Reliable bag-of-words or term frequency--inverse document frequency (TF--IDF) baselines where weighted word evidence already carries most of the signal \\
 High-dimensional raw images, audio, or long sequences & Usually only baseline value unless a strong representation has already been learned elsewhere \\
 \bottomrule
 \end{tabular}
@@ -65,7 +35,7 @@ High-dimensional raw images, audio, or long sequences & Usually only baseline va
 
 \section{Representation Is the Model}
 
-By now the basic linear promise should be clear: the model can only add weighted pieces of what it sees. That means the crucial question comes one step earlier. What exactly does it see? The heart of this chapter is not a fitting rule. It is a representation question.
+The heart of this chapter is not a fitting rule. It is a representation question.
 
 \begin{definition}[Feature]
 A feature is a measurable attribute used to represent an example for a model. Features may be numeric, binary, categorical after encoding, counts, ratios, embeddings, or other derived quantities.
@@ -89,15 +59,11 @@ This is why representation is already part of the model. The model does not see 
 
 Sometimes the raw input is already numeric and usable. Age, temperature, income, and elapsed time fit that description. In many problems, however, raw inputs must be transformed before a linear model can use them effectively. Text must be turned into counts, indicator variables, or embeddings. Categories must be encoded. Dates may need to become cyclic or calendar-aware features. Interactions may need to be added explicitly if they matter.
 
-Mathematically, this is often written as a feature map $\phi(x)$, which transforms a raw example $x$ into a feature vector:
+Mathematically, this is often written as a feature map $\phi(x)$, a compact way to say ``the encoded version of the raw example $x$ that the model actually sees'':
 \[
 \phi(x) = [\phi_1(x), \phi_2(x), \ldots, \phi_d(x)]^\top.
 \]
-The model then operates on $\phi(x)$ rather than directly on the raw input. This notation is useful because it separates two sources of modeling power:
-\begin{itemize}[leftmargin=*]
-\item the \emph{representation} chosen by the feature map
-\item the \emph{fitted weights} learned by the model
-\end{itemize}
+The model then operates on $\phi(x)$ rather than directly on the raw input. This notation separates two sources of modeling power: the \emph{representation} chosen by the feature map and the \emph{fitted weights} learned by the model.
 
 If the representation is weak, fitting better weights may not be enough. If the representation is strong, even a simple weighted sum can work well.
 
@@ -150,10 +116,6 @@ Why does this matter? Many students conclude too early that linear models are on
 \begin{practicalnote}
 Add interaction features deliberately rather than exhaustively. Generating all pairwise products of $d$ features produces $d(d-1)/2$ new coordinates. On a dataset with hundreds of features, that explosion can create severe overfitting and slow training. Add interactions when domain knowledge suggests a specific joint effect, and test whether each addition improves held-out performance.
 \end{practicalnote}
-
-\begin{example}[A Small Feature Rescue Before Abandoning Linearity]
-Suppose an early-support baseline predicts whether a student will need outreach from two raw features: fraction of assignments missed and week of semester. A model that sees only those two raw inputs must pay one global price for missing work. But the same missed-work fraction often means something different in week two than in week ten. If the baseline keeps overpredicting risk early in the term while underpredicting it late in the term, that error pattern is evidence about representation before it is evidence against linearity itself. Adding the interaction \(x_{\text{missed}} x_{\text{week}}\) lets the weighted sum say that missing work matters more as the term advances. A small engineered expansion can therefore rescue the baseline without changing model families.
-\end{example}
 
 \subsection{Common Feature Types}
 
@@ -218,7 +180,7 @@ The same logic appears across public tasks. A sports-shot prediction problem sug
 
 \section{The Generic Linear Pipeline}
 
-Once the feature map is chosen, the next question is what the linear model actually does with it. Before splitting into regression and classification, it helps to establish the reusable pipeline that both share.
+Before splitting into regression and classification, it helps to establish the reusable pipeline that both share.
 
 \begin{figure}[t]
 \centering
@@ -235,22 +197,22 @@ Once the feature map is chosen, the next question is what the linear model actua
   boxA/.style={draw=c3pipeLineA, rounded corners, align=center, minimum height=1.0cm, minimum width=2.05cm, fill=c3pipeA, text=c3pipeLineA, font=\small\bfseries},
   boxB/.style={draw=c3pipeLineB, rounded corners, align=center, minimum height=1.0cm, minimum width=2.05cm, fill=c3pipeB, text=c3pipeLineB, font=\small\bfseries},
   boxC/.style={draw=c3pipeLineA, rounded corners, align=center, minimum height=1.0cm, minimum width=2.05cm, fill=c3pipeA, text=c3pipeLineA, font=\small\bfseries},
-  boxD/.style={draw=c3pipeLineC, rounded corners, align=center, minimum height=1.0cm, minimum width=2.35cm, fill=c3pipeC, text=c3pipeLineC, font=\small\bfseries},
-  boxE/.style={draw=c3pipeLineD, rounded corners, align=center, minimum height=1.0cm, minimum width=2.75cm, fill=c3pipeD, text=c3pipeLineD, font=\small\bfseries},
+  boxD/.style={draw=c3pipeLineC, rounded corners, align=center, minimum height=1.0cm, minimum width=2.05cm, fill=c3pipeC, text=c3pipeLineC, font=\small\bfseries},
+  boxE/.style={draw=c3pipeLineD, rounded corners, align=center, minimum height=1.0cm, minimum width=2.05cm, fill=c3pipeD, text=c3pipeLineD, font=\small\bfseries},
   arrow/.style={-Latex, thick, black!60}
 ]
 \node[boxA] (raw)      {Raw input};
 \node[boxB, right=0.6cm of raw]    (phi)      {Feature map\\$\phi(x)$};
-\node[boxC, right=0.6cm of phi]    (score)    {Linear score\\$w^\top \phi(x) + b$};
-\node[boxD, right=0.6cm of score]  (transform){Task transform\\identity or sigmoid};
-\node[boxE, right=0.6cm of transform](decision){Prediction use\\value, probability, or rule};
+\node[boxC, right=0.6cm of phi]    (score)    {Weighted sum\\$w^\top \phi(x) + b$};
+\node[boxD, right=0.6cm of score]  (transform){Output transform};
+\node[boxE, right=0.6cm of transform](decision){Decision use};
 \draw[arrow] (raw)       -- (phi);
 \draw[arrow] (phi)       -- (score);
 \draw[arrow] (score)     -- (transform);
 \draw[arrow] (transform) -- (decision);
 \end{tikzpicture}%
 }
-\caption{A linear model first encodes the input, then computes one weighted sum, then applies the task-specific transform. The same backbone can support regression, probability estimation, or a thresholded decision rule.}
+\caption{Linear-model pipeline.}
 \label{fig:linear-model-pipeline}
 \end{figure}
 
@@ -284,10 +246,8 @@ Do not jump too quickly from ``the line failed'' to ``the whole model family fai
 
 \section{Linear Regression as the First Concrete Case}
 
-The generic pipeline becomes easier to trust once it is attached to one concrete model. Linear regression is the simplest place to start because the target is numeric and the weighted-sum structure stays visible all the way through.
-
 \begin{definition}[Linear Regression]
-Linear regression predicts a numeric target as an affine function of the features:
+Linear regression predicts a numeric target as an affine function of the features, meaning a weighted sum plus an intercept:
 \[
 \hat{y} = w^\top x + b,
 \]
@@ -311,9 +271,27 @@ Linear regression is commonly fit by minimizing the mean squared residual:
 
 Chapter 2 already explained why squared error is a useful training loss. Here the important skill is more concrete: move comfortably from feature values to prediction to residual, and understand what the residual says about the baseline. A positive residual means the model predicted too low; a negative residual means it predicted too high.
 
+\begin{theorem}[Least-squares residuals are orthogonal to the fitted space]
+In ordinary least squares, if \(X\) is the design matrix, \(\hat{y}=X\hat{\beta}\) is the fitted value vector, and \(r=y-\hat{y}\) is the residual vector, then
+\[
+X^\top r = 0.
+\]
+Equivalently, the residual vector is orthogonal to every column of the design matrix and therefore to every direction the linear model was allowed to use.
+\end{theorem}
+
+\begin{proof}
+Ordinary least squares minimizes \(\|y-X\beta\|_2^2\). Differentiating with respect to \(\beta\) and setting the derivative to zero gives the normal equations
+\[
+X^\top (y-X\hat{\beta}) = 0.
+\]
+Since \(r=y-X\hat{\beta}\), this is exactly \(X^\top r=0\).
+\end{proof}
+
+This is the geometric meaning of best fit in a linear model: once the projection onto the allowed feature space has been made, the leftover error cannot be reduced by moving further inside that same space.
+
 \subsection{Minimizing the Loss: Gradient Descent}
 
-For ordinary linear regression, one often solves the least-squares problem directly with linear algebra. Gradient descent is still an important optimization method, especially once the model or loss becomes too large or too complex for a simple closed-form solve. Starting from some initial weight vector $w$, we repeatedly move the weights in the direction that decreases the loss the fastest. The gradient $\nabla_w \mathcal{L}$ points uphill, so we subtract a small multiple of it:
+The standard procedure for finding weights that minimize the MSE is gradient descent. Starting from some initial weight vector $w$, we repeatedly move the weights in the direction that decreases the loss the fastest. The gradient $\nabla_w \mathcal{L}$ points uphill, so we subtract a small multiple of it:
 \[
 w \leftarrow w - \eta \, \nabla_w \mathcal{L}(w),
 \]
@@ -362,7 +340,7 @@ print(round(loss_before, 4))   # loss before the step
 print(round(loss_after, 4))    # loss after one correction
 \end{codeexample}
 
-Running this program produces a smaller loss after a single step. The code makes two things visible at once: the loss goes down because the weights moved in the direction that locally reduced the squared errors, and each component of the gradient tells its corresponding weight how far to move. In this tiny no-bias setup, both weights increase on the first step because the model starts by underpredicting every positive target from an all-zero score. That first-step sign should not be overinterpreted as the final semantic effect of each feature; later updates, or a model with an explicit bias term, separate those effects more clearly.
+Running this program produces a smaller loss after a single step. The point of the example is to show the mechanics of gradient descent rather than to establish the final semantic role of each feature from one update. Because the model begins from a symmetric near-zero state and the features are not centered, the earliest steps mainly reflect the network's attempt to move away from systematic underprediction. In a fitted model with an explicit bias term and centered or standardized inputs, the eventual sign and magnitude of each coefficient become easier to interpret.
 
 \begin{figure}[t]
 \centering
@@ -433,7 +411,7 @@ If the actual sale price turned out to be 338, the residual would be
 r = 338 - 326.8 = 11.2.
 \]
 
-That is the first concrete skill the chapter wants to automate in the reader's head: move from encoded features to a predicted numeric value, then inspect the residual rather than admiring the formula.
+That is the first concrete skill the chapter wants to automate in the reader's head: move from encoded features to a predicted numeric value, then inspect the residual rather than interpreting the formula in isolation.
 
 \begin{warningbox}
 An interpretable model is not the same thing as a correct interpretation. Coefficients are only interpretable relative to the features included, their scales, and the correlations among them.
@@ -442,10 +420,6 @@ An interpretable model is not the same thing as a correct interpretation. Coeffi
 \subsection{Residual Diagnostics}
 
 Residuals are not just bookkeeping after the fit. If residuals curve with the fitted values, the representation is probably missing nonlinear structure. If their spread grows with the prediction, the error variance may not be constant. If one slice produces extreme residuals, that slice may need a separate feature, a missingness indicator, or a different interaction term. In a linear baseline, residual plots are often the fastest way to learn what structure the representation left out.
-
-\begin{example}[Residual Pattern $\rightarrow$ Representation Repair]
-Suppose a housing baseline predicts apartment price from floor area alone and the residual plot shows a U-shape: very small and very large apartments are consistently underpredicted, while mid-sized apartments are overpredicted slightly. That pattern is evidence about representation before it is evidence against linear baselines altogether. A sensible first repair is to add a transformed feature such as area-squared and then ask whether the residual curvature shrinks on validation data. If a different residual pattern appears only on examples with missing renovation-year data, the first repair may instead be a train-only imputation rule plus a missingness indicator. The residual is useful because it points to the next feature decision, not just to the fact that the current fit is imperfect.
-\end{example}
 
 \subsection{Linear in the Parameters, Not Necessarily in the World}
 
@@ -483,11 +457,13 @@ Students often hear ``linear model'' and imagine ``straight line in reality.'' T
 
 Suppose Model A uses only one feature, area. Model B uses both area and area-squared. Model B can represent curvature in the relationship between area and price even though it is still linear in the parameters. This is one of the highest-value lessons in the chapter: the phrase ``linear model'' names the weighting rule, not the shape of the world.
 
+With the shared score-producing pipeline in place, the next distinction is the output type: first a numeric target, then a probability target.
+
 \section{Logistic Regression as Score-to-Probability Modeling}
 
 Linear regression predicts unrestricted numeric outputs, which makes it unsuitable for binary classification. If the target is whether an email is spam or whether a student needs support, we usually want a probability or a class label, not an arbitrary real number such as $1.7$ or $-0.8$.
 
-Logistic regression keeps the same weighted-sum backbone and changes only the output transform. The model first computes a score
+Logistic regression keeps the same weighted-sum backbone and changes only the output transform. The model first computes a raw score, often called the \emph{logit},
 \[
 z = w^\top x + b,
 \]
@@ -548,7 +524,7 @@ Probability and odds are not the same thing. A probability of $0.8$ means ``80\%
 \end{warningbox}
 
 \begin{practicalnote}
-A one-unit increase in feature $x_j$ changes the log-odds by $w_j$ and multiplies the odds by $e^{w_j}$, holding the encoded features fixed. That is often the cleanest coefficient interpretation in logistic regression.
+A one-unit increase in feature $x_j$ changes the log-odds by $w_j$ and multiplies the odds by $e^{w_j}$, holding all other encoded features constant. That is often the cleanest coefficient interpretation in logistic regression.
 \end{practicalnote}
 
 \begin{theorem}[A $0.5$ logistic threshold is a score threshold]
@@ -674,7 +650,7 @@ $2.0$ & 0.88 & positive \\
 CDC teaching material on marginal effects emphasizes a point that matters here: changes in predicted probability are often easier to communicate than raw changes in log-odds \citep{cdc_marginal_effects}. Logistic coefficients are mathematically elegant, but many users understand ``the predicted probability rises by about five points'' more naturally than ``the log-odds increase by 0.2.''
 \end{example}
 
-For a single feature $x_j$, the corresponding marginal effect comes from the chain rule:
+A \emph{marginal effect} is the local rate at which the predicted probability changes when one feature moves slightly and the others are held fixed. For a single feature $x_j$, the corresponding marginal effect comes from the chain rule:
 \[
 \frac{dP(y=1\mid x)}{dx_j}
 =\frac{d\sigma(z)}{dz}\frac{dz}{dx_j}
@@ -685,7 +661,7 @@ So the same coefficient can have a larger or smaller probability impact dependin
 
 \section{Reading Coefficients Without Fooling Yourself}
 
-One reason students are drawn to linear models is that the coefficients seem readable. That instinct is partly right, but it needs guardrails. Coefficients are not self-explaining truths. They are statements about the fitted relationship \emph{within a particular representation}. The next three subsections give the minimum guardrails: scale, correlation, and omitted variables all change what a coefficient can honestly be said to mean.
+One of the selling points of linear models is interpretability. That selling point is real, but it needs language discipline. Coefficients are not self-explaining truths. They are statements about the fitted relationship \emph{within a particular representation}. The next three subsections give the minimum guardrails: scale, correlation, and omitted variables all change what a coefficient can honestly be said to mean.
 
 \subsection{Scale Matters}
 
@@ -697,7 +673,7 @@ This point is easy to underestimate. A coefficient of $-1.4$ per year of buildin
 
 \subsection{Correlation Matters}
 
-If two features are strongly correlated, such as floor area and number of bedrooms, the model may distribute their effects somewhat arbitrarily. Both features may matter, but the exact coefficient values can become unstable. This does not always ruin prediction, but it weakens naive coefficient stories.
+If two features are strongly correlated, showing strong \emph{collinearity}, meaning strong overlap among predictors, the model may distribute their effects somewhat arbitrarily. Both features may matter, but the exact coefficient values can become unstable. This does not always ruin prediction, but it weakens naive coefficient stories.
 
 In the extreme case of near-perfect collinearity, coefficients can become non-unique or wildly unstable even when predictions barely change. Ridge-style regularization can stabilize the allocation, but it does not restore a unique interpretation by itself.
 
@@ -736,7 +712,7 @@ In the extreme case of near-perfect collinearity, coefficients can become non-un
 
 In practice, this means two models trained on slightly different samples can make similar predictions while assigning noticeably different weights to correlated inputs. Prediction can remain stable while interpretation becomes fragile.
 
-\paragraph{Resampling reveals instability.} One diagnostic for coefficient fragility is to train the same model on bootstrap resamples of the training set and inspect how much each coefficient varies across those resamples. A coefficient that regularly switches sign, or that varies by more than its mean value, should not be interpreted as evidence of a stable directional effect. It may be absorbing the variance of a correlated neighbor. A stable, interpretable coefficient stays in the same direction and roughly the same magnitude across resamples.
+\paragraph{Resampling reveals instability.} One diagnostic for coefficient fragility is to train the same model on bootstrap resamples of the training set, meaning repeated samples drawn with replacement from the original training data, and inspect how much each coefficient varies across those resamples. A coefficient that regularly switches sign, or that varies by more than its mean value (equivalently, check whether the bootstrap 95\% interval for the coefficient includes zero), should not be interpreted as evidence of a stable directional effect. It may be absorbing the variance of a correlated neighbor. A stable, interpretable coefficient stays in the same direction and roughly the same magnitude across resamples.
 
 \paragraph{Adding or removing a feature changes the story.} Suppose a wage model is trained first with both years of experience and job tenure, then with only job tenure removed. If the coefficient on years of experience changes substantially when tenure is dropped, that is evidence of collinearity. The original coefficient was not measuring the ``pure effect'' of experience; it was absorbing part of the tenure effect as well. This is why coefficient narratives built on a single model fit can be misleading even when the model predicts well.
 
@@ -752,14 +728,6 @@ Suppose a wage model includes education but omits years of experience or industr
 Imagine a customer-churn model in which the number of refund requests has a positive coefficient. A naive interpretation would be that requesting refunds causes customers to leave. A more plausible explanation is that dissatisfied customers are precisely the ones who request refunds. Predictive association is not causal explanation.
 \end{example}
 
-\begin{example}[What Missing Means Can Be Part of the Model]
-In an early-support baseline, a missing quiz score can mean at least three different things: the quiz has not happened yet, the student skipped it, or the score failed to enter the system. Treating all three as the number zero collapses different states of the world into one feature value. A better baseline may use an imputed score together with a missingness indicator, or different indicators for ``not yet observed'' and ``missing despite being expected.'' Missingness is therefore part of representation design, not clerical cleanup.
-\end{example}
-
-\begin{practicalnote}
-If missing values must be imputed, learn the imputation rule on the training split only and then apply that fitted rule unchanged to validation and test. Computing a mean, mode, or fill value on the full dataset quietly leaks evaluation information across the boundary established in Chapter~3. The same discipline applies to standardization, target encoding, and any other preprocessing step that estimates statistics from data.
-\end{practicalnote}
-
 \begin{warningbox}
 What you are usually allowed to say:
 \begin{itemize}[leftmargin=*]
@@ -774,85 +742,18 @@ What you are usually not allowed to say from the model alone:
 \end{warningbox}
 
 \begin{practicalnote}
-Classical statistical inference asks extra questions that this chapter is not trying to answer in full, such as whether coefficient uncertainty can be estimated cleanly and whether hypothesis tests are justified. For this book, the main use of a linear model is still predictive baseline design, so coefficient-significance language is secondary to prediction quality and interpretation discipline.
+These assumptions matter for inference, not for prediction alone. Linearity in the encoded features, exogeneity or zero conditional mean of the errors, independent or appropriately modeled errors, roughly constant variance, and no perfect multicollinearity are the classical conditions behind standard errors and hypothesis tests. A linear baseline can still be useful even when some of those assumptions are only approximate.
 \end{practicalnote}
-
-\begin{thinkingtool}
-\textbf{Coefficient interpretation checklist.} Before telling a story with a coefficient, pause and ask:
-\begin{itemize}[leftmargin=*]
-\item What exactly was encoded, scaled, or imputed before this coefficient was fit?
-\item Does the coefficient stay qualitatively similar when correlated predictors are added, removed, or resampled?
-\item Could missing variables, missingness indicators, or measurement choices be carrying part of the apparent effect?
-\item Am I making a predictive association claim or accidentally sliding into a causal one?
-\end{itemize}
-If those questions do not have stable answers, the model may still be a useful baseline, but the narrative attached to the coefficient should stay modest.
-\end{thinkingtool}
-
-\begin{thinkingtool}
-\textbf{What can a fitted linear model justify?} Keep the synthesis simple:
-\begin{itemize}[leftmargin=*]
-\item \emph{Usually safe:} a statement about how the fitted score or predicted risk changes within the encoded representation.
-\item \emph{Safe only with caution:} a coefficient story, if it survives resampling, correlated-feature changes, and unit changes.
-\item \emph{Not justified yet:} a policy or intervention claim about what would happen if the world were changed.
-\end{itemize}
-That three-step boundary helps keep prediction, interpretation, and intervention from collapsing into one another.
-\end{thinkingtool}
 
 \section{Prediction Is Not Intervention}
 
-Linear models tempt people into causal language because the coefficients look clean. This is the point where linear transparency becomes dangerous if the reader stops being precise. A predictive model describes patterns in observed data: given the features we observed, what outcome should we expect? A causal question is different: what would happen if we deliberately changed one part of the world? Pearl's causal framework is useful mainly because it keeps those two questions separate \citep{pearl2009}.
+Linear models tempt people into causal language because the coefficients look clean. This is the point where linear transparency becomes dangerous if the reader stops being precise. A predictive model answers an associational question: given the observed features, what outcome should we expect? A causal question is different: what would happen if we actively changed one part of the world? Pearl's causal framework makes this distinction central by separating ordinary observation from intervention and counterfactual reasoning \citep{pearl2009}.
 
 This distinction matters even in simple tabular problems. A model may learn that students who attend more office hours tend to earn higher grades. That makes office-hour attendance a potentially useful predictive feature. It does \emph{not} by itself prove that forcing attendance to increase would raise grades by the same amount. Students who seek help may also be more motivated, have different schedules, or receive more support elsewhere. Those hidden differences can create confounding.
 
-\begin{figure}[t]
-\centering
-\definecolor{c3obsBg}{RGB}{220,233,251}
-\definecolor{c3obsLine}{RGB}{56,103,170}
-\definecolor{c3causeBg}{RGB}{254,242,214}
-\definecolor{c3causeLine}{RGB}{184,92,16}
-\definecolor{c3hiddenBg}{RGB}{237,224,250}
-\definecolor{c3hiddenLine}{RGB}{100,50,160}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  x=1cm, y=1cm, font=\small,
-  obs/.style={draw=c3obsLine, fill=c3obsBg, rounded corners, align=center,
-              minimum height=0.95cm, minimum width=2.9cm,
-              font=\small\bfseries, text=c3obsLine},
-  cause/.style={draw=c3causeLine, fill=c3causeBg, rounded corners, align=center,
-                minimum height=0.95cm, minimum width=2.9cm,
-                font=\small\bfseries, text=c3causeLine},
-  hidden/.style={draw=c3hiddenLine, fill=c3hiddenBg, rounded corners, align=center,
-                 minimum height=0.95cm, minimum width=3.2cm,
-                 font=\small\bfseries, text=c3hiddenLine},
-  arrow/.style={-Latex, thick, black!60},
-  weakarrow/.style={-Latex, thick, dashed, gray!60}
-]
-%% Panel A: observed association
-\begin{scope}
-  \node[font=\small\bfseries, black!75] at (2.6,3.0) {Observed data};
-  \node[obs] (attendA) at (0.9,1.1) {more office-hour\\attendance};
-  \node[obs] (gradeA)  at (4.3,1.1) {higher\\grades};
-  \draw[arrow] (attendA) -- node[above, font=\footnotesize] {associated with} (gradeA);
-\end{scope}
-%% Panel B: why the causal claim is harder
-\begin{scope}[xshift=7.3cm]
-  \node[font=\small\bfseries, black!75] at (2.5,3.0) {Why the causal claim is harder};
-  \node[hidden] (mot)     at (2.5,2.0) {motivation or outside support};
-  \node[cause]  (attendB) at (0.8,0.7) {more office-hour\\attendance};
-  \node[cause]  (gradeB)  at (4.2,0.7) {higher\\grades};
-  \draw[arrow] (mot) -- (attendB);
-  \draw[arrow] (mot) -- (gradeB);
-  \draw[weakarrow] (attendB) -- node[below, font=\footnotesize, align=center] {association alone\\does not prove cause} (gradeB);
-\end{scope}
-\end{tikzpicture}%
-}
-\caption{Prediction and intervention answer different questions. An observed association can still appear because a hidden factor affects both the feature and the outcome.}
-\label{fig:prediction-vs-causation}
-\end{figure}
-
 \subsection{Confounding Changes the Story}
 
-A \emph{confounder} is something that affects both the feature of interest and the outcome. When confounders are missing or measured badly, the fitted coefficient can mix together several reasons for the pattern we see. The model can still predict well, but its coefficients become unsafe to read as advice about what action would improve the outcome.
+A \emph{confounder} is a variable that influences both the feature of interest and the outcome. When confounders are omitted or measured poorly, the fitted coefficient may mix together several stories: direct effect, indirect effect, selection effect, and historical artifact. The model can still predict well, but its coefficients become unsafe to read as intervention advice.
 
 \begin{example}[Tutoring Is Predictive, but the Policy Claim Is Harder]
 Suppose a model finds that students who sign up for tutoring are less likely to fail. That may mean tutoring helps. It may also mean that students who sign up early are the same students who are more organized, more supported, or more engaged in the course. A tutoring coefficient may therefore be useful for prediction while remaining insufficient for the policy claim ``increasing tutoring sign-ups will reduce failure by this amount.'' 
@@ -860,13 +761,13 @@ Suppose a model finds that students who sign up for tutoring are less likely to 
 
 \subsection{What Stronger Causal Language Requires}
 
-To move from a predictive pattern to a causal claim, the evidence standard changes. Stronger causal language usually requires a design that can support claims about what would happen if something were changed: a randomized experiment, a natural experiment with defensible assumptions, or a domain model that states the needed causal assumptions clearly. A fitted linear model on observational data is rarely enough on its own.
+To move from predictive association to a causal claim, the evidence standard changes. Stronger causal language usually requires a design that supports intervention reasoning: a randomized experiment, a natural experiment with defensible assumptions, or a domain model that makes the required causal assumptions explicit and testable. A fitted linear model on observational data is rarely enough on its own.
 
-The practical rule for this book is conservative. If the task is prediction, say ``linked to,'' ``useful for prediction,'' or ``raises the model score when other encoded features are held fixed.'' Reserve words such as ``causes,'' ``effect,'' or ``would improve outcomes if changed'' for settings where the causal design has actually been defended.
+The practical rule for this book is conservative. If the task is prediction, say ``associated with,'' ``useful for prediction,'' or ``raises the model score when other encoded features are held fixed.'' Reserve words such as ``causes,'' ``effect,'' or ``would improve outcomes if changed'' for settings where the causal design has actually been defended.
 
 \section{Controlled Simplicity: Regularization}
 
-Once a linear model has enough features, the next risk is overfitting. Even linear models can overfit, especially when the number of features is large or when features are noisy. Regularization addresses this by penalizing overly large or overly complex coefficient vectors. It is the chapter's answer to a practical baseline question: how do we keep the first serious model controlled without making it uselessly weak?
+Even linear models can overfit, especially when the number of features is large or when features are noisy. Regularization addresses this by penalizing overly large or overly complex coefficient vectors. It is the chapter's answer to a practical baseline question: how do we keep the first serious model controlled without making it uselessly weak?
 
 \begin{definition}[L2 Regularization]
 L2 regularization adds a penalty proportional to the squared magnitude of the coefficients:
@@ -876,6 +777,32 @@ L2 regularization adds a penalty proportional to the squared magnitude of the co
 \end{definition}
 
 This penalty discourages extreme weights and tends to spread influence more smoothly across correlated features. In regression, the resulting model is often called \emph{ridge regression}. In classification, the same idea is commonly used with logistic regression.
+
+In the least-squares setting, ridge regularization also changes the optimization problem in a mathematically useful way \citep{hoerl1970}.
+
+\begin{theorem}[Ridge regularization gives a unique least-squares solution]
+For a fixed design matrix $X$ of penalized features and any $\lambda>0$, the ridge objective
+\[
+J(w)=\frac{1}{n}\|y-Xw\|_2^2+\lambda\|w\|_2^2
+\]
+is strictly convex in $w$. Consequently it has a unique minimizer, and that minimizer satisfies
+\[
+(X^\top X+n\lambda I)w^\star = X^\top y.
+\]
+\end{theorem}
+
+\begin{proof}
+The Hessian of $J$ is
+\[
+\nabla^2 J(w)=\frac{2}{n}X^\top X + 2\lambda I.
+\]
+For any nonzero vector $v$,
+\[
+v^\top \nabla^2 J(w)\, v
+= \frac{2}{n}\|Xv\|_2^2 + 2\lambda \|v\|_2^2 > 0
+\]
+because $\lambda>0$. So the Hessian is positive definite, which makes $J$ strictly convex and gives a unique minimizer. Setting the gradient to zero yields the stated linear system.
+\end{proof}
 
 \begin{definition}[L1 Regularization]
 L1 regularization adds a penalty proportional to the sum of absolute coefficient values:
@@ -934,25 +861,25 @@ The geometry gives a useful picture: the L2 penalty has round contour lines, so 
 Regularization strength $\lambda$ is not a matter of aesthetic preference. It is a model-selection choice and should be chosen by validation performance. This is also why standardization matters more once regularization is active: if one feature is measured on a much larger scale than another, the penalty no longer treats them comparably.
 \end{practicalnote}
 
-\begin{codeexample}[caption={From scratch: L2 versus L1 gradient penalty}]
+\begin{codeexample}[caption={From scratch: L2 gradient versus an L1 subgradient sketch}]
 # Both penalties are added to the data-loss gradient before each weight update.
 # lam is the regularization strength; weights is the current weight vector.
 
 # L2 penalty gradient: proportional to the weight itself (smooth shrinkage)
 l2_penalty_gradient = [2 * lam * w for w in weights]
 
-# L1 penalty gradient: proportional to the sign of the weight (sparse shrinkage)
+# L1 penalty subgradient: sign away from zero; choose 0 at the kink for this sketch
 def sign(v):
     return 1 if v > 0 else (-1 if v < 0 else 0)
 
-l1_penalty_gradient = [lam * sign(w) for w in weights]
+l1_penalty_subgradient = [lam * sign(w) for w in weights]
 
 # Combined update step (choose one penalty):
 # weights[j] -= learning_rate * (data_gradient[j] + l2_penalty_gradient[j])
-# weights[j] -= learning_rate * (data_gradient[j] + l1_penalty_gradient[j])
+# weights[j] -= learning_rate * (data_gradient[j] + l1_penalty_subgradient[j])
 \end{codeexample}
 
-The L2 penalty nudges every weight toward zero by an amount proportional to the weight's current value, so large weights shrink faster than small ones but none ever reaches exactly zero. The L1 penalty moves every non-zero weight by the same fixed step regardless of magnitude, which is why it can drive weights all the way to zero and produce sparse models.
+The L2 penalty nudges every weight toward zero by an amount proportional to the weight's current value, so large weights shrink faster than small ones but none ever reaches exactly zero. The L1 penalty moves every non-zero weight by the same fixed step regardless of magnitude, which is why it can drive weights all the way to zero and produce sparse models. Because the absolute-value penalty is not differentiable at zero, the code above is intentionally a subgradient-style sketch rather than a literal everywhere-differentiable gradient update.
 
 \section{Why Linear Models Are the Right First Baseline}
 
@@ -990,7 +917,7 @@ The broader point is that linear models expose the relationship between represen
 
 \section{Failure Diagnosis, Not Method Shopping}
 
-Sooner or later, a linear model will miss something important. When that happens, the useful question is not ``what model is fashionable now?'' It is ``what kind of structure is this failure pointing to?'' No model family is universal. Linear models struggle when the decision boundary or regression surface cannot be captured well by a weighted sum of the available features. Images, audio, and raw language sequences often contain local, hierarchical, or contextual structure that a simple linear score cannot exploit directly unless those structures have already been encoded by other means.
+No model family is universal. Linear models struggle when the decision boundary or regression surface cannot be captured well by a weighted sum of the available features. Images, audio, and raw language sequences often contain local, hierarchical, or contextual structure that a simple linear score cannot exploit directly unless those structures have already been encoded by other means.
 
 They also struggle when interactions are essential but omitted. If the effect of one feature depends strongly on another, and that interaction is not encoded explicitly, a linear model may be systematically wrong even when each feature is individually informative.
 
@@ -1069,7 +996,7 @@ By the end of this chapter, the reader should be able to write down the first de
 \toprule
 Design field & What must be stated clearly \\
 \midrule
-Seven-question focus & The sheet answers three questions directly: what representation the model will use, what first serious baseline deserves the first test, and what evidence would show that linearity is no longer enough \\
+Seven-question focus & Questions 4, 5, and 6: choose the representation, justify the first serious baseline, and state what evidence would show that linearity is no longer enough \\
 Task and target type & Regression or classification, and what the model is being asked to predict \\
 Raw input & What the original data looks like before encoding \\
 Feature map & Which engineered or encoded features the weighted sum will actually see \\
@@ -1089,44 +1016,20 @@ Next structural hypothesis & What broader model family would be justified if the
 \end{thinkingtool}
 
 \begin{example}[Filled Baseline Design Sheet]
-For early student-support prediction, the raw input might be course activity logs, attendance, and the first assignment timeline. The feature map could expose missed-deadline count, recent platform inactivity, quiz completion rate, and fraction of required practice work completed by the midpoint. The first baseline would then be logistic regression with validation over a small range of regularization strengths. The interpretation boundary would be clear: use the coefficients to understand what evidence the baseline is using, not to make causal claims about why a student disengages. A likely failure pattern would be weak performance on students whose problems appear mainly through timing or sequence order. That result would justify moving next to a sequential model rather than jumping blindly to a more complex classifier.
+For early student-support prediction, the raw input might be course activity logs, attendance, and the first assignment timeline. The feature map could expose missed-deadline count, recent platform inactivity, quiz completion rate, and, if recorded before the model decision point, whether the student had already triggered an earlier administrative flag. The first baseline would then be logistic regression with validation over a small range of regularization strengths. The interpretation boundary would say that the coefficients are being used to understand the baseline's evidence pattern, not to make causal claims about why a student disengages. The named failure pattern might be weak performance on students whose problems appear only through timing or sequence order, which would justify moving next to a sequential model rather than jumping blindly to a more complex classifier.
 \end{example}
-
-\begin{practicalnote}
-A good first undergraduate lab for this chapter is end to end: split the data first, fit imputation and standardization on training data only, encode the features, fit the linear or logistic baseline, inspect residuals or slice errors, revise one representation choice, and then write the baseline design sheet. The pedagogical point is not merely to fit a line. It is to connect representation, evaluation discipline, diagnosis, and the final artifact in one workflow.
-\end{practicalnote}
 
 \section{Common Mistakes with Linear Models}
 
-Once the baseline sheet is clear, the most useful closing move is to name the habits that regularly weaken linear-model work. Most of them are not about the formula itself. They are about representation, interpretation, and evaluation discipline.
-
-\begin{mistakebox}
-\item \textbf{Treating feature engineering as mechanical.} For linear models, representation is part of the model.
-\item \textbf{Overinterpreting coefficients.} Coefficients describe the fitted model, not the world's causal structure.
-\item \textbf{Encoding categories as ordered integers.} Use one-hot encoding for nominal categories unless order is real.
-\item \textbf{Ignoring missingness as information.} Missing values may be signal, so impute on the training split and add a missingness indicator when needed.
-\item \textbf{Ignoring standardization.} Scale affects optimization and coefficient comparison, especially with regularization.
-\item \textbf{Skipping the linear baseline.} A simple linear baseline is a useful diagnostic, even when you expect a richer model.
-\item \textbf{Forgetting the evaluation boundary.} Preprocessing must respect train, validation, and test splits.
-\item \textbf{Assuming linearity means simplicity of the world.} A linear model can fit a complex problem only if the representation makes it approximately linear.
-\end{mistakebox}
+The common mistakes with linear models are predictable. Teams treat feature engineering as mechanical even though representation is already part of the model; they overread coefficients as if fitted associations were causal structure; they encode nominal categories as fake numeric order; they ignore missingness as possible signal; they skip standardization even when regularization makes scale consequential; and they jump past the linear baseline before learning what it can already explain. Most of these errors are not failures of algebra. They are failures of interpretation.
 
 \section{Looking Ahead}
 
 This chapter showed that representation is already part of the model. The next chapter studies what kind of structure is missing when one global weighted sum is not enough: conditional thresholds and interactions, local similarity, or unlabeled organization.
 
-The first baseline design sheet from this chapter becomes the starting document for Chapter 5's structure diagnosis sheet: if the linear baseline fails, the written failure pattern should justify the next family rather than model shopping.
+\section*{Chapter Summary}
 
-\begin{chaptersummary}
-\item This chapter begins with a representation question: can a good encoding plus one weighted sum already solve the task?
-\item The model does not see raw reality. It sees an encoded representation, so feature choices are already scientific claims about what signal matters.
-\item Linear regression and logistic regression share one pipeline: encode the input, compute one weighted sum, then choose the output transform that matches the target.
-\item Coefficients become useful only under discipline about scale, correlation, omitted variables, and the boundary between predictive language and causal claims.
-\item Regularization keeps the first baseline controlled: L2 shrinks weights smoothly, while L1 can also make the model sparse.
-\item Linear models are strong first baselines because they are cheap, legible, and diagnostically useful.
-\item Failure should be interpreted structurally: first ask whether a better feature map rescues the weighted sum, and only then ask what richer family is justified.
-\item The main deliverable of the chapter is a first baseline design sheet written before method shopping begins.
-\end{chaptersummary}
+This chapter argued that linear modeling is first a representation test and only second a fitting procedure. Once raw inputs are encoded into features, linear regression and logistic regression become two versions of the same weighted-sum pipeline, differing mainly in their output transform and target type. The chapter also showed why coefficient reading requires restraint: scale, collinearity, omitted variables, and the distinction between prediction and intervention all shape what a coefficient can honestly mean. Regularization then turns a simple model into a controlled baseline, and the real value of that baseline is diagnostic: if it succeeds, the task may already be largely additive in the chosen feature space; if it fails, the pattern of failure tells us what structure is missing.
 
 \begin{studyquestions}
 \item Why is ``can one weighted sum already solve the task?'' a better opening question than ``which regression formula comes first?'' 
@@ -1138,19 +1041,17 @@ The first baseline design sheet from this chapter becomes the starting document 
 \end{studyquestions}
 
 \begin{exercises}
-\item Encoding drills: encode the categorical variable \emph{browser} with possible values \{Chrome, Firefox, Safari\} for an example in which the browser is Safari. Then suppose the vocabulary is \{free, cash, meeting, project\} and the email text is ``free project cash.'' Write the bag-of-words vector and compute its dot product with weights $[1.2, 0.8, -0.5, -0.3]$.
+\item One-hot encoding drill: encode the categorical variable \emph{browser} with possible values \{Chrome, Firefox, Safari\} for an example in which the browser is Safari.
+\item Sparse bag-of-words drill: suppose the vocabulary is \{free, cash, meeting, project\} and the email text is ``free project cash.'' Write the bag-of-words vector and compute its dot product with weights $[1.2, 0.8, -0.5, -0.3]$.
 \item Representation audit: for a task of your choice, state the raw input, the encoded representation, one thing the representation loses, and one assumption it inserts.
 \item Logit-to-probability drill: convert logits $-1.5$, $0$, and $1.5$ into probabilities using the sigmoid function.
 \item Score-to-boundary drill: explain why a logistic-regression threshold of $0.5$ is equivalent to testing whether the linear score is nonnegative. Then, for $w=[2,-1]$ and $b=-0.5$, write the boundary equation.
 \item Which feature map makes this relation more linear? A target grows slowly for small $x$ and much faster for large $x$. Suggest one transformed feature set that could help a linear model fit that pattern better.
 \item Same prediction, different coefficients: explain how two models could make similar predictions while assigning different weights to area and bedrooms in a housing model.
-\item Two logistic baselines make nearly the same validation predictions, but one places most of the weight on lateness while the other places more weight on inactivity. Give two technically plausible reasons the coefficient stories can differ while prediction stays similar, and state what claim remains safe.
-\item A residual plot for a price model is strongly U-shaped across the fitted values. What does that suggest about the representation, and what is the first feature repair you would try before abandoning linearity?
 \item L1 or L2? Give one situation where sparse feature selection is especially useful and one situation where smooth shrinkage across correlated features is more appropriate.
 \item A model finds that students who attend more office hours tend to earn higher grades. Write one predictive interpretation and one intervention claim that the model does \emph{not} justify by itself.
 \item Use a public tabular task such as sports-shot prediction and propose a first linear baseline with 4--6 features, a target type, and one failure pattern you would watch for.
 \item Write language-neutral pseudocode that takes a feature vector, weights, and a bias, then returns the logistic score, probability, and thresholded label.
-\item A unigram logistic-regression baseline for routing support emails makes these mistakes: ``I cannot drop this course'' is predicted as a registration request, ``I can no longer log in after the deadline'' is predicted as a deadline reminder, and ``My visa letter has not arrived'' is predicted as a generic document request. Name one representation change that might fix at least one of these errors, and one error pattern that suggests leaving a simple linear bag-of-words baseline.
 \item Use Table~\ref{tab:baseline-design-sheet} to write a one-page baseline design sheet for either spam filtering, student support, or another application of your choice. If you are carrying one case through the book, inherit the same task from the earlier framing, metric, and evaluation artifacts, then end by naming the next structural hypothesis you would test if the linear baseline fails.
 \end{exercises}
 
@@ -1159,6 +1060,5 @@ The first baseline design sheet from this chapter becomes the starting document 
 \item Propose a nonlinear real-world relationship that can still be modeled by a linear model after feature engineering. State the transformed features explicitly and explain why the model remains linear in the parameters.
 \item Construct a small binary-classification task in which one weighted sum on the raw inputs fails, but one additional transformed feature rescues the linear model. State the transformed feature and explain why the rescue works.
 \item Give an example in which a coefficient is highly interpretable for prediction but misleading for causal inference. Explain what additional assumptions or data would be needed before making a causal claim.
-\item Two logistic baselines on the same dataset produce nearly identical validation performance, but the sign on one correlated predictor flips between the two fits after a small resample of the training data. Explain two technically plausible reasons for that instability and what it does to the strength of any coefficient story.
 \item Take one failed linear baseline result from your own experience or invent one. Diagnose the failure structurally: what missing interaction, locality, sequence effect, or learned representation would justify the next modeling step?
 \end{challengeexercises}

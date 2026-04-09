@@ -1,65 +1,22 @@
 \chapter{Representation Learning and Foundation Models}
 
-\begin{learninggoals}
-\item Explain when it is worth learning a reusable representation instead of solving only one task directly.
-\item Use the ``change of coordinates'' mental model to explain why a learned space can make downstream tasks easier.
-\item Understand embeddings, cosine similarity, and linear probes as tools for studying reusable representations rather than as isolated techniques.
-\item Distinguish supervised, self-supervised, multimodal, and transfer-learning pressure in terms of what kind of reusable structure they encourage.
-\item Choose among frozen probes, partial tuning, and full fine-tuning based on label budget, domain shift, and evidence needs.
-\item Produce a reuse and adaptation plan before making a strong transfer or foundation-model claim.
-\end{learninggoals}
+A model can succeed on one task in two very different ways. It can learn a narrow solution tied closely to that task, or it can learn a representation that remains useful when the task changes. This chapter is about the second possibility. Representation learning matters because modern machine learning increasingly depends on reusable internal structure: embeddings that preserve useful geometry, pretrained encoders that transfer across tasks, and large foundation-model workflows that shift effort from training from scratch to adapting what has already been learned. The central question is not whether reuse is fashionable, but what exactly is being reused, how much adaptation it requires, and what evidence shows that the reuse is real rather than only hidden inside a powerful downstream model. By the end of the chapter, the reader should be able to judge when a learned representation is genuinely reusable, how to test that reuse, and when adaptation changes the claim being made.
 
-\begin{whychaptermatters}
-This chapter asks what changes when learned features become reusable across tasks. After reading it, students should distinguish probes, retrieval, partial tuning, and full fine-tuning as different interventions with different claims. The reuse and adaptation plan extends the neural training report from one-task learning into transfer and foundation-model workflows.
-\end{whychaptermatters}
+The shift is larger than it first appears. In classical machine learning, a model is often trained for one task on one dataset with one objective. Representation learning changes the unit of value. What matters is not only whether the model solves today's task, but whether it learns a space that remains useful for tomorrow's tasks as well. Foundation-model workflows push this further by pretraining for reuse first and adapting later. The modern form of this idea draws on work on representation learning as exposed structure, contextual word representations, latent prediction, attention-based sequence modeling, bidirectional pretraining, and foundation-model analysis \citep{bengio2013rep,mikolov2013,peters2018elmo,oord2018cpc,vaswani2017,devlin2019,bommasani2021}. The chapter follows that same path: first what a reusable space is, then what kinds of training pressure create it, then how probes and adaptation test it, and finally how attention and foundation-model workflows scale the same logic.
 
-The previous chapter showed how a network can learn useful internal features for one task. The next question is what happens when those features survive beyond that task.
-
-Sometimes a model is valuable not only because it solves today's problem, but because it learns a space that makes tomorrow's problems easier. The same representation might support classification, retrieval, clustering, or later adaptation with fewer labels. Foundation-model workflows push that idea further by pretraining for reuse first and specializing later \citep{bengio2013rep,mikolov2013,peters2018elmo,oord2018cpc,vaswani2017,devlin2019,bommasani2021}.
-
-\begin{problemsolvinglens}
-When a pretrained model helps on a new task, ask what is actually doing the work: the reusable representation, fresh external evidence, or downstream adaptation.
-\end{problemsolvinglens}
+The chapter extends the book's representation question from one task to many, connects baseline discipline to frozen probes and shallow adaptation, and keeps the evidence question visible by asking whether any downstream gain came from reused structure, from extra adaptation capacity, or from better external evidence. Its running artifact is a reuse and adaptation plan: state what pretrained object is being reused, what first clean diagnostic isolates reuse, what shallowest adaptation is justified, what external evidence the workflow still needs, and what alternative explanation could fake the gain.
 
 \section{Opening Dilemma: Solve One Task, or Learn a Reusable Space?}
 
-Suppose you can train one model from scratch for one task, or start from a representation that has already seen broad data and may help on several tasks. That second option is not always worth the extra machinery, but when labels are scarce or the same inputs will be reused in many ways, it can change what counts as progress.
+The previous chapter ended by showing that neural networks can learn internal features instead of relying only on hand-built ones. This chapter begins where that idea becomes strategically important. Sometimes the real value of a model is not that it solves one task well, but that it learns a space in which many related tasks become easier.
 
-That is the opening dilemma of the chapter. Should we solve one task directly, or should we spend effort learning a reusable space that may pay off across tasks, domains, or label budgets?
+This is the opening dilemma of the chapter. Should we solve a task directly from scratch, or should we invest in learning a reusable representation that may help across tasks, domains, or label budgets?
 
-The answer depends on what the reusable space really buys us. A model trained only for one classifier may work well today and still throw away value that could have helped retrieval, clustering, transfer, or later fine-tuning. A reuse-first workflow tries to keep that value.
+That question matters whenever the useful structure is expensive to relearn from scratch. A model trained only for one classifier may work well today and still throw away value that could have helped retrieval, clustering, transfer, or later fine-tuning. A reusable representation changes what we mean by progress. The rest of the chapter turns that claim into a workflow: define the space, ask what pressure created it, test it with the cleanest downstream diagnostic, and only then decide how much adaptation is justified.
 
-\begin{decisionbox}
-Invest in reusable representation learning when the raw input is too entangled for simple task-specific modeling and when the learned space is likely to be reused across tasks, domains, or limited-label settings.
-\end{decisionbox}
+Invest in reusable representation learning when the raw input is too entangled for simple task-specific modeling and when the learned space is likely to be reused across tasks, domains, or limited-label settings. A sensible workflow is to identify the source representation, test it first with a frozen-feature or linear-probe diagnostic, compare against a retrieval-only or prompting-only baseline when relevant, choose the shallowest adaptation that still addresses label budget and domain shift, and write down alternative explanations for any gain.
 
-The practical payoff is a reuse and adaptation plan: what is being reused, what is being changed, and what evidence would justify the transfer claim.
-
-\begin{practicalnote}
-A good first pass is simple: identify the source representation, test it with frozen features or a linear probe (a simple linear classifier trained on frozen embeddings; see Section~\ref{sec:linear-probe}), compare against a clean baseline when that comparison matters, and only then decide how much adaptation is worth doing.
-\end{practicalnote}
-
-\begin{thinkingtool}
-\textbf{Reuse and adaptation plan.} A clean transfer claim separates five things: what pretrained object is being reused, what first diagnostic isolates reuse, what adaptation depth is justified, what external evidence the workflow still needs, and what alternative explanation could fake the gain.
-\end{thinkingtool}
-
-\begin{corepathbox}
-\textbf{Core path.} Learn the reuse logic first: representation as change of coordinates, what makes a space reusable, probe first, then compare prompting, retrieval, and tuning by what changed.
-
-\textbf{Enrichment.} Attention mechanics, broader pretraining taxonomies, and larger foundation-model workflow detail deepen the story, but the core undergraduate gain is being able to say where a transfer improvement came from and what it still does not prove.
-\end{corepathbox}
-
-\begin{decisionbox}
-\textbf{What should change first in a reuse workflow?}
-\begin{itemize}[leftmargin=*]
-\item To test whether the pretrained space already exposes the signal, start with a linear probe or frozen features.
-\item If correctness depends on current external evidence, add retrieval before blaming the representation.
-\item If the representation seems useful but the task is moderately shifted, prefer the shallowest tuning that can fix the mismatch.
-\item Reserve full fine-tuning for large domain shift or strong labeled evidence.
-\end{itemize}
-\end{decisionbox}
-
-The whole discussion turns on one question:
+The chapter's key question can therefore be stated plainly:
 
 \begin{center}
 \emph{When is it worth learning a reusable representation instead of solving only one task directly, and how do we know the reusable representation is actually what is helping?}
@@ -67,16 +24,21 @@ The whole discussion turns on one question:
 
 \section{Representation as a Change of Coordinates}
 
-The best mental model for a representation is a change of coordinates. It is also the mental model that holds the rest of the chapter together: if the coordinates improve, simple downstream readouts, transfer diagnostics, and later adaptation should all become easier for a reason we can inspect.
+A useful first mental model is to treat representation learning as a change of coordinates: data are mapped into a space where the structure needed for downstream tasks becomes easier to separate, compare, or read out. It is also the mental model that holds the rest of the chapter together: if the coordinates improve, simple downstream readouts, transfer diagnostics, and later adaptation should all become easier for a reason we can inspect.
 
 \begin{definition}[Representation Learning]
 Representation learning is the process of learning transformations of data that make useful structure easier to detect, compare, transfer, or predict from.
+\end{definition}
+
+\begin{definition}[Representation, embedding, feature]
+A \emph{representation} is any learned internal structure produced by a model. An \emph{embedding} is a specific kind of representation: a vector placed in a learned continuous space where geometric relationships encode meaningful structure. \emph{Features} is the most general term, covering any attribute or signal---whether hand-crafted or learned---used as input to a model. In this chapter, ``representation'' is the default term; ``embedding'' is used when the geometric space matters.
 \end{definition}
 
 In one coordinate system, classes may overlap, neighborhoods may be meaningless, and prediction may require many labels. In another coordinate system, examples that ``mean the same thing'' may cluster naturally and simple downstream decisions may become effective.
 
 \begin{figure}[t]
 \centering
+\resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
   x=1cm,
   y=1cm,
@@ -120,6 +82,7 @@ In one coordinate system, classes may overlap, neighborhoods may be meaningless,
 \node[classneg] at (3.2,2.6) {};
 \end{scope}
 \end{tikzpicture}
+}
 \caption{The central promise of representation learning is not magical. It is the possibility of mapping a hard raw space into a more useful space where simpler downstream decisions work better.}
 \label{fig:bad-vs-good-space}
 \end{figure}
@@ -144,15 +107,7 @@ This is why a weak downstream model on top of a strong representation can outper
 
 \section{What Makes a Representation Reusable?}
 
-Not every learned representation transfers to new tasks. A representation is \emph{reusable} in a meaningful sense only when it satisfies several conditions at once. Naming these conditions makes the concept durable beyond any specific model family. These conditions also become the chapter's checklist for deciding whether downstream success is evidence of reuse or only evidence that a later adaptation stage compensated for a weak source space.
-
-\textbf{Invariances captured.} A reusable visual representation should be roughly invariant to the specific lighting conditions, camera angle, and background of the training images, since those factors do not define the content. A reusable language representation should be roughly invariant to paraphrase: ``the student submitted late'' and ``the assignment was turned in after the deadline'' should be close in a representation meant to capture meaning. A representation that has learned the right invariances can transfer to new examples that share the same semantic content under different surface forms.
-
-\textbf{Information preserved.} A representation that compresses too aggressively may throw away information that a new task needs. A representation designed for topic classification that discards fine-grained syntax may not be reusable for grammatical error detection. Reuse requires that the relevant information is still present in the space, even if it was not the primary target during pretraining.
-
-\textbf{Task mismatch tolerated.} The pretraining task and the new task are never exactly the same. A language representation pretrained on predicting masked words may not encode document layout, while a visual representation pretrained only for object identity may not preserve the spatial cues needed for scene understanding. Reuse is easier when the pretraining task was broad enough to touch the relevant signals and when the mismatch between source and target objectives is modest.
-
-\textbf{Adaptation cost contained.} A representation that requires full fine-tuning on thousands of labeled examples to be useful for a new task is reusable in a narrow sense, but the practical barrier is high. Reuse is most valuable when a small labeled set, a linear probe, or a lightweight adapter is sufficient. This is the operational meaning of the transfer learning promise: the pretrained space should reduce the labeled-data burden for new tasks.
+Not every learned representation transfers to new tasks. A representation is \emph{reusable} in a meaningful sense only when several conditions hold at once. It should capture the right invariances, so that lighting, paraphrase, nuisance background, or other label-preserving changes do not destroy the relevant structure. It should preserve the information that a new task still needs, rather than compressing so aggressively that fine distinctions disappear. It should tolerate some mismatch between the source objective and the target task, because pretraining and downstream use are never exactly the same problem. And its adaptation cost should remain contained: reuse is most valuable when a small labeled set, a linear probe, or a lightweight adapter is enough to unlock the target signal rather than requiring a full relearning of the representation.
 
 \begin{table}[t]
 \centering
@@ -172,7 +127,7 @@ Adaptation cost contained & Can a linear probe or small adapter achieve competit
 \label{tab:reusability-conditions}
 \end{table}
 
-This framing is more durable than naming current model families because it applies equally to word embeddings, visual encoders, audio representations, and tabular feature extractors. Whatever the source architecture, the reuse question is always: which invariances did it learn, what information does it still carry, how far is the source task from the target, and how much new labeled data does adaptation require?
+This framing is more durable than naming current model families because it applies equally to word embeddings, visual encoders, audio representations, and tabular feature extractors. Whatever the source architecture, the reuse question is always: which invariances did it learn, what information does it still carry, how far is the source task from the target, and how much new labeled data does adaptation require? These reuse conditions become easier to see once representation is made geometric. Embeddings are the most common way modern machine learning turns that abstract idea into a usable space.
 
 \section{Embeddings and Geometry: Useful Space, Still a Model Choice}
 
@@ -188,35 +143,36 @@ Embeddings are one of the clearest examples of reusable representation learning.
 \definecolor{c7encBlueBg}{RGB}{220,233,251}
 \definecolor{c7downGreen}{RGB}{26,112,64}
 \definecolor{c7downGreenBg}{RGB}{210,238,220}
+\resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
-  x=0.9cm,
+  x=1cm,
   y=1cm,
   font=\small,
   ebox/.style={draw=c7encBlue, fill=c7encBlueBg, rounded corners=4pt,
-               align=center, minimum height=1.05cm, text width=2.1cm,
+               align=center, minimum height=1.05cm, text width=2.4cm,
                font=\small, line width=0.8pt},
   dbox/.style={draw=c7downGreen, fill=c7downGreenBg, rounded corners=4pt,
-               align=center, minimum height=1.05cm, text width=2.1cm,
+               align=center, minimum height=1.05cm, text width=2.4cm,
                font=\small, line width=0.8pt},
   arr/.style={-Latex, line width=1.1pt, draw=c7encBlue},
   branch/.style={-Latex, line width=1.1pt, draw=c7downGreen}
 ]
 %% ── Top row: encoding pipeline ──────────────────────────────
 \node[ebox] (raw) at (0.0,0) {raw input};
-\node[ebox] (enc) at (3.3,0) {encoder};
-\node[ebox] (emb) at (6.6,0) {embedding\\vector};
+\node[ebox] (enc) at (3.8,0) {encoder};
+\node[ebox] (emb) at (7.6,0) {embedding\\vector};
 \draw[arr] (raw) -- (enc);
 \draw[arr] (enc) -- (emb);
 
 %% ── Fan-out point ───────────────────────────────────────────
-\coordinate (fan) at (6.6,-1.3);
+\coordinate (fan) at (7.6,-1.3);
 \draw[c7encBlue, line width=1.1pt] (emb.south) -- (fan);
 \filldraw[c7encBlue] (fan) circle (2.5pt);
 
 %% ── Bottom row: downstream tasks ───────────────────────────
-\node[dbox] (probe) at (2.4,-2.8) {probe};
-\node[dbox] (retr)  at (5.8,-2.8) {retrieve /\\cluster};
-\node[dbox] (ft)    at (9.0,-2.8) {adapt};
+\node[dbox] (probe) at (2.8,-2.8) {linear probe};
+\node[dbox] (retr)  at (6.4,-2.8) {retrieval /\\clustering};
+\node[dbox] (ft)    at (10.0,-2.8) {fine-tuning};
 
 %% ── Straight branches from fan-out to each task ─────────────
 \draw[branch] (fan) -- (probe.north);
@@ -224,11 +180,12 @@ Embeddings are one of the clearest examples of reusable representation learning.
 \draw[branch] (fan) -- (ft.north);
 
 %% ── Labels ──────────────────────────────────────────────────
-\node[font=\footnotesize, c7encBlue, anchor=south] at (3.3,0.7)
+\node[font=\footnotesize, c7encBlue, anchor=south] at (3.8,0.7)
     {\textbf{learn once}};
-\node[font=\footnotesize, c7downGreen, anchor=north] at (5.8,-3.55)
-    {\textbf{reuse downstream}};
-\end{tikzpicture}
+\node[font=\footnotesize, c7downGreen, anchor=north] at (6.4,-3.65)
+    {\textbf{reuse many ways}};
+\end{tikzpicture}%
+}
 \caption{A reusable representation is valuable because the same encoder and embedding space can support several downstream operations: simple probes, retrieval, clustering, or more task-specific adaptation.}
 \label{fig:rep-encoder-embedding-workflow}
 \end{figure}
@@ -289,6 +246,19 @@ This measures the angle between two vectors rather than their raw length. It is 
 The dot product $e_i^\top e_j$ is large when two vectors point in similar directions. Dividing by the vector lengths turns that raw alignment into a scale-free similarity score.
 \end{prereqbridge}
 
+\begin{theorem}[Johnson--Lindenstrauss dimension reduction]
+For any finite set $S$ of $n$ points in $\mathbb{R}^d$ and any $0<\varepsilon<1$, there exists a map $f:\mathbb{R}^d\to\mathbb{R}^k$ with
+\[
+k = O\!\left(\frac{\log n}{\varepsilon^2}\right)
+\]
+such that for all $u,v\in S$,
+\[
+(1-\varepsilon)\|u-v\|_2^2 \le \|f(u)-f(v)\|_2^2 \le (1+\varepsilon)\|u-v\|_2^2
+\]
+\citep{johnson1984}.
+\end{theorem}
+
+The theorem does not say every useful embedding is a random projection, and it does not replace task-specific representation learning. It does justify a central geometric intuition of the chapter: moderately low-dimensional spaces can still preserve many of the pairwise relationships that downstream retrieval, clustering, or probing depend on.
 
 
 \begin{figure}[t]
@@ -327,7 +297,7 @@ The dot product $e_i^\top e_j$ is large when two vectors point in similar direct
 \end{figure}
 
 \begin{advancednote}
-Cosine similarity and Euclidean distance answer different questions. Euclidean distance cares about absolute position and scale. Cosine cares about direction. In some applications the distinction is minor; in others it changes the neighbor ranking substantially.
+Cosine and Euclidean similarity answer different questions. Euclidean distance cares about absolute position and scale. Cosine cares about direction. In some applications the distinction is minor; in others it changes the neighbor ranking substantially.
 \end{advancednote}
 
 \begin{warningbox}
@@ -336,7 +306,7 @@ Embedding neighborhoods are evidence-bearing summaries, not ground-truth meaning
 
 \section{How Representations Are Learned: Supervisory Pressure}
 
-The next question is where reusable structure comes from in the first place. These workflows make the most sense when they are understood as different kinds of \emph{training pressure} on the learned space, not as disconnected method names. By training pressure we mean the structural demands that a training objective places on the representation---what the model is forced to organize in order to reduce its loss. Different objectives really do produce different reuse profiles. Supervised pretraining often optimizes one label space well and can transfer strongly when the downstream task is close. Self-supervised objectives such as masked prediction, contrastive alignment (which trains the model to pull representations of similar items closer together and push dissimilar items apart), and self-distillation instead force the model to preserve context, invariance, or cross-view agreement that may transfer more broadly \citep{bengio2013rep,devlin2019,chen2020simclr,he2020moco,grill2020byol,caron2021dino}. Transfer and adaptation then test how much of that reusable structure actually survives contact with a new task.
+The next question is where reusable structure comes from in the first place. The chapter is strongest when these workflows are understood as different kinds of pressure on the learned space, not as disconnected method names. Different objectives really do produce different reuse profiles. Supervised pretraining often optimizes one label space well and can transfer strongly when the downstream task is close. Self-supervised objectives such as masked prediction, contrastive alignment, and self-distillation instead force the model to preserve context, invariance, or cross-view agreement that may transfer more broadly \citep{bengio2013rep,devlin2019,chen2020simclr,he2020moco,grill2020byol,caron2021dino}. Transfer and adaptation then test how much of that reusable structure actually survives contact with a new task.
 
 \begin{table}[t]
 \centering
@@ -363,7 +333,7 @@ The limitation is narrowness. A representation learned only for one fixed target
 \subsection{Self-Supervised Pressure}
 
 \begin{definition}[Self-Supervised Learning]
-Self-supervised learning trains a model using targets generated from the data itself rather than relying entirely on external human labels.
+Self-supervised learning generates training targets from the data itself---for example, predicting masked words from their surrounding context---rather than relying on external human labels. The prefix \emph{self-} refers to the source of the supervision signal, not the absence of one.
 \end{definition}
 
 \begin{mathlens}
@@ -374,13 +344,7 @@ One visible example is masked-token prediction. If $M$ is the set of masked posi
 The loss is small only when the model assigns high probability to the original tokens at the masked positions. That makes the training signal explicit: the model must use surrounding context to recover what was removed.
 \end{mathlens}
 
-Self-supervised learning creates prediction problems from structure already present in the input. Common patterns include:
-\begin{itemize}[leftmargin=*]
-\item predicting masked or missing parts of a sequence,
-\item reconstructing a clean example from a corrupted one,
-\item matching two augmented views of the same underlying object,
-\item predicting future segments of time-series or audio data.
-\end{itemize}
+Self-supervised learning creates prediction problems from structure already present in the input. Common patterns include predicting masked or missing parts of a sequence, reconstructing a clean example from a corrupted one, matching two augmented views of the same underlying object, and predicting future segments of time-series or audio data.
 
 The pretext task is not the final goal. It is pressure that teaches invariance, context, continuity, or structure. Later probe and transfer results are only as good as the pressure that created the representation in the first place.
 
@@ -394,18 +358,19 @@ Students do not need to memorize every acronym in that list. The durable lesson 
 \definecolor{c7ssBlue}{RGB}{56,103,170}
 \definecolor{c7ssGreenBg}{RGB}{210,238,220}
 \definecolor{c7ssGreen}{RGB}{26,112,64}
-\begin{tikzpicture}[x=0.9cm, y=1cm, font=\small,
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
   sbox/.style={draw=black!55, fill=black!4, rounded corners=4pt,
-               align=center, minimum height=1.1cm, text width=2.1cm,
+               align=center, minimum height=1.1cm, text width=2.3cm,
                font=\small, line width=0.8pt},
   mbox/.style={draw=c7ssBlue, fill=c7ssBlueBg, rounded corners=4pt,
-               align=center, minimum height=1.1cm, text width=2.2cm,
+               align=center, minimum height=1.1cm, text width=2.5cm,
                font=\small, line width=0.8pt},
   tbox/.style={draw=c7ssGreen, fill=c7ssGreenBg, rounded corners=4pt,
-               align=center, minimum height=1.1cm, text width=2.2cm,
+               align=center, minimum height=1.1cm, text width=2.5cm,
                font=\small, line width=0.8pt},
   lossbox/.style={draw=black!60, fill=yellow!8, rounded corners=4pt,
-               align=center, minimum height=1.3cm, text width=2.2cm,
+               align=center, minimum height=1.3cm, text width=2.5cm,
                font=\small, line width=0.8pt},
   arr/.style={-Latex, line width=1.1pt, draw=black!65}
 ]
@@ -413,33 +378,34 @@ Students do not need to memorize every acronym in that list. The durable lesson 
 \node[sbox] (raw) at (0,0) {raw example};
 
 %% ── Fork point ──────────────────────────────────────────────
-\coordinate (fork) at (1.5,0);
+\coordinate (fork) at (1.8,0);
 \draw[black!65, line width=1.1pt] (raw.east) -- (fork);
 \filldraw[black!55] (fork) circle (2.5pt);
 
 %% ── Top path (model) ───────────────────────────────────────
-\node[mbox] (view) at (4.0, 1.5) {corrupted /\\augmented view};
-\node[mbox] (enc)  at (6.8, 1.5) {encoder $\rightarrow z$};
+\node[mbox] (view) at (4.4, 1.5) {corrupted /\\augmented view};
+\node[mbox] (enc)  at (7.6, 1.5) {encoder $\rightarrow z$};
 \draw[arr] (fork) -- (view.west);
 \draw[arr] (view) -- (enc);
 
 %% ── Bottom path (target) ───────────────────────────────────
-\node[tbox] (target) at (4.0,-1.5) {target /\\paired view};
+\node[tbox] (target) at (4.4,-1.5) {target /\\paired view};
 \draw[arr] (fork) -- (target.west);
 
 %% ── Right: loss ─────────────────────────────────────────────
-\node[lossbox] (loss) at (8.7, 0) {pretext loss:\\predict or\\compare};
+\node[lossbox] (loss) at (9.6, 0) {pretext loss:\\predict or\\compare};
 %% Top path feeds into loss from above
 \draw[-Latex, line width=1.1pt, draw=c7ssBlue]
-    (enc.east) -- (8.7, 1.5) -- (loss.north);
+    (enc.east) -- (9.6, 1.5) -- (loss.north);
 %% Bottom path feeds into loss from below
 \draw[-Latex, line width=1.1pt, draw=c7ssGreen]
-    (target.east) -- (8.7,-1.5) -- (loss.south);
+    (target.east) -- (9.6,-1.5) -- (loss.south);
 
 %% ── Path labels ─────────────────────────────────────────────
-\node[font=\footnotesize\bfseries, c7ssBlue] at (5.2, 2.25) {model path};
-\node[font=\footnotesize\bfseries, c7ssGreen] at (5.2,-2.25) {target path};
-\end{tikzpicture}
+\node[font=\footnotesize\bfseries, c7ssBlue] at (6.0, 2.35) {model path};
+\node[font=\footnotesize\bfseries, c7ssGreen] at (6.0,-2.35) {target path (from the same data)};
+\end{tikzpicture}%
+}
 \caption{Self-supervision is not ``learning without targets.'' It is learning from targets created out of the structure already present in the data.}
 \label{fig:selfsupervised-workflow}
 \end{figure}
@@ -464,6 +430,8 @@ for each raw example x:
 
 \subsection{Autoencoders as Reconstruction-Based Representation Learning}
 
+Reconstruction provides another form of self-supervised pressure. Rather than predicting masked tokens or contrasting augmented views, an autoencoder learns to compress and reconstruct its input, keeping only the structure needed to recover the original signal.
+
 \begin{definition}[Autoencoder]
 An autoencoder is a model that learns an encoder that maps an input into a latent representation and a decoder that tries to reconstruct the original input from that latent representation. In the standard representation-learning setup, the latent state is smaller or otherwise constrained.
 \end{definition}
@@ -477,7 +445,7 @@ A simple reconstruction objective is
 \qquad
 \hat x = g_\theta(f_\theta(x)),
 \]
-where $f_\theta$ is the encoder and $g_\theta$ is the decoder (here $\theta$ denotes all model parameters jointly, both encoder and decoder). The loss is small only when the latent representation preserves enough structure to rebuild the input faithfully.
+where $f_\theta$ is the encoder and $g_\theta$ is the decoder. The loss is small only when the latent representation preserves enough structure to rebuild the input faithfully.
 \end{mathlens}
 
 \begin{codeexample}[caption={A minimal autoencoder loop}]
@@ -493,6 +461,10 @@ Suppose a sensor stream has a stable daily pattern with occasional spikes. An au
 \end{example}
 
 If the latent space is almost as large and unconstrained as the input itself, reconstruction can collapse into copying rather than abstraction. Bottlenecks, denoising, sparsity, or related constraints are what turn reconstruction into a representation-learning pressure rather than a memorization path.
+
+\begin{example}[Bottleneck ratio matters]
+If the input is 1000-dimensional and the bottleneck is 10-dimensional, the encoder must compress by a factor of 100, forcing it to learn meaningful structure. If the bottleneck is 900-dimensional, the model can nearly copy the input, learning little of value. The effective constraint is the ratio of bottleneck size to input size. Denoising and variational objectives add further pressure against trivial solutions.
+\end{example}
 
 \begin{decisionbox}
 Autoencoders help when the input contains redundancy, when a compressed latent space is useful, or when the downstream task benefits from denoising, anomaly detection, or a compact summary of the input.
@@ -534,11 +506,13 @@ Together, reconstruction and cross-modal alignment show two of the main ways a m
 
 \section{Why Self-Supervision Scales}
 
-The main practical advantage of self-supervision is that unlabeled data is usually much more abundant than carefully labeled data. If the pretraining objective is chosen well, large amounts of raw data can be turned into representational pressure before a downstream label set even exists. This is not a bigger-is-better claim. It explains why reuse-first workflows became practical at all.
+The main practical advantage of self-supervision is that unlabeled data is usually much more abundant than carefully labeled data. If the pretraining objective is chosen well, large amounts of raw data can be turned into representational pressure before a downstream label set even exists. This section is therefore not making a bigger-is-better claim. It is explaining why reuse-first workflows became practical at all.
 
 This is one of the major reasons the field moved toward pretraining and adaptation. Instead of rebuilding features from scratch for every new task, we can first learn broad reusable structure and then specialize it later.
 
-Scale helps because raw data is plentiful, but that should not invite a lazy conclusion. Self-supervision scales only when the objective teaches the invariances or contextual structure the downstream task actually needs. More unlabeled data is not a substitute for a reuse audit \citep{chen2020simclr,devlin2019}.
+Scale helps because raw data is plentiful, but the chapter should resist a lazy conclusion here. Self-supervision scales only when the objective teaches the invariances or contextual structure the downstream task actually needs. More unlabeled data is not a substitute for a reuse audit \citep{chen2020simclr,devlin2019}.
+
+Scale helps only when the self-supervised objective encourages structure that aligns with downstream tasks. A pretraining signal that rewards surface-level statistics may scale without producing representations that transfer. The question is therefore not just ``how much data?'' but ``does the training pressure reward the right invariances?''
 
 \begin{example}[Denoising as a Representation Task]
 Suppose an image model is trained to reconstruct a clean image from a corrupted version. The model cannot succeed by memorizing one pixel at a time. It must learn which patterns are stable enough to infer the missing content. This forces the internal representation to organize edges, textures, and shapes rather than only the raw corruption.
@@ -548,23 +522,19 @@ Suppose an image model is trained to reconstruct a clean image from a corrupted 
 Contrastive learning is an especially influential self-supervised idea. Two views of the same underlying example are encouraged to have similar representations, while different examples are pushed apart. This teaches invariance: what changes under augmentation should often be ignored, while what remains stable should be preserved.
 \end{advancednote}
 
+Transfer learning makes reuse operational, but it still leaves one diagnostic question unanswered: is the useful structure already present in the frozen representation, or does the downstream model have to build it again?
+
 \section{Transfer Begins: Pretrain, Probe, Adapt}
 
-Once a reusable space exists, the next issue is whether it actually helps on a new task. That is where transfer learning begins.
+The chapter now shifts from how reusable spaces are created to how they are tested. Once a representation has been learned, we still need to use it. This is where transfer learning begins.
 
 \begin{definition}[Transfer Learning]
 Transfer learning is the reuse of knowledge learned on one task, dataset, or objective to improve performance on another task.
 \end{definition}
 
-Transfer is not a victory lap after pretraining. It is the first serious test of whether the representation contains linearly or cheaply accessible structure for the new task. A useful heuristic from earlier transfer work is that lower layers often transfer more generally while upper layers become more task-specific, but that pattern is not a law: modern architectures and tasks can blur it, and stronger source models often transfer better without doing so uniformly across downstream tasks \citep{yosinski2014transfer,kornblith2019transfer}.
+Transfer is not a victory lap after pretraining. It is the first serious test of whether the representation contains linearly or cheaply accessible structure for the new task. Yosinski et al.\ showed that lower layers tend to transfer more generally while upper layers become more task-specific, and Kornblith et al.\ found that stronger source models often transfer better but not uniformly across downstream tasks \citep{yosinski2014transfer,kornblith2019transfer}.
 
-The simplest reuse workflow is:
-\begin{enumerate}[leftmargin=*,label=\arabic*.]
-\item pretrain an encoder on a broad source objective,
-\item freeze or partially freeze the encoder,
-\item train a smaller downstream head on the target task,
-\item optionally fine-tune some or all of the encoder.
-\end{enumerate}
+The simplest reuse workflow is to pretrain an encoder on a broad source objective, freeze or partially freeze it, train a smaller downstream model on the target task, and only then decide whether some or all of the encoder should be fine-tuned.
 
 \begin{codeexample}[caption={A generic pretrain-and-adapt workflow}]
 encoder = pretrain_on_broad_data()
@@ -623,28 +593,11 @@ if task_or_domain_shift_is_large:
 \label{fig:pretrain-adapt-timeline}
 \end{figure}
 
-\begin{practicalnote}
-Keep one downstream target in mind through the rest of the chapter: a university support assistant that must classify incoming messages, retrieve current policy passages, and either answer or escalate. The next sections revisit that same target under frozen probes, deeper heads, tuning, prompting, and retrieval so that the differences feel like one workflow rather than a list of adaptation options.
-\end{practicalnote}
-
-\begin{thinkingtool}
-\textbf{Reuse audit.} Before adapting a pretrained model, ask:
-\begin{itemize}[leftmargin=*]
-\item What structure is being reused?
-\item How much of it stays frozen?
-\item What downstream head or adaptation method is being added?
-\item What evidence would show that reuse, rather than downstream complexity, is doing the real work?
-\end{itemize}
-\end{thinkingtool}
+So far the chapter has described reusable structure abstractly. The next practical question is whether that structure is already accessible enough to help on a new task. Before adapting a pretrained model, ask what structure is being reused, how much of it stays frozen, what downstream head or adaptation method is being added, and what evidence would show that reuse rather than downstream complexity is doing the real work.
 
 \section{Linear Probe as the First Diagnostic}
-\label{sec:linear-probe}
 
-A linear probe is a deliberately simple downstream model, often just a linear classifier or regressor trained on frozen embeddings. Following the probe tradition used to inspect intermediate representations, it is useful precisely because it separates two questions without hiding them behind a powerful downstream head \citep{alain2016probes}:
-\begin{itemize}[leftmargin=*]
-\item Did the representation capture useful information?
-\item Can a powerful downstream model exploit it?
-\end{itemize}
+A linear probe is a deliberately simple downstream model, often just a linear classifier or regressor trained on frozen embeddings. Following the probe tradition used to inspect intermediate representations, it is useful precisely because it separates two questions without hiding them behind a powerful downstream head \citep{alain2016probes}: did the representation itself capture useful information, or would the downstream model need to create that structure on its own?
 
 This is one of the cleanest habits in the chapter:
 
@@ -674,21 +627,23 @@ This is the boundary-testing version of the chapter's claim: a strong frozen pro
 Use broad reuse-first workflows only when the source representation is plausibly aligned with the target and when the evidence justifies the added complexity. Skip them when the task is tiny and specialized, when fresh external evidence matters more than pretrained priors, or when privacy, latency, or interpretability constraints dominate.
 \end{warningbox}
 
-\begin{practicalnote}
-When transfer fails, diagnose the mismatch before tuning harder. Ask whether the source data lacked the target nuisance factors, whether the label meaning shifted, whether the tokenizer or sensor changed what counts as signal, and whether the target task needs information the source objective never had to preserve. These are different failure stories, so they deserve different next comparisons.
-\end{practicalnote}
-
 \section{Probe, Freeze, Partial Tune, or Full Tune?}
 
-Probing comes first, but it is not the only option. The broader menu of adaptation choices is an experimental claim about the quality and fit of the pretrained representation, not only a computational decision. Each strategy implies a different answer to the question: ``how much of the pretrained representation do I trust for this new task?''
+The previous section argued for probing first. This section names the broader menu of adaptation choices that comes after that first diagnostic. The choice of adaptation strategy is not only a computational decision. It is an experimental claim about the quality and fit of the pretrained representation. Each strategy implies a different answer to the question: ``how much of the pretrained representation do I trust for this new task?''
 
-\textbf{Linear probe (frozen encoder).} Train only a linear head on top of the frozen pretrained features. This strategy makes the strongest claim about the representation: the task-relevant information is already linearly accessible in the frozen space. The probe is also the cleanest first diagnostic: if it works well, the frozen representation is reusable for that target under a simple linear readout. If it works poorly, the result says the frozen space is not enough on its own, but it does not by itself tell us whether the issue is missing signal, a weak probe setup, or a need for more adaptation.
+\textbf{Linear probe (frozen encoder).} Train only a linear head on top of the frozen pretrained features. This strategy makes the strongest claim about the representation: the task-relevant information is already linearly accessible in the frozen space. The probe is also the cleanest diagnostic: if it works well, the frozen representation is reusable for that target under a simple linear readout. If it works poorly, you learn that either the representation does not contain the right signals or those signals require a more complex readout.
 
 \textbf{Partial fine-tuning (unfreeze top layers).} Allow the later layers of the pretrained network to update while keeping the early layers frozen. This strategy claims that the early-layer representations are general enough to reuse directly, but the later-layer abstractions need task-specific adjustment. The tradeoff is between compute efficiency and the risk of task-specific overfitting in the upper layers.
 
 \textbf{Full fine-tuning.} Allow all layers to update. This strategy makes the weakest claim about the pretrained representation: some layers may need substantial adjustment to be useful for the new task. Full fine-tuning can achieve higher performance when the target task differs significantly from pretraining, but it requires more labeled data, more compute, and more care to avoid catastrophic forgetting of the source representation.
 
+\begin{warningbox}
+Full fine-tuning on a small labeled set risks \emph{catastrophic forgetting}: the model overwrites previously learned representations to fit the new task, losing reusable structure built during pretraining. This is why the adaptation ladder starts with the gentlest intervention (frozen probe) and escalates only when evidence supports it.
+\end{warningbox}
+
 \textbf{Adapter modules and low-rank updates.} Insert small trainable modules between frozen pretrained layers, or decompose weight updates into low-rank matrices. These strategies aim to capture task-specific adjustments while touching as little of the pretrained space as possible. They are useful when compute or data is limited and when preserving most of the pretrained representation is a priority.
+
+Between frozen probes and full fine-tuning lies \emph{few-shot learning}: adapting a model with very few labeled examples, often via prompt engineering or lightweight adapters. The evaluation discipline is the same---only the label budget and adaptation mechanism differ.
 
 \begin{table}[t]
 \centering
@@ -708,18 +663,35 @@ Adapter / low-rank & Low-medium & Small-moderate & Moderate & Good with less com
 \label{tab:adaptation-strategies}
 \end{table}
 
-The judgment rule is to start with the linear probe. If the probe achieves strong performance, the pretrained representation is already carrying a large share of the task-relevant information, and further adaptation may be unnecessary. If the probe performs poorly, that is a reason to inspect the representation and the probe setup before moving to deeper tuning. The failure is a diagnostic, not just a prompt to try the next strategy in the table.
+The judgment rule is to start with the linear probe. If the probe achieves strong performance, the pretrained representation is already fit for the task and no further adaptation is necessary. If the probe performs poorly, partial or full fine-tuning is warranted, but one should then ask \emph{why} the probe failed. Was the pretraining task too different? Is the target task genuinely out-of-distribution? Is the labeled set too small for fine-tuning to help? The probe failure is a diagnostic, not just a prompt to try the next strategy in the table.
 
 \section{Adaptation Depth: Freeze, Partial Tuning, Full Tuning}
 
-That menu becomes a simple rule: start with the cheapest test that tells you whether the pretrained space already exposes the signal, then move deeper only when the evidence says the frozen or lightly adapted model is not enough.
+The previous section named the options. This section turns that menu into a decision rule. Once a representation is shown to contain useful information, the next question is how much of it should be allowed to move.
 
-The modern design space is wider than freeze versus full fine-tuning. Gradual-unfreezing strategies such as ULMFiT made this visible early in NLP, and later adapter modules and low-rank updates made the same point at larger scale: teams can specialize a pretrained model while moving only part of it \citep{howard2018ulmfit,houlsby2019adapters,hu2021lora}. These methods can lower compute and preserve more of the original model, but they still need the same question answered: did the gain come from reuse, or from extra task-specific capacity?
+The modern design space is wider than freeze versus full fine-tuning. Gradual-unfreezing strategies such as ULMFiT made this visible early in NLP, and later adapter modules and low-rank updates made the same point at larger scale: teams can specialize a pretrained model while moving only part of it \citep{howard2018ulmfit,houlsby2019adapters,hu2021lora}. These methods can lower compute and preserve more of the original model, but they do not remove the need to show whether the observed gain came from reused representation or from extra task-specific capacity.
 
 \begin{table}[t]
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{2.01cm}L{1.35cm}L{1.70cm}L{1.85cm}L{2.10cm}}
+\toprule
+Choice & Cost & Overfitting risk & Diagnostic cleanliness & Performance ceiling \\
+\midrule
+Frozen encoder + probe & low & low & strongest & often lower if shift is large \\
+Parameter-efficient tuning & low to medium & low to medium & stronger than full tuning & often high when modest specialization is enough \\
+Partial fine-tuning & medium & medium & moderate & often good compromise \\
+Full fine-tuning & highest & highest on small data & weakest & highest when enough data and meaningful shift exist \\
+\bottomrule
+\end{tabular}
+\caption{These choices are not value judgments. They are tradeoffs among compute, evidence quality, and adaptation flexibility.}
+\label{tab:adaptation-choice-comparison}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
 \begin{tabular}{L{3.18cm}L{3.27cm}L{3.08cm}}
 \toprule
 Scenario & Sensible first choice & Why \\
@@ -742,15 +714,30 @@ Freeze first when you want a clean diagnostic of representation quality or when 
 Suppose a pretrained encoder already gives a strong frozen linear probe on typed classroom notices. Fine-tuning may add little there because the domain shift is small. Now move to handwritten whiteboard photos with glare, blur, and camera perspective. The same encoder may still help, but fine-tuning becomes more plausible because the downstream domain asks the representation to adapt to new nuisance structure.
 \end{example}
 
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{L{3.00cm}L{1.45cm}L{4.38cm}}
+\toprule
+Method & Test accuracy & What the result suggests \\
+\midrule
+Raw-feature logistic regression & 0.565 & weak baseline under low labels and domain shift \\
+Frozen encoder + linear probe & 0.683 & the pretrained representation already exposes useful signal \\
+Frozen encoder + learned classifier & 0.691 & a slightly richer head helps, but only modestly \\
+Partial fine-tuning & 0.625 & more adaptation can overfit before it helps \\
+Full fine-tuning & 0.570 & aggressive tuning can erase the advantage when labels are scarce \\
+\bottomrule
+\end{tabular}
+\caption{A small pedagogical domain-shift example from the companion materials. The point is not that full fine-tuning is always worse, but that low-label adaptation often rewards restraint and good diagnostics.}
+\label{tab:adaptation-results}
+\end{table}
+
 \begin{evidencebox}
-Evidence that transfer learning is genuinely helping should include at least one of the following:
-\begin{itemize}[leftmargin=*]
-\item similar performance with fewer labeled examples,
-\item better performance at the same label budget,
-\item faster convergence during downstream training,
-\item better robustness under domain shift or nuisance variation.
-\end{itemize}
+Evidence that transfer learning is genuinely helping should show up in at least one concrete way: similar performance with fewer labeled examples, better performance at the same label budget, faster convergence during downstream training, or better robustness under domain shift or nuisance variation.
 \end{evidencebox}
+
+Up to this point, reuse has meant a fixed learned space. Attention changes that picture by making the representation itself depend on context at inference time. The key architectural ingredient is attention---a mechanism that lets each position in a sequence directly access any other position, weighted by learned relevance. Understanding attention is essential because it underlies the transformer architecture, which powers nearly all current foundation models.
 
 \section{Attention: Building Context-Dependent Representations}
 
@@ -770,25 +757,9 @@ In a sentence, a word can attend to previous or later words. In an image, a patc
 
 \begin{quote}\noindent\textbf{Static vs. contextual representations.} A static embedding gives an object the same vector regardless of where it appears. A contextual representation changes with surrounding elements. The word ``bank'' in a finance sentence and in a river sentence may start from the same token identity, but attention lets the resulting vector depend on context.\end{quote}
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.0cm}L{3.28cm}L{3.72cm}}
-\toprule
-Surface token & Local context & Contextual reading \\
-\midrule
-\texttt{bank} & \texttt{the bank approved the loan} & financial institution participating in a lending event \\
-\texttt{bank} & \texttt{the river reached the bank} & physical boundary of the river rather than a financial actor \\
-\bottomrule
-\end{tabular}
-\caption{The token type can stay the same while the contextual representation changes. Attention makes that shift operational by letting the token borrow information from surrounding words.}
-\label{tab:token-before-after-context}
-\end{table}
-
 Before the notation appears, it helps to say the mechanism in plain language. Each token or patch already has a current representation. Attention lets one element ask, ``which other elements are most relevant to me right now, and how much of each should I borrow?'' In that reading, the query is what the current element is looking for, the keys describe what other elements offer, and the values are the information those elements can contribute.
 
-In the transformer formulation, every element in the sequence has its own query, key, and value vectors. For a given element, its query vector~$q$ is compared against the key vectors~$k_j$ of all elements (including itself), and the result is used to weight the corresponding value vectors~$v_j$. The attention weights are computed by normalizing the full list of query-key similarities:
+In the transformer formulation, each element has a query vector $q$, key vectors $k_j$, and value vectors $v_j$. The attention weights are computed by normalizing the full list of query-key similarities:
 \[
 \mathrm{score}_j = \frac{q^\top k_j}{\sqrt{d}},
 \qquad
@@ -801,6 +772,22 @@ Here $c$ is the context-aware representation produced by attention.
 \begin{prereqbridge}
 The softmax function converts a list of raw scores into nonnegative weights that sum to $1$. It turns ``how relevant is each item?'' into a proper weighted average.
 \end{prereqbridge}
+
+\begin{theorem}[Softmax attention produces a convex combination of value vectors]
+In the transformer formulation above, each attention weight satisfies \(\alpha_j \ge 0\) and \(\sum_j \alpha_j = 1\). The context vector
+\[
+c = \sum_j \alpha_j v_j
+\]
+is therefore a convex combination of the value vectors \(\{v_j\}\).
+\end{theorem}
+
+\begin{proof}
+Each \(\alpha_j\) is a softmax weight, so it is nonnegative by construction. The denominator in the softmax is the sum of all exponentiated scores, so summing the resulting weights over \(j\) gives \(1\). A weighted sum of vectors with nonnegative weights that sum to \(1\) is, by definition, a convex combination.
+\end{proof}
+
+\begin{practicalnote}
+This is the clean mathematical version of the usual intuition that attention forms a weighted average over candidate pieces of context. The output cannot jump outside the convex hull of the values being mixed; what changes is which values receive most of the weight.
+\end{practicalnote}
 
 \begin{mathlens}
 The factor \(\sqrt{d}\) keeps dot-product scores from growing too large as the key/query dimension \(d\) grows. A useful intuition is that if the coordinates of \(q\) and \(k_j\) are roughly centered with unit-scale variation, then \(q^\top k_j\) can grow in typical magnitude as \(d\) increases. Dividing by \(\sqrt{d}\) makes the softmax input less sensitive to dimension, so no single head becomes overwhelmingly peaky just because its vectors are longer.
@@ -953,26 +940,18 @@ Transformers matter because they combine flexible context modeling, shared archi
 \end{advancednote}
 
 \section{Foundation Models as a Workflow Shift}
+\begin{definition}[Foundation Model]
+A foundation model is a broadly pretrained model intended to support adaptation across many downstream tasks, often across domains or modalities.
+\end{definition}
 
-By this point, the broad pattern should feel familiar: pretrain once on a large and varied source, then reuse the result through prompting (structuring the input to steer the model's output at inference time without changing its parameters), retrieval, or downstream adaptation. Large language models and multimodal encoders made that reuse-first pattern especially visible at scale.
-
-The term \emph{foundation model} is used for a broadly pretrained model built for that kind of reuse across many downstream tasks, often across domains or modalities.
-
-The defining shift is not just model size. It is workflow. Instead of training one model for one narrow task, a foundation-model workflow usually looks like this:
-\begin{itemize}[leftmargin=*]
-\item collect broad data,
-\item choose a large-scale pretraining objective,
-\item train a reusable model,
-\item adapt or prompt the model for many narrower tasks,
-\item evaluate carefully under real deployment conditions.
-\end{itemize}
+The previous sections described a mechanism and an architecture. This section changes level again, from model internals to engineering workflow. The defining shift is not just model size. It is workflow. Instead of training one model for one narrow task, a foundation-model workflow usually collects broad data, chooses a large-scale pretraining objective, trains a reusable model, adapts or prompts that model for many narrower tasks, and then evaluates the resulting behavior carefully under real deployment conditions.
 
 GPT-3 made this workflow shift difficult to ignore because the same pretrained language model could change behavior substantially through prompting and few-shot examples even before full task-specific tuning \citep{brown2020}. CLIP made a parallel point in multimodal transfer by using language supervision to build a reusable image representation with zero-shot behavior on many downstream tasks \citep{radford2021clip}. Bommasani et al.\ use the term foundation model for precisely this pattern of broad pretraining plus many downstream adaptation paths \citep{bommasani2021}.
 
 That is why the cleanest sentence in this section is:
 
 \begin{center}
-\emph{Foundation models are better understood as reusable pipelines than as prestigious checkpoints.}
+\emph{Foundation models are better understood as reusable pipelines than as single fixed artifacts.}
 \end{center}
 
 \begin{table}[t]
@@ -1058,14 +1037,7 @@ Foundation models can be powerful because they amortize representation learning 
 
 \subsection{Why They Need More Discipline, Not Less}
 
-The risks are equally important:
-\begin{itemize}[leftmargin=*]
-\item training data may be opaque or poorly documented,
-\item broad competence can mask brittle failure modes,
-\item inherited biases and harmful associations may transfer downstream,
-\item large compute cost can make experimentation uneven and less transparent,
-\item users may overtrust fluent output as if it were verified knowledge.
-\end{itemize}
+The risks are equally important. Training data may be opaque or poorly documented, broad competence can mask brittle failure modes, inherited biases and harmful associations may transfer downstream, large compute cost can make experimentation uneven and less transparent, and users may overtrust fluent output as if it were verified knowledge.
 
 \begin{failurebox}
 Foundation models create a serious illusion risk. Because they can produce coherent text, plausible image descriptions, or polished outputs across many tasks, users may infer understanding, truthfulness, or reliability that has not actually been demonstrated. Breadth of behavior is not the same as grounded competence.
@@ -1104,33 +1076,9 @@ The claim changes with the intervention. A prompting gain often supports a behav
 \textbf{Intervention audit.} When a system improves, ask what changed: the instruction, the accessible evidence, or the predictor itself. Then make the claim at that same level rather than attributing the gain to vague ``model quality.''
 \end{thinkingtool}
 
-\begin{minimumtakeaway}
-Transfer is not one thing. Prompting changes the instruction, retrieval changes the accessible evidence, and fine-tuning changes the predictor itself. The cleanest claim is the one that stays at the level of the intervention that actually changed.
-\end{minimumtakeaway}
-
 \begin{thinkingtool}
 \textbf{Common failure mode $\rightarrow$ recovery move.} Failure mode: treating prompting, retrieval, and fine-tuning as interchangeable upgrades and then making one blurry claim about ``the model.'' Recovery move: run the smallest comparison that changes only one layer of the workflow, name whether the gain came from instruction, evidence, or parameter updates, and keep the claim at that same level.
 \end{thinkingtool}
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.18cm}L{2.23cm}L{1.95cm}L{2.26cm}}
-\toprule
-Intervention on the same support task & What changed most & Strongest defensible claim & What it still does not prove \\
-\midrule
-Prompting only & answer format and local behavior policy & behavior framing improved & no new evidence entered and no durable task adaptation was shown \\
-Retrieval augmentation & current policy evidence at inference time & evidence access improved & the pretrained representation itself did not necessarily improve \\
-Frozen linear probe & simple readout on frozen embeddings & task signal is linearly accessible in the reused space & robustness under domain shift is still untested \\
-Frozen deeper head & extra downstream readout capacity & the frozen space may still be useful with a richer head & gains may come from the head rather than from clean reuse \\
-Partial fine-tuning & top layers adapt to local phrasing & modest task-specific adjustment was helpful & reuse is now less cleanly isolated than under a probe \\
-Full fine-tuning & more of the model is reshaped for the target & target labels and broader adaptation improved task fit & the gain may come mainly from downstream training rather than from reusable structure \\
-\bottomrule
-\end{tabular}
-\caption{One downstream task can look better for many different reasons. This is why adaptation choice is also a claim audit: each intervention changes what part of the observed gain should be attributed to reuse, evidence, or new task-specific training.}
-\label{tab:one-task-many-claims}
-\end{table}
 
 \begin{figure}[t]
 \centering
@@ -1199,7 +1147,7 @@ Changing the adaptation method changes the claim you are allowed to make. Always
 
 \section{Chapter Artifact: A Reuse and Adaptation Plan}
 
-Once reuse enters the picture, a strong result can come from several different places: the pretrained representation, fresh retrieved evidence, prompting, or downstream tuning. If those sources are not separated, the final claim becomes blurry. The plan below is a compact way to state what is being reused, what is being changed, and what evidence would show that reuse is actually helping.
+By the end of this chapter, the reader should be able to write down not only which pretrained representation or foundation model they want to use, but how they plan to test what is actually being reused and what evidence would justify that claim. The point is to keep reuse claims separate from gains that really come from retrieval, prompting, or downstream tuning. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, the structure diagnosis sheet justified leaving it, and the training report justified the learned-model claim. This chapter's artifact asks a new question: what part of that learned system is reusable, and what evidence would justify saying so?
 
 \begin{table}[t]
 \centering
@@ -1225,7 +1173,7 @@ Evidence needed & What result would justify claiming that reuse is genuinely hel
 \end{table}
 
 \begin{thinkingtool}
-\textbf{Reuse and adaptation plan.} A strong plan makes explicit what is being reused, what is being changed, the first clean diagnostic of reuse, and what evidence would justify a strong transfer claim.
+\textbf{Reuse and adaptation plan.} Before adapting a pretrained model, write down what is being reused, what is being changed, the first clean diagnostic of reuse, and what evidence would justify a strong transfer claim.
 \end{thinkingtool}
 
 \begin{example}[Filled Reuse and Adaptation Plan]
@@ -1234,37 +1182,15 @@ Suppose a university wants to classify short student emails into routine, ambigu
 
 \section{Common Mistakes with Representation Learning}
 
-The mistakes in this section are different surface versions of one deeper error:
-
-\begin{center}
-\emph{confusing reusable behavior with justified evidence about why that behavior exists.}
-\end{center}
-
-\begin{mistakebox}
-\item \textbf{Assuming a good representation is task-free magic.} A representation can be useful across tasks without being universally useful.
-\item \textbf{Treating embedding neighbors as ground-truth meaning.} Nearest neighbors are model-dependent summaries, not philosophical definitions.
-\item \textbf{Skipping the linear probe.} A simple probe is one of the cleanest tests of representation quality.
-\item \textbf{Believing self-supervision automatically solves label scarcity.} The pretraining objective still has to match the downstream task.
-\item \textbf{Confusing transfer success with the source of transfer.} Say what part of the gain came from the representation, retrieval, prompting, or fine-tuning.
-\item \textbf{Treating attention maps as full explanations.} Attention can be informative without being a faithful causal explanation.
-\item \textbf{Confusing scale with validation.} Large models still need controlled evaluation.
-\end{mistakebox}
+The recurring mistakes here are all versions of one deeper error: confusing reusable behavior with justified evidence about why that behavior exists. A representation can be useful across tasks without being task-free magic; embedding neighbors are model-dependent summaries rather than ground-truth meaning; skipping the linear probe hides the basic accessibility question; self-supervision does not automatically solve label scarcity unless its training pressure matches the downstream need; transfer gains should be attributed carefully across representation, retrieval, prompting, and fine-tuning; attention maps are only diagnostic evidence; and scale does not remove the need for controlled evaluation.
 
 \section{Looking Ahead}
 
-Embeddings, probes, transfer, attention, and foundation-model workflows all treat AI as a question of reusable representations. The next chapter grounds that idea in vision, where the reuse question becomes concrete: which visual changes should a model ignore, which should it preserve, and what augmentations or architectures actually encode that judgment?
+This chapter framed AI around reusable representations: embeddings, probes, transfer, attention, and foundation-model workflows. The next chapter grounds those ideas in vision, where the reuse question becomes concrete: which visual changes should a model ignore, which should it preserve, and what augmentations or architectures actually encode that judgment? That chapter introduces one sustained running case---a pedestrian detector for a campus shuttle---to show how the representation and transfer logic from this chapter becomes tactically clear inside a real visual system.
 
-The reuse and adaptation plan from this chapter becomes the starting document for Chapter 8's vision design and stress-test card: reusable features still have to be audited against domain-specific invariances and deployment conditions.
+\section*{Chapter Summary}
 
-\begin{chaptersummary}
-\item The central question here is when it is worth learning a reusable representation instead of solving only one task directly, and how to tell that the reusable representation is what is helping.
-\item A good representation rearranges the space so that simpler downstream decisions become possible, and embeddings make that geometric claim explicit.
-\item Supervised, self-supervised, and transfer-learning workflows differ mainly in what kind of pressure they place on the learned space.
-\item A linear probe is one of the cleanest diagnostics of reusable representation quality, so adaptation should usually begin there rather than with maximal tuning.
-\item Adaptation depth should be chosen by label budget, domain shift, and evidence needs rather than by default.
-\item Attention matters because representation becomes context-sensitive, and transformers matter because they scale that idea across modalities.
-\item Foundation models are best understood as reusable workflows: changing the adaptation method changes both the system behavior and the claim you are allowed to make.
-\end{chaptersummary}
+This chapter shifted the unit of value from one-task accuracy to reusable structure. It argued that a learned representation is valuable when it preserves the right information, captures the right invariances, and remains useful under a lightweight downstream readout or adaptation strategy. Embeddings, probes, attention, and foundation-model workflows all fit into that same logic: progress is not just solving today's task, but learning a space that makes future tasks easier for reasons we can inspect.
 
 \begin{studyquestions}
 \item Why can a weak downstream model perform well when built on top of a strong representation?
@@ -1276,6 +1202,7 @@ The reuse and adaptation plan from this chapter becomes the starting document fo
 \end{studyquestions}
 
 \begin{exercises}
+\item A model produces attention weights $[0.1, 0.7, 0.2]$ for one token attending to three others. (a) What can you conclude from these weights? (b) What would be an over-interpretation? (c) If you permuted the three context tokens and the weights changed to $[0.6, 0.1, 0.3]$, what does that tell you about the model's sensitivity to position?
 \item Draw a tiny 2D picture of a ``bad'' space and a ``good'' learned space for the same binary classification task. Explain what changed.
 \item Compute the cosine similarity between the vectors $a=[1,2]^\top$ and $b=[2,1]^\top$.
 \item Suppose a model has strong training performance on its self-supervised pretraining objective but weak downstream transfer. Give two plausible explanations.
@@ -1283,8 +1210,6 @@ The reuse and adaptation plan from this chapter becomes the starting document fo
 \item Explain why a linear probe may be a better first diagnostic than a deep downstream head when evaluating a new embedding model.
 \item In your own words, explain why attention can be understood as data-dependent weighted averaging.
 \item A model produces the attention row $(0.10, 0.70, 0.20)$ for one token over a three-token sequence. What does that row tell you, and what does it \emph{not} justify you claiming?
-\item A pretrained encoder is evaluated on the same downstream task in four ways: frozen features plus linear probe gives $84\%$ accuracy, frozen features plus a two-layer head gives $83\%$, full fine-tuning gives $85\%$, and training from scratch gives $71\%$. State the clearest first claim this result supports, and one thing it still does \emph{not} prove about reuse.
-\item A frozen probe works well on typed course emails but fails on multilingual chat messages with slang and campus-specific abbreviations. Give two plausible reasons this transfer failed under domain shift, and name one clean next comparison before full fine-tuning.
 \item Use Table~\ref{tab:reuse-adaptation-plan} to sketch a reuse and adaptation plan for one target task of your choice. Include the first clean diagnostic and one alternative explanation you would have to rule out before claiming that reuse helped. If you are carrying one case through the book, say what remains fixed from the previous chapter's training report and what this chapter changes first.
 \end{exercises}
 

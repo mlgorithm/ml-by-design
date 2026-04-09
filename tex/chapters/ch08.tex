@@ -1,28 +1,6 @@
 \chapter{Language: Context and Grounding}
 
-\begin{learninggoals}
-\item Explain why language tasks depend on deciding what linguistic structure must be preserved rather than on choosing an architecture by habit.
-\item Use a context audit to decide whether token counts, local order, long-range context, or external grounding are needed.
-\item Understand tokenization, bag-of-words, and n-grams as serious representation choices rather than as obsolete preprocessing steps.
-\item Explain why contextual representations, sequence models, and transformers matter when meaning depends on surrounding language.
-\item Distinguish generation quality from grounded, trustworthy behavior.
-\item Distinguish a base language model from an instruction-following model and explain what additional training stages produce the behavioral difference.
-\item Use prompting strategies to choose the simplest inference-time intervention that produces reliable behavior.
-\item Choose among prompting, retrieval, and fine-tuning based on what kind of behavioral change is needed and what evidence is available.
-\item Produce an NLP context-and-grounding card before making a serious NLP system claim.
-\end{learninggoals}
-
-\begin{whychaptermatters}
-This chapter turns context and grounding into the main design questions for NLP. After reading it, students should identify whether a task is mainly labeling, retrieval, or grounded response generation before choosing models. The NLP context-and-grounding card extends the earlier representation audits into evidence-aware language workflows.
-\end{whychaptermatters}
-
-The vision chapter treated invariance, shortcuts, and deployment realism as central problems. Language creates a parallel but different challenge. The same words can mean different things in different contexts, while the same idea can be expressed through very different surface forms. A language system therefore has to decide what may be collapsed away, what must be preserved, and when external \emph{grounding}---tying the model's output to retrievable, verifiable external evidence---is required before fluent output can be trusted. The chapter follows that route in order: first decide the task shape and the context that must survive, then decide what representation preserves it, then decide how grounding and behavior design change the claim, and finally decide what evaluation would make the claim defensible.
-
-\begin{problemsolvinglens}
-This chapter asks an NLP-specific modeling question: what linguistic structure must the task preserve, and what evidence shows that the system is using that structure rather than producing merely fluent behavior? The answer drives tokenization, baseline choice, contextual modeling, retrieval, and evaluation.
-\end{problemsolvinglens}
-
-By the end of the chapter, the reader should be able to write an NLP context-and-grounding card before claiming that a language system is ready.
+Language is difficult for machine learning because meaning is not carried by words in isolation. The same words can mean different things in different contexts, and the same meaning can be expressed in many different forms. This chapter studies language models through that tension. It begins with task shape and tokenization, then moves from lexical baselines to contextual representations and sequence models, and finally turns to retrieval, grounding, prompting, and evaluation. The central claim is that language modeling is not only about generating plausible text; it is about deciding what context is needed, what evidence must be present, and what kind of output behavior the task can actually justify. Here \emph{grounding} means constraining an answer by external evidence that can be retrieved, inspected, and checked. By the end of the chapter, the reader should be able to analyze an NLP system in terms of context, grounding, and behavior design rather than only architecture.
 
 \section{Opening Dilemma: Same Words, Different Meaning; Same Meaning, Different Words}
 
@@ -41,7 +19,7 @@ The wording is different, but the underlying request is almost the same. Now com
 \end{quote}
 Surface overlap remains, but the operational meaning has changed sharply. One question may be answered from the course late-policy page. Another may require escalation to a human adviser because the institutional risk is different.
 
-Language is difficult because surface form is not enough. The sentence \texttt{the bank approved the loan} uses the token \texttt{bank} differently from \texttt{the river reached the bank}. (Throughout this chapter, a \emph{token} is a discrete unit of text---a word, subword piece, or character---that the model receives as input; Section~\ref{sec:tokenization} makes the choice precise.) Meanwhile, two answers to the same question may use different wording while expressing the same underlying idea. If a model preserves too little structure, it collapses distinctions the task needs. If it preserves structure in the wrong way, it may sound fluent without being grounded, faithful, or useful.
+Language is difficult because surface form is not enough. The sentence \texttt{the bank approved the loan} uses the token \texttt{bank} differently from \texttt{the river reached the bank}. Meanwhile, two answers to the same question may use different wording while expressing the same underlying idea. If a model preserves too little structure, it collapses distinctions the task needs. If it preserves structure in the wrong way, it may sound fluent without being grounded, faithful, or useful.
 
 This means NLP should not begin with model names. It should begin with a judgment question: what information must survive the representation? Some tasks care mainly about which words are present. Some care about local order such as negation. Some depend on long-range context, discourse, or entity reference. Some require external knowledge or retrieval before any answer can be trusted.
 
@@ -49,39 +27,13 @@ Throughout this chapter, keep one running case in view: a grounded course-suppor
 
 \section{Problem-Solving Technique: Context Audit}
 
-\begin{thinkingtool}
-\textbf{Context audit.} Before choosing an NLP representation, write down:
-\begin{itemize}[leftmargin=*]
-\item whether token presence is enough,
-\item whether local order matters,
-\item whether long-range dependence matters,
-\item whether external knowledge or retrieval is required,
-\item whether dialect, register, or identity variation matters,
-\item what output the task requires: a label, a span, a ranked list, or generated text.
-\end{itemize}
-\end{thinkingtool}
+Before choosing an NLP representation, write down whether token presence is enough, whether local order matters, whether long-range dependence matters, whether external knowledge or retrieval is required, whether dialect, register, or identity variation matters, and what output the task requires: a label, a span, a ranked list, or generated text.
 
 This is the chapter's most reusable habit. A bag-of-words baseline, an n-gram repair, a contextual encoder, or a retrieval-augmented generator are not interchangeable choices. They encode different claims about what linguistic structure matters. The context audit forces that claim onto the page before the model is built.
 
-\begin{decisionbox}
-In NLP, model choice should follow the context audit. If the task can safely collapse order and ambiguity, a sparse lexical baseline may be enough. If meaning depends on local or global context, the representation must preserve it. If correctness depends on outside facts, grounding becomes part of the system design rather than an optional upgrade.
-\end{decisionbox}
+In NLP, model choice should follow the context audit. If the task can safely collapse order and ambiguity, a sparse lexical baseline may be enough. If meaning depends on local or global context, the representation must preserve it. If correctness depends on outside facts, grounding becomes part of the system design rather than an optional upgrade. A practical workflow is to decide whether token presence, local order, long-range context, or grounding matters, start with the simplest baseline that preserves the needed structure, add n-grams or contextual encoders if order and context matter, add retrieval if current evidence is required, and only then choose prompting, fine-tuning, or a hybrid after checking how the workflow will be evaluated and when it should abstain or escalate.
 
-\begin{practicalnote}
-Workflow sketch: first decide whether token presence, local order, long-range context, or grounding matters. Then start with the simplest baseline that preserves the needed structure, add n-grams or contextual encoders if order and context matter, add retrieval if current evidence is required, and only then choose prompting, fine-tuning, or a hybrid after checking how the workflow will be evaluated and when it should abstain or escalate.
-\end{practicalnote}
-
-\begin{thinkingtool}
-\textbf{Artifact preview: NLP context-and-grounding card.} Keep six fields visible from the start: task type, output type, the linguistic structure that must survive, whether grounding is required, the escalation rule, and the evidence that would justify the final claim.
-\end{thinkingtool}
-
-\begin{thinkingtool}
-\textbf{Wrong question $\rightarrow$ better question.} Wrong: ``Which NLP model is strongest?'' Better: ``What linguistic structure must survive, what evidence must be available at prediction time, and what kind of output does the workflow actually need?''
-\end{thinkingtool}
-
-\begin{thinkingtool}
-\textbf{Signal to trust $\rightarrow$ signal to doubt.} Trust: the system retrieves the right evidence, preserves the task-relevant context, cites or exposes the source when needed, and escalates when the evidence is weak or the case is high risk. Doubt: the answer sounds fluent but the supporting passage is wrong, missing, stale, or never shown, and the workflow gives no safe way to abstain or defer.
-\end{thinkingtool}
+The chapter's running artifact is an NLP context-and-grounding card with six fields: task type, output type, the linguistic structure that must survive, whether grounding is required, the escalation rule, and the evidence that would justify the final claim. The right opening question is therefore not ``Which NLP model is strongest?'' but ``What linguistic structure must survive, what evidence must be available at prediction time, and what kind of output does the workflow actually need?'' Trust is earned when the system retrieves the right evidence, preserves the task-relevant context, cites or exposes the source when needed, and escalates when the evidence is weak or the case is high risk. Doubt begins when the answer sounds fluent but the supporting passage is wrong, missing, stale, or never shown.
 
 \begin{figure}[t]
 \centering
@@ -89,23 +41,6 @@ Workflow sketch: first decide whether token presence, local order, long-range co
 \caption{Context audit flowchart for NLP representation choice. Each decision point corresponds to a key question in the context audit framework. The path through the flowchart determines the appropriate representation and model architecture, from simple bag-of-words baselines to retrieval-augmented generation systems.}
 \label{fig:context-audit-flowchart}
 \end{figure}
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.55cm}L{3.2cm}L{4.0cm}}
-\toprule
-NLP regime & Primary job & What the system must get right \\
-\midrule
-Classification / labeling & Assign a label, span, or slot & Preserve the local or token-level structure that controls the label \\
-Retrieval / ranking & Find the right document or passage & Surface the evidence that should support the later action or answer \\
-Grounded generation / escalation & Produce a bounded answer or defer safely & Stay faithful to retrieved evidence and refuse or escalate when the evidence is weak \\
-\bottomrule
-\end{tabular}
-\caption{A first NLP decision is not the model name but the regime: labeling, retrieval, or grounded response generation. Each regime implies a different output, evaluation style, and failure pattern.}
-\label{tab:nlp-three-regimes}
-\end{table}
 
 \section{Task Shape Before Representation Depth}
 
@@ -162,14 +97,7 @@ A course-support assistant may be built in at least three different ways. It mig
 \end{example}
 
 \begin{decisionbox}
-\textbf{Choose the smallest NLP workflow that preserves the needed structure.}
-\begin{itemize}[leftmargin=*]
-\item Stable lexical cues and label output: start with bag-of-words or n-grams.
-\item Token-level extraction or strong local-order dependence: sequence labeling or contextual encoders.
-\item Long-range context, paraphrase, or discourse dependence: contextual sequence models or transformers.
-\item Correctness depends on current documents or policies: retrieval must be part of the system.
-\item Output is a controlled transformation of source text: encoder-decoder modeling is a natural fit.
-\end{itemize}
+\textbf{Choose the smallest NLP workflow that preserves the needed structure.} Start with bag-of-words or n-grams when stable lexical cues are enough and the output is a label. Move to sequence labeling or contextual encoders when token-level extraction or strong local order matters. Use contextual sequence models or transformers when meaning depends on long-range context, paraphrase, or discourse. Make retrieval part of the system when correctness depends on current documents or policies, and prefer encoder-decoder modeling when the output is a controlled transformation of source text.
 \end{decisionbox}
 
 \section{Worked Workflow: One Message, Several NLP Jobs}
@@ -236,31 +164,11 @@ Now compare the same workflow for the message
 \end{quote}
 The lexical overlap is high, but the correct system behavior may be completely different. A direct answer may be unsafe because the question is both higher stakes and more dependent on individual institutional context. The right system may still classify the message, retrieve the most relevant advising page, and then route the student to a human specialist rather than generating a confident answer on its own.
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.42cm}L{3.27cm}L{3.32cm}}
-\toprule
-Stage or representation & Late-submission message & Visa-attendance message \\
-\midrule
-Bag-of-words routing & likely deadline / illness queue & may notice \texttt{visa} or \texttt{attendance}, but lexical overlap alone does not yet set the safety boundary \\
-N-gram or local repair & preserves phrases such as \texttt{without penalty} and nearby negation if it appears & preserves phrases such as \texttt{affect my visa}, which local counts can blur \\
-Contextual encoder & ties \texttt{sick} and \texttt{submit tonight} to a routine policy request & recognizes that attendance here belongs to a higher-stakes advising workflow rather than a late-work request \\
-Retrieval target & late-work and illness-extension rules & international-student advising policy plus the human contact path \\
-Behavior policy & grounded answer if evidence is current and complete & escalate or hand off even if a relevant page is found \\
-\bottomrule
-\end{tabular}
-\caption{Two similar-looking student messages become easier to teach when they are followed through the same pipeline. The needed structure and the safe behavior can diverge long before final generation.}
-\label{tab:two-messages-one-pipeline}
-\end{table}
-
 \begin{practicalnote}
 In modern NLP systems, the model is often only one stage in a language workflow. The chapter is easier to read if students keep asking: what subproblem is being solved at this stage, and what later stage depends on it?
 \end{practicalnote}
 
 \section{Tokenization as a Modeling Decision}
-\label{sec:tokenization}
 
 Machine-learning models do not receive meaning directly. They receive tokenized input. Tokenization converts raw text into units such as words, subwords, or characters, and that choice changes what the model is allowed to notice and reuse. It is therefore the chapter's first representational bottleneck.
 
@@ -279,6 +187,8 @@ For this chapter, it is enough to think of a token as a unit the model can read.
 \end{prereqbridge}
 
 Tokenization is therefore not clerical preprocessing. It is part of the representation claim. A bad tokenization choice can erase useful regularity before the main model has even started learning.
+
+Once text has been broken into units, the next question is how much meaning survives if we ignore order altogether.
 
 \section{Bag-of-Words as the First Serious Lexical Baseline}
 
@@ -354,16 +264,18 @@ Consider the phrases \texttt{late submission allowed} and \texttt{late submissio
 Bag-of-words and n-grams produce sparse count vectors. Modern NLP often uses dense embeddings instead.
 
 \begin{definition}[Word Embedding]
-A word embedding is a dense vector representation of a token learned so that tokens occurring in similar contexts receive similar vectors.
+A word embedding is a dense vector representation of a token learned so that tokens occurring in similar contexts receive similar vectors. In modern NLP, \emph{word} is often shorthand for \emph{token}: the embedding may correspond to a word, a subword piece, or even a character, depending on the tokenizer. This chapter uses both terms, but the underlying object is always a token-level vector.
 \end{definition}
-
-In modern NLP, \emph{word} is often shorthand for \emph{token}: the embedding may correspond to a word, a subword piece, or even a character, depending on the tokenizer.
 
 Embeddings allow statistical sharing across related words. If \texttt{exam}, \texttt{quiz}, and \texttt{test} occur in similar contexts, their vectors may become nearby in embedding space. This makes downstream learning easier when exact lexical overlap is limited.
 
 \subsection{Static Embeddings}
 
 Static embeddings assign one vector per word type. This is already much more expressive than isolated one-hot vectors, but it still has a serious limitation: a token receives the same representation regardless of where it appears.
+
+\begin{example}[Limitation of static embeddings]
+Consider the word ``bank'' in two sentences: ``The bank approved the loan'' (financial institution) and ``The river reached the bank'' (geographic feature). A static embedding assigns one fixed vector to ``bank'' regardless of context, so both senses collapse into a single point. Any downstream model using this embedding must disentangle the senses from surrounding words---a burden that contextual representations remove by producing different vectors for the same token in different contexts.
+\end{example}
 
 \subsection{Contextual Representations}
 
@@ -398,7 +310,6 @@ An earlier chapter already explained attention as a general representation mecha
 \end{advancednote}
 
 \section{Language Modeling as Sequence Prediction}
-\label{sec:language-modeling}
 
 \begin{definition}[Language Model]
 A language model assigns probabilities to sequences of tokens, typically by predicting each next token conditioned on the tokens that came before it.
@@ -406,10 +317,22 @@ A language model assigns probabilities to sequences of tokens, typically by pred
 
 This chapter uses the classic autoregressive setup because it makes the next-token logic explicit. Masked or denoising objectives are also important in modern NLP, but the next-token factorization is the clearest starting point for the sequence-prediction story here. Once context is represented, generation can be described as repeated prediction under that context.
 
-If a sequence is $(w_1, w_2, \ldots, w_T)$, a standard factorization is
+\begin{theorem}[Chain rule factorization of a token sequence]
+For any token sequence $(w_1,\ldots,w_T)$ with positive joint probability,
 \[
-P(w_1, w_2, \ldots, w_T) = \prod_{t=1}^{T} P(w_t \mid w_1, \ldots, w_{t-1}).
+P(w_1,\ldots,w_T)=P(w_1)\prod_{t=2}^{T} P(w_t\mid w_1,\ldots,w_{t-1})
 \]
+\citep{murphy2022}.
+\end{theorem}
+
+\begin{proof}
+Apply the identity $P(A,B)=P(B\mid A)P(A)$ repeatedly. First,
+\[
+P(w_1,\ldots,w_T)=P(w_T\mid w_1,\ldots,w_{T-1})\,P(w_1,\ldots,w_{T-1}).
+\]
+Expanding the second factor the same way, and continuing until only $P(w_1)$ remains, yields the stated product.
+\end{proof}
+
 Conceptually, language modeling asks one repeated question: given the text so far, what token should come next?
 
 \begin{mathlens}
@@ -423,6 +346,8 @@ and perplexity is
 \]
 So perplexity is the inverse geometric mean probability per token: lower is better because the model assigned higher probability to the observed sequence.
 \end{mathlens}
+
+Perplexity is a next-token predictive measure, not a direct measure of factuality, faithfulness, or grounded usefulness.
 
 Perplexity comparisons are only meaningful when tokenization and evaluation protocol are held fixed. A model scored on subword units is not directly comparable to a model scored on different tokens unless the setup is normalized carefully.
 
@@ -496,29 +421,29 @@ The evidence question also changes. In continuation, the prompt itself is usuall
 Encoder-decoder structure does not guarantee faithfulness. If the target is freer than the source permits, the model can compress away conditions, hedge too little, or invent support that was never in the source. High-risk tasks may therefore require extraction, citation, or grounded answer policies even when encoder-decoder modeling fits the task shape well.
 \end{warningbox}
 
+A model that predicts likely continuations is not yet a grounded system; the next question is what changes when correct behavior depends on external evidence rather than parametric memory alone.
+
 \section{Decoding, Retrieval, and Grounding as Behavior Design}
 
-The chapter now shifts from representation and training objectives to system behavior. Once a language model produces next-token probabilities, the system still needs a behavior policy.
+The chapter now shifts from representation and training objectives to system behavior. Once a language model produces next-token probabilities, the system still needs a behavior policy. A \emph{retrieval contract} is the explicit rule for what evidence must be present before the system is allowed to answer. A \emph{hallucination} is a fluent continuation that is not supported by the required evidence, or is not faithful to that evidence even when something relevant was retrieved.
 
 \subsection{Decoding Changes the Behavior}
 
-The previous section described the decoder as a neural network component. Here, \emph{decoding} means something different: the inference-time strategy for selecting tokens from the model's probability distribution.
-
 Greedy decoding always picks the highest-probability next token. Sampling introduces randomness. Temperature changes how conservative or diverse the output becomes. Two systems built on the same model can therefore behave very differently depending on decoding choices.
+
+\begin{example}[Same model, different decoding]
+Given the prompt ``The student asked about the deadline for...'' a language model might produce:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Greedy decoding}: ``the final project submission.'' (always picks the highest-probability next token---deterministic but repetitive).
+  \item \textbf{Sampling with temperature 0.7}: ``the midterm essay resubmission.'' (samples from a slightly flattened distribution---more varied but still coherent).
+  \item \textbf{Sampling with temperature 1.5}: ``the portfolio review and the pizza order.'' (high temperature flattens the distribution further---creative but may lose coherence).
+\end{itemize}
+The model's weights are identical in all three cases. The decoding strategy is a separate design choice that shapes system behavior.
+\end{example}
 
 \subsection{Retrieval and Grounding Change the Claim}
 
 Fluent continuation is not enough when correctness depends on trustworthy outside information. In those settings, retrieval and grounding are not optional embellishments. They change what the system is allowed to claim.
-
-\begin{decisionbox}
-\textbf{When not to generate.}
-\begin{itemize}[leftmargin=*]
-\item Do not generate when the needed evidence is missing, stale, or conflicting.
-\item Do not generate when the case falls into a high-risk policy category that already requires escalation.
-\item Do not generate when retrieval found only partial support and the omitted condition could change the action.
-\item Do not generate when the system cannot expose the source behind the answer it is about to give.
-\end{itemize}
-\end{decisionbox}
 
 This is the deeper reason retrieval-augmented generation matters. Once a language system is required to retrieve evidence before answering, the strongest defensible claim is no longer ``the model knows the answer.'' It is narrower and more technical: given the current document collection, retrieval pipeline, and answer policy, the system can often find the right supporting material and stay faithful to it \citep{lewis2020rag}. That claim is better because it can be audited. It also means many apparent language failures are really retrieval or policy failures earlier in the pipeline.
 
@@ -604,55 +529,13 @@ Completeness & The evidence includes the conditions, exceptions, and escalation 
 
 \subsection{Retrieval Pipeline Anatomy}
 
-A practical retrieval stack usually has five stages:
-\begin{itemize}[leftmargin=*]
-\item \textbf{Chunking.} Split documents into passages that can be searched; too coarse hides the right sentence, too fine removes surrounding conditions.
-\item \textbf{Indexing.} Build a lexical or vector index so the system can search quickly.
-\item \textbf{First-pass retrieval.} Pull a broad candidate set using a cheap similarity score.
-\item \textbf{Reranking.} Rescore the candidates with a stronger model or additional features.
-\item \textbf{Grounding and citation.} Answer only from the selected evidence, and expose the source when the user or reviewer needs an audit trail.
-\end{itemize}
+A practical retrieval stack usually has five stages. First comes \textbf{chunking}: split documents into passages that can be searched, since chunks that are too coarse hide the right sentence and chunks that are too fine remove surrounding conditions. Next comes \textbf{indexing}, where the system builds a lexical or vector index so search is fast enough to be usable. Then comes \textbf{first-pass retrieval}, which pulls a broad candidate set using a cheap similarity score, followed by \textbf{reranking}, where a stronger model or additional features rescore those candidates. Only after that should the system perform \textbf{grounding and citation}: answer from the selected evidence and expose the source when the user or reviewer needs an audit trail.
 
 \begin{practicalnote}
 If chunking strips away the exception clause, no reranker can recover it later. Retrieval quality starts with how the evidence was segmented.
 \end{practicalnote}
 
 Once this contract is stated explicitly, retrieval evaluation becomes sharper. A system should not get full credit merely because a vaguely related document appeared somewhere in the ranking. The document must be the right kind of support for the answer the system is going to present.
-
-\subsection{Worked End-to-End Grounded Workflow: One Question Through the Pipeline}
-
-Keep one question fixed long enough to see the whole grounded workflow:
-\begin{quote}
-\texttt{I missed Lab 3 because I was sick. Can I submit tonight without penalty?}
-\end{quote}
-The point is not that every support system should answer this question automatically. The point is that one message can now be followed through task identification, retrieval, answer policy, and evaluation without resetting the reader's context at each stage.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{2.0cm}p{4.7cm}p{3.22cm}}
-\toprule
-Stage & What happens to the same question & What must be checked \\
-\midrule
-Task identification & The system recognizes a grounded policy question about late submission rather than a free-form chat request & The workflow is in the right NLP regime: grounded answering, not generic generation \\
-Chunking and indexing & Course policy pages are split so the illness-extension condition and deadline exception remain in the same retrievable chunk & The key condition is not lost before retrieval even starts \\
-First-pass retrieval & Candidates include the late-work rule, the illness-extension form instructions, and perhaps a nearby but incomplete FAQ & The right evidence appears high enough to make grounding possible \\
-Reranking & The system promotes the current illness-extension rule above stale or merely related passages & Relevance, freshness, and authority all still hold after reranking \\
-Answer or escalate & If the retrieved rule is current and complete, the system may answer conservatively; if the evidence is partial or conflicting, it should defer & Generation is allowed only when the evidence contract is actually satisfied \\
-Grounded response & A safe answer says the student must file the illness-extension form within forty-eight hours and cites the current policy & The answer preserves the condition and does not add unsupported reassurance \\
-Evaluation target & Review checks retrieval success, faithfulness to the passage, and whether escalation would have been preferable under the risk level & The system is judged as a pipeline, not only by answer fluency \\
-\bottomrule
-\end{tabular}
-\caption{One grounded question carried through the full workflow. The same message now ties together task regime, retrieval quality, answer policy, and evaluation target in one uninterrupted path.}
-\label{tab:end-to-end-grounded-workflow}
-\end{table}
-
-The same walkthrough also clarifies diagnosis. If the system answers from an outdated FAQ, that is mainly a retrieval freshness failure. If it retrieves the correct illness-extension rule but answers ``Yes, illness means no penalty'' without the forty-eight-hour condition, that is a synthesis failure under correct evidence. If the message instead asks about visa attendance, the first failure is task and escalation choice rather than answer wording. Keeping one question fixed makes those differences easier to see.
-
-\begin{decisionbox}
-When a grounded answer looks wrong, diagnose the pipeline in order: did the system identify the right task, retrieve current and complete evidence, compose the answer faithfully, and only then choose direct answering instead of escalation?
-\end{decisionbox}
 
 \subsection{Retrieval Failure Often Precedes Generation Failure}
 
@@ -675,10 +558,6 @@ High-risk case not escalated & Polite but unsafe direct answer & The behavior po
 \caption{In grounded NLP, many answer failures begin as retrieval or escalation failures before they become generation failures.}
 \label{tab:nlp-retrieval-failure-modes}
 \end{table}
-
-\begin{minimumtakeaway}
-In grounded NLP, fluent generation is never the whole story. If the retrieved evidence is wrong, stale, partial, or missing, the safest fix is often retrieval or escalation policy, not a more eloquent generator.
-\end{minimumtakeaway}
 
 \begin{example}[Same Generator, Different Evidence]
 Suppose the same language model is used twice on the question ``Can I submit tonight without penalty?'' In one run, retrieval returns the current late-policy page and the illness-extension instructions. In another, retrieval returns an outdated FAQ plus a general attendance page. The generator may be identical in both cases, yet the second run is much more likely to produce a polished but operationally wrong answer. That is why grounded systems must be evaluated as pipelines rather than as text generators alone.
@@ -752,7 +631,7 @@ Stage & What the model learns from & What behavior changes \\
 \midrule
 Pretraining & Large collections of unlabeled text & General language structure, vocabulary coverage, and broad world-level patterns \\
 Instruction fine-tuning & Curated (instruction, response) examples & How to interpret and respond to requests in the intended format \\
-Preference alignment & Signals that distinguish preferred from less-preferred responses (typically, human raters rank alternative model outputs and a reward signal derived from those rankings further adjusts the model) & How to favor helpful, honest, and bounded behavior over merely plausible continuations \\
+Preference alignment & Signals that distinguish preferred from less-preferred responses & How to favor helpful, honest, and bounded behavior over merely plausible continuations \\
 \bottomrule
 \end{tabular}
 \caption{Each stage applies a different behavioral pressure. The stages are additive: instruction fine-tuning builds on the base model, and preference alignment builds on instruction fine-tuning. Removing a stage does not simply undo the previous one; it leaves the model at an intermediate behavioral state.}
@@ -851,13 +730,13 @@ Three prompting patterns appear consistently across task settings, but they do n
 \label{fig:prompting-ladder}
 \end{figure}
 
+\begin{practicalnote}
+Zero-shot, few-shot, and chain-of-thought are not exclusive rungs on a ladder. They are orthogonal choices that can be combined: zero-shot with chain-of-thought reasoning, few-shot with chain-of-thought demonstrations, or few-shot without explicit reasoning steps. The figure orders them by how much prompt engineering effort they require, not by mutual exclusivity. Your choice should depend on what information the model needs to behave reliably on your task.
+\end{practicalnote}
+
 \begin{example}[Same Task, Three Prompting Strategies]
 Suppose the task is to classify a student message into one of three routing categories: \emph{deadline}, \emph{grading}, or \emph{administrative}.
-\begin{itemize}[leftmargin=*]
-\item \textbf{Zero-shot}: the input describes the categories and asks for a label.
-\item \textbf{Few-shot}: the input includes two or three labeled examples before the new message.
-\item \textbf{Chain-of-thought variant}: either zero-shot or few-shot, but the input asks the model to first identify the main concern in the message and then select the category.
-\end{itemize}
+\textbf{Zero-shot} prompting describes the categories and asks for a label. \textbf{Few-shot} prompting includes two or three labeled examples before the new message. A \textbf{chain-of-thought variant} can be paired with either one by asking the model to first identify the main concern in the message and only then select the category.
 If the zero-shot result is already reliable under realistic message variation, adding examples or reasoning steps may not improve it. If the model makes consistent errors on edge cases, few-shot examples that cover those cases may help. If the routing logic is genuinely multi-step---for example, distinguishing a visa question from a course question requires identifying a specific entity type first---a chain-of-thought version of either prompt may reduce errors by making the intermediate step explicit. Chain-of-thought is therefore not a third rung above few-shot; it is an extra scaffold that can be paired with different demonstration choices.
 \end{example}
 
@@ -908,7 +787,7 @@ This is why grounding changes the claim being made. A grounded system does not s
 
 \section{Evaluation Matched to Task}
 
-Return to the same late-submission message in Table~\ref{tab:end-to-end-grounded-workflow}. By this point the chapter has already decided what the system is trying to do, what evidence it must retrieve, and when it should answer or escalate. Evaluation in NLP depends sharply on task shape. The evidence must match the behavior the system is supposed to produce. This is where the chapter protects the claim made by the earlier choices about context, grounding, prompting, and escalation.
+Evaluation in NLP depends sharply on task shape. The evidence must match the behavior the system is supposed to produce. This is where the chapter protects the claim made by the earlier choices about context, grounding, prompting, and escalation.
 
 \subsection{A Simple Evaluation Map}
 
@@ -952,11 +831,11 @@ Recommendation systems share the same logic. A system that proposes articles, pr
 
 \subsection{Perplexity and Likelihood}
 
-For language models, one common measure is perplexity (introduced in the Math Lens of Section~\ref{sec:language-modeling}):
+For language models, one common measure is perplexity:
 \[
 \mathrm{PP} = \exp\left(-\frac{1}{T}\sum_{t=1}^{T}\log P(w_t \mid w_1,\ldots,w_{t-1})\right).
 \]
-This is the same quantity defined earlier---the inverse geometric mean probability per token. Lower perplexity means the model assigns higher probability to the observed text. This can be useful, but it does not directly measure factual accuracy, grounding quality, fairness, or user usefulness.
+Lower perplexity means the model assigns higher probability to the observed text. This can be useful, but it does not directly measure factual accuracy, grounding quality, fairness, or user usefulness.
 
 \subsection{Generation and Grounding Evidence}
 
@@ -972,20 +851,9 @@ Evidence that an NLP system is genuinely useful should match the task. For class
 
 \subsection{A Practical Rubric for Grounded Answers}
 
-When a document-grounded answer is important enough to review manually, a short rubric is often more informative than one headline score. A reviewer can ask:
-\begin{itemize}[leftmargin=*]
-\item Did the system retrieve the right supporting passage?
-\item Did the final answer accurately reflect that passage?
-\item Did it avoid adding unsupported conditions, exceptions, or assurances?
-\item Did it cite or expose the source clearly enough for audit?
-\item Did it escalate rather than answer when the evidence or risk profile required it?
-\end{itemize}
+When a document-grounded answer is important enough to review manually, a short rubric is often more informative than one headline score. The reviewer should ask whether the system retrieved the right supporting passage, whether the final answer accurately reflected that passage, whether it avoided adding unsupported conditions, exceptions, or assurances, whether it cited or exposed the source clearly enough for audit, and whether it escalated rather than answered when the evidence or risk profile required it.
 
 This kind of rubric fits the running support-assistant case well. A sentence can be fluent and mostly correct while still failing the review because it cites the wrong rule, omits a necessary condition, or answers a case that should have been deferred.
-
-\begin{example}[Same Passage, Different Evaluation Judgment]
-Suppose one answer says, ``Yes, illness means you can submit tonight,'' while another says, ``Only if the illness-extension form is filed within forty-eight hours, according to the retrieved policy.'' A fluency-focused score might prefer the shorter first answer, but the grounded-answer rubric correctly prefers the second because it preserves the condition, exposes the source, and stays inside the evidence.
-\end{example}
 
 \subsection{Prompt Sensitivity and Evaluation Instability}
 
@@ -1070,34 +938,15 @@ For a course-support assistant, a sensible card would specify: task type is \emp
 
 \section{Common Mistakes in NLP}
 
-\begin{mistakebox}
-\item \textbf{Declaring classical methods dead.} Sparse methods and n-grams still matter when they match the task.
-\item \textbf{Treating fluency as truth.} Surface quality is not enough evidence.
-\item \textbf{Ignoring tokenization.} Tokenization changes the effective input space.
-\item \textbf{Using the wrong evaluation for the task.} Perplexity, BLEU, ROUGE, accuracy, retrieval quality, and human preference measure different things.
-\item \textbf{Forgetting that retrieval and generation are different.} Some tasks are about finding trustworthy evidence, not free composition.
-\item \textbf{Conflating a base model with an instruction-following model.} The behavioral gap between them is large; the stages that close it are additional training, not architecture.
-\item \textbf{Using prompt iteration when fine-tuning is needed.} Prompting cannot produce behavior that requires a genuine change in model parameters; repeated prompt redesign on a structurally mismatched task wastes time without diagnosing the real problem.
-\item \textbf{Treating hallucination as a single failure type.} Fabrication, wrong synthesis, stale evidence, and overconfident uncertainty failure require different pipeline responses.
-\end{mistakebox}
+The common mistakes in NLP mostly come from overcrediting fluency and undercrediting structure. Readers declare classical methods dead even when sparse methods or n-grams match the task, treat fluency as truth, ignore tokenization, use the wrong evaluation target, forget that retrieval and generation are different problems, conflate a base language model with an instruction-following model, keep iterating on prompts when the task really needs a parameter change, or use \emph{hallucination} as one blunt label for several different failure types.
 
 \section{Looking Ahead}
 
-This chapter treated language as context-dependent sequence structure. The next chapter keeps the sequential view but moves to audio and time series, where the central question becomes more explicit still: what information was actually available at the decision moment, and what would count as cheating through time?
+This chapter treated language as context-dependent sequence structure. The next chapter keeps the sequential view but moves to audio and time series, where the central question becomes more explicit still: what information was actually available at the decision moment, and what would count as cheating through time? Both chapters rest on one shared discipline: the prediction-time audit that makes context, timing, and forbidden future information explicit before modeling begins.
 
-The NLP context-and-grounding card from this chapter becomes the starting document for Chapter 10's sequential design card: once language workflow is explicit, the next question is what information is legal at the decision moment.
+\section*{Chapter Summary}
 
-\begin{chaptersummary}
-\item NLP begins by deciding what context the task needs, not by choosing an architecture by habit.
-\item Tokenization, bag-of-words, n-grams, and contextual models preserve different amounts of linguistic structure, so they should be chosen by task need rather than by fashion.
-\item Task shape matters before representation depth: classification, retrieval, question answering, summarization, and generation produce different outputs and therefore need different evidence.
-\item Language modeling predicts likely continuations, while instruction following, prompting, retrieval, and fine-tuning each change behavior in different ways.
-\item Prompting is an inference-time behavioral policy, not a parameter update; retrieval changes the evidence available to the system; fine-tuning changes the model itself.
-\item Hallucination arises because plausible continuation is not the same as grounded correctness, so grounding, abstention, and escalation are structural design choices rather than afterthoughts.
-\item Decoding policy and grounding both change system behavior, so fluent output is not enough evidence of trustworthy performance.
-\item NLP evaluation must match task shape and should often include retrieval quality, factual support, prompt variation, and coverage checks rather than one surface metric alone.
-\item The main deliverable of the chapter is an NLP context-and-grounding card that makes the required context, evidence, and escalation policy explicit before a system claim is made.
-\end{chaptersummary}
+This chapter treated language as a problem of context, sequence, and evidence. It showed that different tasks require different preserved structure, that lexical baselines remain meaningful when the task allows them, and that retrieval and grounding change the system's claim as much as the model architecture does. The main lesson is that fluent language is not yet trustworthy language: a serious NLP system must preserve the right context, use the right evidence, and know when to abstain or escalate.
 
 \begin{studyquestions}
 \item Why is a context audit more useful than choosing an NLP architecture by habit?
@@ -1119,10 +968,6 @@ The NLP context-and-grounding card from this chapter becomes the starting docume
 \item A retrieval system returns ranked passages with relevance labels $[0,1,0,1]$ in the top four positions, and there are three relevant passages in the collection. Compute precision@2, recall@4, and reciprocal rank.
 \item For a support assistant, propose two message types that should be answered automatically and two that should be escalated to a human. Justify the boundary technically, not only socially.
 \item Give one example in which dialect or register variation creates a technical coverage problem rather than merely a stylistic difference.
-\item A support assistant answers, ``The add/drop deadline is October 15,'' and cites a retrieved passage that says, ``The withdrawal deadline is October 15; the add/drop deadline is September 5.'' What is the main failure: retrieval, grounding, or generation? Explain the smallest pipeline change you would test first.
-\item The same generator is run twice on the question ``Can I submit tonight without penalty?'' In run A, retrieval returns the current illness-extension rule. In run B, retrieval returns last semester's FAQ. Name the main retrieval-contract failure in run B and state the safest output policy the system should use.
-\item Two prompts are given the same retrieved evidence. One asks for a short direct answer and the other asks for a cautious cited answer. The model answers much more boldly under the first prompt. Explain what this says about prompt sensitivity and what stability test you would run before deployment.
-\item Two answers are written from the same retrieved passage. Answer A is fluent but omits an exception clause. Answer B is slightly less polished but cites the clause and recommends escalation for ambiguity. Using the grounded-answer rubric from the chapter, say which answer is better and why a single fluency score would miss the difference.
 \item Use Table~\ref{tab:nlp-context-grounding-card} to sketch a one-page context-and-grounding card for a language task of your choice. End by naming the smallest workflow that could meet the card's requirements. If you are carrying one case through the book, state which parts come over unchanged from the framing memo, evaluation plan, and reliability discipline, and which parts become language-specific here.
 \end{exercises}
 

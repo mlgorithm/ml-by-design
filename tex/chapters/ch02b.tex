@@ -1,21 +1,8 @@
 \chapter{Generalization, Leakage, and Evaluation Discipline}
 
-\begin{learninggoals}
-\item Explain generalization as the ability of a result to survive new data rather than only the observed sample.
-\item Distinguish underfitting and overfitting as different failure modes of the same training process.
-\item Use protected train, validation, and test roles as procedural boundaries rather than as vocabulary words.
-\item Recognize common leakage patterns before they invalidate an experiment.
-\item Use a baseline ladder and simple sanity checks to judge whether a reported win means anything.
-\item Produce a one-page evaluation plan before reporting a serious model claim.
-\end{learninggoals}
+Once a task has been framed and its success criteria have been stated, a harder question remains: when does the evidence deserve trust? Strong numbers can reflect real learning, but they can also come from leakage, weak baselines, unstable splits, or a test set that quietly became part of development.
 
-\begin{whychaptermatters}
-This chapter protects the meaning of the numbers Chapter 2 chose. After reading it, students should treat splits, preprocessing boundaries, leakage control, and baselines as part of the claim rather than as cleanup. The evaluation plan extends the metric-and-action worksheet and becomes the gate before later model changes.
-\end{whychaptermatters}
-
-Chapter 2 answered one judgment question: once a model outputs scores, what predictive behavior should count as good? Chapter 3 answers the next one: when can we trust the evidence for that behavior?
-
-This chapter is therefore about protecting the meaning of a result. A result can look excellent because the model learned a real pattern. It can also look excellent because the split leaked, the baseline was weak, the test set quietly became part of development, or the task changed between semesters. The chapter's job is to keep those possibilities separate. Read the chapter as the construction of one evaluation plan: what counts as new evidence, what workflow keeps it external, what traps can fake success, and what baseline makes the final claim easy to read and judge.
+This chapter turns evaluation discipline into procedure. It defines what should count as new evidence, how train, validation, and test roles must remain separate, and which simple checks keep a promising result honest. By the end of the chapter, the reader should be able to write a minimal evaluation plan that makes a model claim credible on genuinely new data.
 
 \begin{problemsolvinglens}
 Protect the claim by keeping development, external evidence, and baseline comparison separate. A strong-looking score is not enough if the workflow that produced it made the result too easy to win.
@@ -27,27 +14,25 @@ Protect the claim by keeping development, external evidence, and baseline compar
 
 \section{Opening Dilemma: The Validation Score Looks Great. Can We Trust It?}
 
-Keep the same course-support setting in view from the first two chapters. Suppose a support team trains several early-warning models on historical course data and one of them produces excellent validation recall and a strong final test score. Before celebrating, the team still has to ask harder questions. Were the preprocessing steps learned only from the training data? Was the test set kept external until the end? Did the model beat a serious baseline or only a convenient straw man? Would the result still look strong next semester? Each later section of the chapter turns one of those questions into a procedural safeguard.
+Keep the same course-support setting in view from the first two chapters. Suppose a support team trains several early-warning models on historical course data and one of them produces excellent validation recall and a strong final test score. Before celebrating, the team still has to ask harder questions. Were the preprocessing steps learned only from the training data? Was the test set kept external until the end? Did the model beat a serious baseline or only an unrealistically weak comparison? Would the result still look strong next semester? Each later section of the chapter turns one of those questions into a procedural safeguard.
 
 Those questions are not paperwork added after the model. They are what make the number mean anything.
 
 \section{Can the Result Survive New Data? Generalization and Overfitting}
 
-By the time a model looks good on the training data, one question still remains: will it still look good on new cases? The training loss tells us how well the model matches data it has already seen. The next judgment question is whether the result survives new examples.
+The training loss tells us how well the model matches data it has already seen. The next judgment question is whether the result survives new examples.
 
 \begin{definition}[Generalization]
 Generalization is the ability of a model to maintain good performance on unseen examples drawn from the same underlying problem as the training data.
 \end{definition}
 
-Two classic failure modes define the landscape:
-\begin{itemize}[leftmargin=*]
-\item \emph{Underfitting}: the model is too simple, too restricted, or too poorly trained to capture even the main patterns in the training data.
-\item \emph{Overfitting}: the model matches the training data too closely, including noise or accidental details that do not hold for new data.
-\end{itemize}
+Two classic failure modes define the landscape. \emph{Underfitting} means the model is too simple, too restricted, or too poorly trained to capture even the main patterns in the training data. \emph{Overfitting} means the model matches the training data too closely, including noise or accidental details that do not hold for new data.
 
 One way to see this is through the \emph{generalization gap}, the difference between training performance and performance on held-out data. A small gap does not guarantee excellence, but a large gap is a warning sign that the model has learned something too specific to the observed sample.
 
 Model capacity, meaning how complex a pattern the model can represent, plays a central role here. A more flexible model can represent more complicated functions. That flexibility is useful when the data contains real structure, but dangerous when the data is limited or noisy. Overfitting is not evidence of intelligence. It is evidence that the experimental setup allowed memorization or unstable pattern matching to masquerade as learning.
+
+If generalization is the real target, then evaluation cannot be improvised after training. It has to be built into the experimental workflow from the start.
 
 \begin{figure}[t]
 \centering
@@ -94,19 +79,30 @@ Zech et al.\ studied pneumonia detection from chest radiographs across multiple 
 
 \section{Protected Evaluation Workflow}
 
-Once that question is clear, the next step is procedural rather than mathematical: how do we keep development work from contaminating the answer? The answer is the disciplined split between training, validation, and test data. This is the chapter's workflow spine, because every later safeguard depends on these roles staying distinct.
-
-\begin{itemize}[leftmargin=*]
-\item The \emph{training set} is used to fit parameters.
-\item The \emph{validation set} is used to choose tuning settings, model structures, thresholds, or stopping points.
-\item The \emph{test set} is reserved for the final report after the important decisions are already made.
-\end{itemize}
+The next question is procedural rather than mathematical: how do we protect evaluation from development? The answer is the disciplined split between training, validation, and test data. This is the chapter's workflow spine, because every later safeguard depends on these roles staying distinct. The \emph{training set} is used to fit parameters. The \emph{validation set} is used to choose tuning settings, model structures, thresholds, or stopping points. The \emph{test set} is reserved for the final report after the important decisions are already made.
 
 \begin{practicalnote}
 The workflow is simple enough to say plainly: split first, fit preprocessing on train only, train candidate models on train, choose among them on validation, and touch the test set once at the end.
 \end{practicalnote}
 
 Students often understand those definitions and still run the workflow incorrectly. The key is not only what the sets are called. The key is the order in which they are used. The names matter less than the boundary: once information crosses from held-out evidence back into development, the claim is weaker even if the code still runs cleanly.
+
+A protected test set matters not just procedurally but statistically. When a bounded metric is averaged over independent held-out examples, its empirical value concentrates around the true expected performance.
+
+\begin{theorem}[Hoeffding Bound for Held-Out Evaluation {\citep{hoeffding1963}}]
+Let $Z_1,\ldots,Z_n$ be independent random variables with $0 \le Z_i \le 1$, and let
+\[
+\bar{Z}=\frac{1}{n}\sum_{i=1}^n Z_i.
+\]
+Then for any $\varepsilon > 0$,
+\[
+P\!\left(\left|\bar{Z}-\mathbb{E}[\bar{Z}]\right|\ge \varepsilon\right)\le 2e^{-2n\varepsilon^2}.
+\]
+\end{theorem}
+
+The practical point is not that a held-out score becomes infallible, but that an untouched test set gives a statistically interpretable estimate of performance. Repeated reuse of that same test set weakens exactly that interpretation.
+
+If the held-out metric is an average of bounded per-example quantities, such as accuracy indicators or a loss rescaled into $[0,1]$, this inequality explains why larger protected test sets produce more stable evidence and why repeated peeking at the same hold-out set is so damaging.
 
 Here \emph{preprocessing} means data transformations such as scaling, normalization, or feature extraction that are learned from the training data and then applied unchanged to validation and test data.
 
@@ -194,34 +190,9 @@ Chapter 3 establishes minimal experimental discipline for one credible result. C
 
 \section{How Experiments Lie: Leakage}
 
-Leakage is easiest to understand by starting with a simple rule: information from outside the legitimate training process must stay outside. Data leakage occurs when that rule is broken and outside information reaches the model or the experiment design. Leakage is dangerous because it often produces excellent-looking results for the wrong reason. The cleanest way to think about it is as a broken boundary: some information that should have stayed outside development was allowed back in.
+Data leakage occurs when information from outside the legitimate training process reaches the model or the experiment design. Leakage is dangerous because it often produces excellent-looking results for the wrong reason. The cleanest way to think about it is as a broken boundary: some information that should have stayed outside development was allowed back in.
 
-Common forms of leakage include:
-\begin{itemize}[leftmargin=*]
-\item normalizing or scaling the full dataset before the train-test split
-\item selecting features using all examples before separating the test set
-\item using duplicate or near-duplicate examples across training and test data
-\item allowing future information into a prediction task that should use only past information
-\item tuning repeatedly on the test set until the score looks good
-\end{itemize}
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.35cm}L{2.45cm}L{2.45cm}L{2.1cm}}
-\toprule
-Leakage type & What crossed the boundary & How it happens & First fix \\
-\midrule
-Preprocessing leakage & Validation or test statistics & Scale, normalize, or select features before the split & Split first; fit transforms on train only \\
-Duplicate leakage & Near-duplicate cases or entities & The same student, document, or event appears across splits & Deduplicate or split by entity or time \\
-Future-information leakage & Post-outcome or future context & Features contain timestamps or signals unavailable at decision time & Enforce prediction-time legality \\
-Test-set tuning & Final external evidence & Thresholds or hyperparameters change after seeing test results & Freeze choices on validation only \\
-\bottomrule
-\end{tabular}
-\caption{Leakage is easier to catch when the broken boundary is named directly.}
-\label{tab:leakage-taxonomy-cheatsheet}
-\end{table}
+Common forms of leakage are straightforward once the boundary is clear: normalizing or scaling the full dataset before the train-test split, selecting features using all examples before separating the test set, using duplicate or near-duplicate examples across training and test data, allowing future information into a prediction task that should use only past information, or tuning repeatedly on the test set until the score looks good.
 
 Leakage is not a small classroom mistake. Bernett et al.\ present it as a recurring threat to validity in machine learning for biology and argue that guarding against it is central to trustworthy evaluation and reproducibility \citep{bernett2024}. The setting in their paper is biological ML, but the lesson is completely general.
 
@@ -289,21 +260,13 @@ train_data = scaler.transform(train_data)
 test_data = scaler.transform(test_data)
 \end{codeexample}
 
-\begin{example}[Leaked Result Versus Clean Result]
-Suppose a course-support team scales all features before splitting and reports precision@20 of $0.70$ on its held-out set. After repairing the workflow so scaling is learned on train only and near-duplicate student records are removed across semesters, the same model family reports precision@20 of $0.52$. The second result is less exciting, but it is the first result that deserves interpretation. The drop is not a failure of evaluation discipline. It is the evidence that the earlier score was too easy to win.
-\end{example}
-
 \begin{warningbox}
 Leakage does not merely make a result slightly noisy. It can destroy the meaning of the experiment. A leaked benchmark score is not a weaker scientific claim; it is often no scientific claim at all.
 \end{warningbox}
 
-\begin{sanitycheck}
-If the test result caused you to keep one model instead of another, the test set has already stopped being fully external evidence, even if the reported metric was computed correctly.
-\end{sanitycheck}
-
 \section{Baseline Ladder and Sanity Checks}
 
-Suppose a sophisticated model appears to win. Before trusting that win, ask what simpler methods can already do. Always predicting the majority class, using a simple weighted linear model, fitting a small decision tree, or even comparing against a random baseline can reveal whether the task is easy, imbalanced, or poorly specified. The ladder is not a ritual of humility for its own sake. It is a way to make sure the final claim is about real added value rather than about avoiding an obvious comparison.
+A clean pipeline is necessary, but it is not sufficient; the result still needs an honest comparison point. Before trusting a sophisticated model, ask how well simple serious baselines perform. Always predicting the majority class, using a simple weighted linear model, or fitting a small decision tree can reveal whether the task is easy, imbalanced, or poorly specified. A random predictor belongs in a different category: it is a sanity check that can catch a broken pipeline, not a serious rung in the ladder. The ladder is not a ritual of humility for its own sake. It is a way to make sure the final claim is about real added value rather than about avoiding an obvious comparison.
 
 \begin{table}[t]
 \centering
@@ -314,8 +277,8 @@ Suppose a sophisticated model appears to win. Before trusting that win, ask what
 Baseline rung & What it tells you \\
 \midrule
 Majority class or constant prediction & Whether the headline score is beating trivial class imbalance or central tendency \\
-Simple hand-designed score rule or weighted baseline & Whether the task already has a strong low-complexity solution \\
-A slightly richer transparent comparison & Whether one extra structural idea already explains most of the gain before complexity escalates \\
+Simple weighted model & Whether the task already has a strong low-complexity solution \\
+Small tree, simple word-count model, or nearest-neighbor copy rule & Whether modest nonlinear structure or simple representation tricks already explain most of the gain \\
 Only then a complex model & Whether additional complexity is buying something real rather than hiding weak experimental design \\
 \bottomrule
 \end{tabular}
@@ -323,29 +286,19 @@ Only then a complex model & Whether additional complexity is buying something re
 \label{tab:baseline-ladder}
 \end{table}
 
-Baselines are not only a practical convenience. They are part of good evidence. They show whether the new method actually improves on something simple, expose hidden issues such as class imbalance or weak labels, and give the result a clear point of comparison. A score of $85\%$ may be excellent or trivial depending on the baseline.
+Baselines are not only practical convenience. They are part of the philosophy of evidence. They show whether the new method actually improves on something simple, expose hidden issues such as class imbalance or weak labels, and anchor interpretation. A score of $85\%$ may be excellent or trivial depending on the baseline.
 
-The same habit appears in good course design and good benchmark practice. Starter baselines, public datasets, and example solutions do not make the work trivial. They make the final claim easier to read and judge.
-
-\begin{practicalnote}
-Task-specific first ladders make the idea easier to execute:
-\begin{itemize}[leftmargin=*]
-\item \textbf{Binary classification:} majority class $\rightarrow$ logistic or linear baseline $\rightarrow$ small tree or simple interaction model.
-\item \textbf{Regression:} mean predictor $\rightarrow$ linear regression $\rightarrow$ shallow tree or another slightly richer structured baseline.
-\item \textbf{Ranking or retrieval:} random or popularity baseline $\rightarrow$ lexical or hand-designed score rule $\rightarrow$ learned ranking model.
-\end{itemize}
-The exact rungs will change by domain, but the pedagogy stays the same: earn the right to use complexity by beating a simpler comparison first.
-\end{practicalnote}
+The same habit appears in good course design and good benchmark practice. Starter baselines, public datasets, and example solutions do not make the work trivial. They make the claim legible.
 
 \begin{practicalnote}
-Two sanity checks should become automatic:
-\begin{itemize}[leftmargin=*]
-\item \textbf{Shuffled labels.} If labels are randomized and the model still looks strong, the pipeline is broken.
-\item \textbf{Split stability.} If validation performance swings wildly under small changes in the train-validation split, the setup may be too fragile for a strong conclusion.
-\end{itemize}
+Two sanity checks should become automatic. First, run a \emph{shuffled-label check}: randomly reassign the labels and confirm that performance collapses to chance. If it does not, the pipeline is broken. Second, inspect \emph{split stability}: if validation performance swings wildly under small changes in the train-validation split, the setup may be too fragile for a strong conclusion.
 \end{practicalnote}
 
-\section{Metric Failure Gallery}
+\begin{warningbox}
+The shuffled-label sanity check works as follows: randomly permute the training labels so they no longer correspond to the inputs, then retrain the model from scratch. If the model still achieves non-trivial performance on the validation set, the pipeline is broken---it is learning from data artifacts (leaky features, duplicate rows, or preprocessing that encodes the target) rather than genuine signal. A properly constructed pipeline should perform at chance level on shuffled labels.
+\end{warningbox}
+
+\section{When Good Numbers Still Support Weak Claims}
 
 By this point in the chapter, the reader has seen that no single number settles evaluation. It helps to make that lesson explicit through a small gallery of common metric traps. A correct metric can still be the wrong summary if it leaves the operational question untouched.
 
@@ -381,22 +334,12 @@ A probability model may reduce average log loss while becoming slightly worse ca
 The lesson is not that metrics are untrustworthy. The lesson is that every metric answers a narrower question than students first assume. Good evaluation therefore asks not only ``what is the score?'' but also ``what behavior is this score summarizing, and what important behavior is still outside it?''
 
 \begin{thinkingtool}
-\textbf{Metric failure gallery.} Whenever a headline number looks persuasive, name one failure mode it cannot rule out. If no such failure mode comes to mind, the evaluation may still be too shallowly understood.
+\textbf{Claim failure gallery.} Whenever a headline number looks persuasive, name one failure mode it cannot rule out. If no such failure mode comes to mind, the evaluation may still be too shallowly understood.
 \end{thinkingtool}
 
 \section{Chapter Artifact: A Minimal Evaluation Plan}
 
 By the end of Chapter 3, the reader should be able to write a short evaluation plan before reporting any result. The goal is not paperwork. The goal is to make the claim explicit enough that weak evidence and procedural mistakes become visible early. This is the point where decision context, threshold as policy, leakage control, and the baseline ladder become one reusable document. Chapter 2 said what good behavior would look like; Chapter 3 says what workflow and evidence would justify believing that behavior is real.
-
-\begin{decisionbox}
-\textbf{You may report a result only if...}
-\begin{itemize}[leftmargin=*]
-\item the split protocol was protected from development leakage,
-\item preprocessing stayed inside the training boundary,
-\item the result beat a serious baseline,
-\item the final claim sentence matches the workflow that produced it.
-\end{itemize}
-\end{decisionbox}
 
 \begin{table}[t]
 \centering
@@ -406,7 +349,7 @@ By the end of Chapter 3, the reader should be able to write a short evaluation p
 \toprule
 Plan field & What must be written down \\
 \midrule
-Seven-question focus & The plan answers three questions directly: what decision matters, what baseline the system must beat, and what evidence would justify the final claim. It also states the threshold or ranking policy that later systems work must implement responsibly \\
+Seven-question focus & Questions 1, 5, and 6 directly: what decision matters, what baseline counts, and what evidence supports the claim. The plan also fixes the threshold or ranking policy that later systems work must implement responsibly \\
 Decision context & What real decision or policy the evaluation is meant to support \\
 Primary metric & The main quantity that expresses success for that decision \\
 Supporting metrics & Additional metrics needed to expose tradeoffs such as imbalance or calibration \\
@@ -415,7 +358,6 @@ Calibration check & How confidence quality will be inspected if probabilities ma
 Split protocol & How training, validation, and test roles are separated \\
 Leakage controls & What preprocessing or feature steps must stay inside the training boundary \\
 Baseline ladder & Which simpler baselines the system must beat before a strong claim is made \\
-Sanity checks & Which quick checks, such as shuffled labels or split stability, would reveal a broken or fragile pipeline \\
 Claim statement & The exact sentence the final result is supposed to justify \\
 \bottomrule
 \end{tabular}
@@ -423,65 +365,36 @@ Claim statement & The exact sentence the final result is supposed to justify \\
 \label{tab:evaluation-plan}
 \end{table}
 
-Table~\ref{tab:evaluation-plan-example} shows the same course-support case after all three opening chapters are read together: the Chapter 1 memo states the task, the Chapter 2 worksheet states the judgment policy, and the Chapter 3 plan states what evidence would justify trusting it.
+\begin{example}[Filling in the Plan: Student Support]
+For the student-support framing from Chapter~1, a concrete evaluation plan might read:
 
-\begin{table}[t]
-\centering
-\footnotesize
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{p{3.2cm}p{7.03cm}}
-\toprule
-Plan field & One defensible course-support entry \\
-\midrule
-Seven-question focus & The plan now answers the original decision question, the fixed-budget ranking policy, the baseline that must be beaten, and the evidence needed for a trustworthy claim \\
-Decision context & An adviser can contact only the five highest-risk students each week for early outreach \\
-Primary metric & Precision@5 on the protected test split, because queue quality at the real budget is the main operational question \\
-Supporting metrics & Recall@5, calibration near the review boundary, subgroup recall, and queue size stability across splits \\
-Threshold or ranking policy & Rank weekly scores, contact the top five, and inspect cases near the cutoff before expanding the queue \\
-Calibration check & Plot a reliability diagram and inspect calibration in the score region that determines who enters the weekly queue \\
-Split protocol & Train on earlier course offerings, use a later offering for validation, freeze choices, and evaluate once on a held-out offering or term-level test split \\
-Leakage controls & Fit scaling and feature transforms on train only; block near-duplicate student records and any post-outreach or post-deadline signals from entering training \\
-Baseline ladder & Compare against majority class, a simple hand-designed early-alert rule, and a linear or logistic baseline before trusting a more complex model \\
-Sanity checks & Run shuffled-label and split-stability checks; if either still looks strong, stop and debug the pipeline before interpreting the result \\
-Claim statement & ``Using only early-course signals available before outreach, this system surfaces a meaningfully better top-five advising queue than simple baselines on unseen course offerings.'' \\
-\bottomrule
-\end{tabular}
-\caption{A worked evaluation plan for the running course-support case. The important habit is not the exact wording, but the fact that the workflow, baseline, leakage boundary, and final claim are now written down together.}
-\label{tab:evaluation-plan-example}
-\end{table}
-
-This is the pay-off of the opening sequence. The framing memo said what problem the team meant. The metric-and-action worksheet said what good behavior would look like. The evaluation plan now says what evidence would make that judgment trustworthy.
+\textbf{Decision context:} Flag students at risk of missing one of the first two major deadlines or failing to submit early core work for proactive advising outreach by week~4 of each semester.
+\textbf{Primary metric:} Recall at the top 15\% of the ranked list (the advising team's weekly capacity).
+\textbf{Supporting metrics:} Precision at the same budget to monitor false-alarm fatigue; calibration of predicted risk scores in the flagged region.
+\textbf{Threshold or ranking policy:} Rank all students by predicted risk; advisors contact the top 15\% each week.
+\textbf{Calibration check:} Compare predicted risk with the observed frequency of the proxy event within each predicted-risk decile on validation data.
+\textbf{Split protocol:} Train on semesters 1--4, validate on semester~5, test on semester~6. No student appears in more than one split.
+\textbf{Leakage controls:} Proxy-event labels are constructed only from the early deadline and submission records that define the target. Feature engineering uses only information available at week~4 (no later grades, no later-semester behaviors, and no support flags created after outreach begins).
+\textbf{Candidate model:} Logistic regression on all available week-4 features.
+\textbf{Baseline ladder:} (1) majority class, (2) logistic regression on GPA alone.
+\textbf{Claim statement:} ``The all-features logistic model identifies students at risk of the early-support proxy event with higher recall than GPA-only screening when the advising team reviews the top 15\% of the ranked list, on a held-out semester.''
+\end{example}
 
 \begin{thinkingtool}
-\textbf{Evaluation plan.} Before reporting a score, write down the decision context, primary and supporting metrics, threshold or ranking policy, calibration check, split protocol, leakage controls, baseline ladder, sanity checks, and final claim sentence.
+\textbf{Evaluation plan.} Before reporting a score, write down the decision context, primary and supporting metrics, threshold or ranking policy, calibration check, split protocol, leakage controls, baseline ladder, and final claim sentence.
 \end{thinkingtool}
 
 \section{Common Mistakes in Evaluation}
 
-By this point, the main workflow is already on the page. A short mistake list helps fix the contrast between a disciplined evaluation and one that only looks careful on the surface.
-
-\begin{mistakebox}
-\item \textbf{Optimizing the wrong quantity.} A model can improve its training loss and still fail at the deployment metric.
-\item \textbf{Letting the test set become a teacher.} Once test results influence model choice, the final score stops being an external check.
-\item \textbf{Reporting one number and hiding the tradeoff.} One metric is rarely enough because accuracy, threshold policy, calibration, and rare-case behavior can differ.
-\item \textbf{Skipping leakage and baseline checks.} A contaminated pipeline or a weak baseline does not support a strong claim.
-\item \textbf{Comparing complex models without a simple baseline.} You still cannot tell whether the task is genuinely hard or the gain is meaningful.
-\end{mistakebox}
+Several evaluation mistakes recur often enough to name directly. The first is optimizing one quantity and quietly reporting another, as if improvement in training loss automatically settled the deployment question. The second is letting the test set become a teacher: once test results influence model choice, the final number stops functioning as external evidence. A third is reporting one clean metric and letting it hide tradeoffs in calibration, rare-case performance, or operational thresholding. Finally, weak baselines and uninspected leakage can make an apparently strong result much easier to achieve than the report suggests.
 
 \section{Looking Ahead}
 
-This chapter made evaluation discipline explicit: generalization, protected evidence, leakage control, baselines, and claim design. The next chapter asks whether a simple linear model can already solve the task once the representation is chosen well. In other words, the book now moves from protecting the claim to choosing the first serious model family that deserves to make one.
+This chapter made evaluation discipline explicit: generalization, protected evidence, leakage control, baselines, and claim design. With the claim now protected, the next question is modeling economy: what is the simplest serious model that deserves to make that claim?
 
-The evaluation plan from this chapter becomes the starting document for Chapter 4's baseline design sheet: once the claim is protected, the next question is what first serious model family deserves a real test.
+\section*{Chapter Summary}
 
-\begin{chaptersummary}
-\item Chapter 3 asks whether the result survives new evidence rather than only the sample already seen during development.
-\item Underfitting and overfitting are different ways a training process can fail to generalize.
-\item Protected train, validation, and test roles exist to keep evaluation external to model development.
-\item Leakage, weak baselines, and test-set reuse are among the most common ways experiments become self-deceptive.
-\item A serious empirical claim needs both a defended metric and a defended workflow.
-\item The main deliverable of the chapter is a one-page evaluation plan written before a serious model claim is made.
-\end{chaptersummary}
+Chapter 3 shifts the focus from judging model behavior to judging the evidence for that judgment. Training fit is not enough; the real standard is generalization, which is why train, validation, and test roles must remain protected and why leakage, weak baselines, and repeated test-set tuning are so damaging. The chapter also treats sanity checks and simple baselines as part of interpretation rather than as optional extras. Its endpoint is a minimal evaluation plan that makes the claim, the split protocol, the leakage controls, and the comparison standard explicit before any result is presented.
 
 \begin{studyquestions}
 \item Why is generalization a better judgment question than training loss alone?
