@@ -11,12 +11,10 @@ cp -R "$ROOT_DIR/pages/." "$DEST_DIR/"
 
 if [[ -f "$ROOT_DIR/ml-by-design.pdf" ]]; then
   cp "$ROOT_DIR/ml-by-design.pdf" "$DEST_DIR/ml-by-design.pdf"
-elif [[ -f "$ROOT_DIR/book.pdf" ]]; then
-  cp "$ROOT_DIR/book.pdf" "$DEST_DIR/ml-by-design.pdf"
 elif [[ -f "$ROOT_DIR/build/book.pdf" ]]; then
   cp "$ROOT_DIR/build/book.pdf" "$DEST_DIR/ml-by-design.pdf"
 else
-  echo "No compiled book PDF found in repository root or build/." >&2
+  echo "No compiled book PDF found in ml-by-design.pdf or build/book.pdf." >&2
   exit 1
 fi
 
