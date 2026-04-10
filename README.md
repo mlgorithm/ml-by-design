@@ -10,10 +10,7 @@ Download the current edition here:
 
 ## DOI
 
-- Living book DOI: [10.5281/zenodo.19341954](https://doi.org/10.5281/zenodo.19341954)
-- Current public release DOI: [10.5281/zenodo.19341955](https://doi.org/10.5281/zenodo.19341955)
-
-Use the release DOI when citing a fixed snapshot, and the concept DOI when pointing readers to the ongoing book.
+- Zenodo book DOI: [10.5281/zenodo.19497452](https://doi.org/10.5281/zenodo.19497452)
 
 ## License
 
