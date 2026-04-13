@@ -157,6 +157,8 @@ The key insight is a recursive structure: the value of a state is the immediate 
 
 \begin{mathlens}
 \textbf{The Bellman Equation.} The state-value and action-value functions satisfy:
+
+Let \(P(s', r \mid s, a)\) denote the environment's joint probability distribution over next state \(s'\) and immediate reward \(r\) after taking action \(a\) in state \(s\).
 \[
 V^\pi(s) = \sum_a \pi(a|s) \sum_{s', r} P(s', r | s, a) \left[r + \gamma V^\pi(s')\right].
 \]
@@ -251,12 +253,12 @@ In words: increase the log-probability of actions that led to high returns; decr
 \begin{example}[Course-support assistant, policy gradient]
 Parameterize the policy as a neural network mapping queries to response probabilities: $\pi_\theta(\text{response} | \text{query}) = \text{softmax}(\text{nn}_\theta(\text{query}))$.
 
-On each interaction, compute the return (did the issue resolve?) and the Q-estimate. Update:
+On each interaction, compute the return (did the issue resolve?) and convert it into an estimated advantage \(\hat A(s,a)\), meaning how much better or worse the chosen response was than the policy's usual expectation in that state. Update:
 \[
-\theta \leftarrow \theta + \alpha \nabla_\theta \log \pi_\theta(a_{\text{chosen}} | s) \cdot Q(s, a_{\text{chosen}}).
+\theta \leftarrow \theta + \alpha \nabla_\theta \log \pi_\theta(a_{\text{chosen}} | s) \cdot \hat A(s, a_{\text{chosen}}).
 \]
 
-If the issue resolved ($Q > 0$), increase the probability of that response. If it escalated ($Q < 0$), decrease the probability. Over time, the policy learns to generate responses that resolve issues.
+If the chosen response resolved the issue better than the baseline expected (\(\hat A > 0\)), increase its probability. If it did worse than expected (\(\hat A < 0\)), decrease it. Over time, the policy learns to favor responses that outperform its current default behavior.
 \end{example}
 
 \subsection{Actor-Critic Methods}
@@ -315,7 +317,7 @@ Instead of $\arg\max_a \hat{Q}(s, a)$, choose:
 \[
 \arg\max_a \left[\hat{Q}(s, a) + c \sqrt{\frac{\log N}{\text{count}(s, a)}}\right],
 \]
-where $\text{count}(s, a)$ is the number of times action $a$ has been taken in state $s$. The second term is an ``exploration bonus'': actions tried fewer times get an optimism bonus. As an action is tried more, the bonus shrinks.
+where $\text{count}(s, a)$ is the number of times action $a$ has been taken in state $s$. In practice, unseen actions are tried once first, or treated as having an infinite exploration bonus, so the denominator is never zero. The second term is an ``exploration bonus'': actions tried fewer times get an optimism bonus. As an action is tried more, the bonus shrinks.
 
 UCB is principled: it balances known good actions with actions that could plausibly be better if we learned more about them.
 \end{definition}
@@ -393,7 +395,7 @@ The solution is a feedback loop: deploy RL systems carefully, monitor what they 
 \end{evidencebox}
 
 \begin{warningbox}
-\textbf{Do not ignore partial observability.} Often, the agent observes only part of the state. A student query might not reveal the student's true underlying problem; a pedestrian's position might not reveal their intent. If the reward depends on the hidden part of the state, the agent cannot learn a good policy. Invest in better sensors, better state representation, or simplify the problem.
+\textbf{Do not ignore partial observability.} Often, the agent observes only part of the state. A student query might not reveal the student's true underlying problem; a pedestrian's position might not reveal their intent. If the reward depends on the hidden part of the state, the agent may fail to learn a reliable policy from the current observations alone. Invest in better sensors, better state representation, or simplify the problem.
 
 Practical workarounds include \emph{frame stacking}---feeding the agent several recent observations rather than just one---and \emph{recurrent policies} that maintain a learned latent state summarising observation history. Both approaches give the agent implicit memory without requiring the full Partially Observable Markov Decision Process (POMDP) formalism.
 \end{warningbox}
@@ -548,7 +550,7 @@ Jumping straight to RL without first testing a simple heuristic or rule-based po
 \end{failurepattern}
 
 \begin{failurepattern}[Ignoring partial observability]
-The agent observes state $s$, but the reward depends on a hidden part of the state. The agent cannot learn a good policy because it cannot infer the full state from $s$. Cause: insufficient sensor data or poor state representation. Mitigation: invest in better observations, or simplify the problem to make it fully observable.
+The agent observes state $s$, but the reward depends on a hidden part of the state. The agent may fail to learn a reliable policy because it cannot infer the full state from $s$ alone. Cause: insufficient sensor data or poor state representation. Mitigation: invest in better observations, add memory or state estimation, or simplify the problem to make it closer to fully observable.
 \end{failurepattern}
 
 \begin{failurepattern}[Confusing on-policy and off-policy learning]

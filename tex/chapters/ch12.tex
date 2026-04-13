@@ -211,7 +211,7 @@ Let $a(x)\in\{0,1\}$ indicate whether the system answers on input $x$, and let $
 \[
 R_\phi(f)=\frac{\mathbb{E}[a(x)\,\ell(f(x),y)]}{\mathbb{E}[a(x)]}.
 \]
-On this automation-safety score, lowering the threshold usually raises coverage, but it can also raise selective risk if the newly accepted cases are too uncertain. This is why thresholding works best when confidence is reasonably calibrated.
+This quantity is defined when \(\mathbb{E}[a(x)]>0\), meaning the system answers at least some cases. On this automation-safety score, lowering the threshold usually raises coverage, but it can also raise selective risk if the newly accepted cases are too uncertain. This is why thresholding works best when confidence is reasonably calibrated.
 \end{mathlens}
 
 \begin{definition}[Selective Prediction]
@@ -518,9 +518,9 @@ This walkthrough shows the chapter's central point: the useful system is not jus
 
 The same readiness questions survive in the dashboard-camera pedestrian detector from Chapter~\ref{ch:vision}. The service objective is no longer ``answer routine questions quickly.'' It is ``surface likely pedestrian hazards early enough to support a safe braking or alerting decision without flooding the driver or controller with false alarms.'' The input contract includes camera calibration, frame rate, lens geometry, synchronization, and health checks for glare or dropout. The operating policy might require agreement between detection and short-term tracking before a high-confidence alert is issued, with conservative slowdown behavior when the visual evidence degrades.
 
-Monitoring also looks different without changing the systems logic. Useful signals include night-rain miss rate, alert rate by lighting condition, camera-health failures, latency spikes, and disagreement between the detector and downstream tracker. A no-launch trigger might be unacceptable failure on close-range pedestrians under dusk, glare, or unseen-camera slices even if average daytime metrics remain strong.
+Monitoring also looks different without changing the systems logic. Useful signals include audited night-rain miss rate on periodically labeled clips, alert rate by lighting condition, camera-health failures, latency spikes, and disagreement between the detector and downstream tracker. A no-launch trigger might be unacceptable failure on close-range pedestrians under dusk, glare, or unseen-camera slices even if average daytime metrics remain strong.
 
-A concrete operating rule might be: if the night-rain miss rate exceeds the safety threshold for three consecutive evaluation windows, the system automatically increases its sensitivity (lowering the detection threshold) and logs an alert for the engineering team. If the miss rate still exceeds the threshold after the sensitivity adjustment, the system should signal the driver-assistance module to reduce maximum speed until conditions improve or a human operator reviews the situation.
+A concrete operating rule might be: if the audited night-rain miss rate exceeds the safety threshold for three consecutive labeled evaluation windows, the system automatically increases its sensitivity (lowering the detection threshold) and logs an alert for the engineering team. Because those labels arrive with delay, the live service should also watch immediate proxy signals such as tracker disagreement, close-range near-miss reports, and camera-health failures; if those degrade sharply before the audit catches up, the driver-assistance module should reduce maximum speed until conditions improve or a human operator reviews the situation.
 
 The details differ from the support assistant, but the readiness brief still asks the same questions about requirements, contracts, fallback behavior, monitoring, and ownership.
 

@@ -272,8 +272,8 @@ The evolution of sequence models reflects a progression in how context is stored
 \begin{itemize}[leftmargin=*]
   \item \textbf{Hidden Markov Models} maintain a discrete hidden state with fixed transition probabilities. They model uncertainty explicitly but struggle with long-range dependencies because the state space must be enumerated.
   \item \textbf{Recurrent Neural Networks} (RNNs) replace the discrete state with a continuous hidden vector updated at each step. This is more flexible, but gradients can vanish or explode across many steps, making long-range learning difficult.
-  \item \textbf{LSTMs and GRUs} add gating mechanisms that control what information flows forward and what is discarded. Gates solve the vanishing-gradient problem for moderately long sequences.
-  \item \textbf{Transformers} abandon sequential processing entirely. Attention computes direct pairwise connections between all positions, allowing any token to attend to any other without information passing through intermediate steps. This makes long-range context easy but requires encoding positional information explicitly.
+  \item \textbf{LSTMs and GRUs} add gating mechanisms that control what information flows forward and what is discarded. Gates mitigate vanishing-gradient problems and usually support longer dependencies than plain RNNs, though they do not remove optimization limits entirely.
+  \item \textbf{Transformers} replace recurrent state updates during training with attention over positions, allowing any token to attend to any other without information passing through intermediate steps. This makes long-range context easier to model in parallel, though autoregressive decoding at inference time can still proceed token by token and positional information must be encoded explicitly.
 \end{itemize}
 Each architecture solves a memory limitation of its predecessor, at the cost of additional assumptions or computation.
 \end{practicalnote}
@@ -428,7 +428,7 @@ Sequential tasks often have deceptively strong simple baselines. In forecasting,
 A complicated sequential model that cannot beat a naive baseline under an honest split is not a near-miss. It is a warning sign that the representation, split logic, or claim may be wrong.
 
 \begin{example}[Naive Baselines for the Running Cases]
-For the demand forecaster, the simplest credible baseline is \emph{persistence}: predict that the next hour's demand equals the same hour yesterday. A slightly stronger baseline adds the weekly pattern: predict from the same hour and same day of week last week. Any model that cannot beat persistence is not learning temporal structure.
+For the demand forecaster, the simplest credible baseline is true \emph{persistence}: predict that the next hour's demand equals the current hour's demand. A stronger seasonal-repeat baseline predicts from the same hour yesterday, and another adds the weekly pattern by using the same hour and same day of week last week. Any model that cannot beat these simple baselines is not clearly learning useful temporal structure.
 
 For the wake-word detector, the naive baseline is a fixed energy threshold: if the short-term energy of the audio buffer exceeds a threshold, flag it. This baseline has a high false-positive rate but exposes how much of the detector's value comes from spectral discrimination versus simple loudness.
 \end{example}
@@ -514,7 +514,7 @@ Multimodal systems must choose how information from different modalities flows i
 
 \begin{itemize}[leftmargin=*]
   \item \textbf{Early fusion}: Concatenate raw or preprocessed inputs from all modalities before the model sees them. This assumes that low-level structure is shared across modalities and that the model can learn useful interactions from the combined input.
-  \item \textbf{Late fusion}: Train separate models on each modality, then combine their outputs (scores, embeddings, or decisions) at the end. This assumes modalities are largely independent in their contribution to the final decision.
+  \item \textbf{Late fusion}: Train separate models on each modality, then combine their outputs (scores, embeddings, or decisions) at the end. This works best when modality-specific processing can stay mostly separate until the final decision.
   \item \textbf{Cross-modal attention}: Let modalities interact during processing through attention mechanisms that allow each modality to selectively focus on relevant parts of other modalities. This assumes learned interaction is beneficial and computationally feasible.
 \end{itemize}
 
@@ -528,14 +528,14 @@ Strategy & Assumption & Strength & Weakness \\
 \midrule
 Early fusion & Shared low-level structure & Captures joint patterns & High-dimensional input; all modalities equally weighted \\
 Late fusion & Modality independence & Interpretable per-modality; scalable & May miss complementary signals \\
-Cross-modal attention & Learned selective interaction & Flexible; modality-adaptive & Computationally expensive; requires rich supervision \\
+Cross-modal attention & Learned selective interaction & Flexible; modality-adaptive & Computationally expensive; often benefits from substantial pretraining or supervision \\
 \bottomrule
 \end{tabular}
 \caption{Fusion strategies trade off between assumption simplicity, computational cost, and flexibility in modeling multimodal interaction.}
 \label{tab:fusion-strategies}
 \end{table}
 
-Each strategy makes different assumptions about how modalities relate. Early fusion assumes shared low-level structure; late fusion assumes independence until the decision; cross-modal attention allows learned interaction. The right choice depends on the task, the computational budget, and whether modality interaction is theoretically justified.
+Each strategy makes different assumptions about how modalities relate. Early fusion assumes shared low-level structure; late fusion keeps the modalities separate until the decision stage; cross-modal attention allows learned interaction throughout processing. The right choice depends on the task, the computational budget, and whether modality interaction is theoretically justified.
 
 \subsection{The Multimodal Audit}
 
@@ -592,7 +592,7 @@ In a graph neural network with $k$ layers, a node $v$ at layer $\ell$ computes i
 \[
 h_v^{(\ell+1)} = \text{COMBINE}\left( h_v^{(\ell)}, \text{AGGREGATE}\left( \{ h_u^{(\ell)} : u \in \text{Neighbors}(v) \} \right) \right)
 \]
-where AGGREGATE pools messages from neighbors (e.g., sum, mean, max) and COMBINE updates the node's state (e.g., via a neural network). After $k$ layers, each node's representation encodes its $k$-hop neighborhood.
+where AGGREGATE pools messages from neighbors (e.g., sum, mean, max) and COMBINE updates the node's state (e.g., via a neural network). After $k$ layers, each node's representation can depend on aggregated information from its $k$-hop neighborhood, though different neighborhoods may still collapse to the same representation if the aggregation is not expressive enough.
 \end{definition}
 
 The key design choices in a graph neural network are:

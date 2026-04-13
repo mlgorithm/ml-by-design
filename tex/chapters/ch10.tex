@@ -345,7 +345,7 @@ with uncertainty governed by the spread of the differences rather than by two se
 \end{mathlens}
 
 \begin{theorem}[Paired intervals are built from within-example differences]
-If two systems are scored on the same $n$ cases, $d_i$ denotes the paired difference on case $i$, and the paired differences can be treated as independent draws from a distribution that is approximately normal (or $n$ is large enough for the $t$ approximation to be reasonable), then a two-sided \(100(1-\alpha)\%\) $t$-interval for the mean paired difference is
+If two systems are scored on the same $n$ cases, let $d_i$ denote the paired difference on case $i$. Assuming the paired differences are independent draws from an approximately normal distribution (or $n$ is large enough for the $t$ approximation to hold), a two-sided \(100(1-\alpha)\%\) $t$-interval for the mean paired difference is
 \[
 \bar d \pm t_{1-\alpha/2,\,n-1}\frac{s_d}{\sqrt{n}},
 \]
@@ -679,15 +679,15 @@ It appears males are admitted at a higher rate overall. But stratifying by depar
 \toprule
 Department & Gender & Admission Rate & Sample Size \\
 \midrule
-STEM & Male & $50\%$ & $80$ \\
-STEM & Female & $60\%$ & $50$ \\
-Humanities & Male & $40\%$ & $120$ \\
-Humanities & Female & $35\%$ & $50$ \\
+STEM & Male & $30\%$ & $80$ \\
+STEM & Female & $35\%$ & $80$ \\
+Humanities & Male & $55\%$ & $120$ \\
+Humanities & Female & $60\%$ & $20$ \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Within \emph{each} department, females are admitted at equal or higher rates. Yet the aggregate rate favors males. The confounder is \emph{application volume}: more males apply to Humanities (a department with lower admission rates overall), while more females apply to STEM (higher rates). The aggregate trend is a statistical artifact of the distribution of applicants across departments, not evidence of gender-based bias in admission decisions.
+Within \emph{each} department, females are admitted at higher rates. Yet the aggregate rate favors males. The confounder is \emph{application volume}: more females apply to STEM, the more selective department, while more males apply to Humanities, the less selective one. The aggregate trend is a statistical artifact of the distribution of applicants across departments, not direct evidence of gender-based bias in admission decisions.
 \end{example}
 
 Simpson's paradox is not merely an academic curiosity. It shows that predictive associations learned from aggregate data can misguide deployment decisions. A model trained on the aggregate data would learn that gender predicts admission, but the causally relevant story is departmental selectivity and application distribution, not discrimination.
@@ -715,17 +715,17 @@ A system learns that high school students who take Advanced Placement exams have
 Conversely, an intervention that respects causal direction is more likely to succeed:
 
 \begin{example}[When Model Predictions Can Guide Intervention]
-A model trained on randomized tutoring sessions learns that students assigned to tutoring improve their grades. Here, the causal direction is clear: the intervention (tutoring assignment) is the cause, and the outcome (grade improvement) is the result. A deployed system that uses this model to identify which students would benefit most from tutoring can safely recommend tutoring. The recommendation respects the causal structure learned in the experiment.
+A model trained on randomized tutoring sessions learns that students assigned to tutoring improve their grades on average. Here, the causal direction is clear: the intervention (tutoring assignment) is the cause, and the outcome (grade improvement) is the result. A deployed system can therefore use this evidence to justify tutoring as an intervention for similar students in the same operational setting. More ambitious claims about which students would benefit \emph{most} would require additional evidence about heterogeneous treatment effects.
 \end{example}
 
 \subsection{Observational Data, Experiments, and Causal Inference}
 
-The gold standard for establishing causation is a randomized experiment: randomly assign some units to treatment and others to control, keep everything else constant, and measure the difference in outcomes. Random assignment ensures that treatment and control groups do not differ on any confounder, measured or unmeasured.
+The gold standard for establishing causation is a randomized experiment: randomly assign some units to treatment and others to control, keep everything else constant, and measure the difference in outcomes. Random assignment aims to balance confounders, measured and unmeasured, across groups in expectation. In any finite experiment some imbalance can remain by chance, but randomization makes that imbalance analyzable rather than systematically tied to treatment choice.
 
 Observational data---data where the experimenter did not control assignment---cannot establish causation with certainty. But it is not useless. When an experiment is infeasible due to ethics, cost, or time, causal inference methods can offer partial remedies by making and testing strong assumptions about confounders.
 
 \begin{itemize}[leftmargin=*]
-\item \textbf{Instrumental variables:} If a variable $Z$ influences $X$ but does not directly influence $Y$ except through $X$, then $Z$ can help isolate the causal effect of $X$ on $Y$. Example: latitude determines temperature access to heating fuel (it influences fuel availability, which affects heating), but latitude does not directly affect health except through heating. Using latitude as an instrument can help estimate the causal effect of heating on health even though we cannot randomly assign heating to people.
+\item \textbf{Instrumental variables:} If a variable $Z$ influences $X$ but does not directly influence $Y$ except through $X$, then $Z$ can help isolate the causal effect of $X$ on $Y$. Example: random assignment to a tutoring voucher changes who actually attends tutoring, but the voucher itself should affect exam performance only through tutoring uptake. The voucher can therefore serve as an instrument for tutoring attendance when compliance is imperfect.
 \item \textbf{Difference-in-differences:} If two populations follow parallel trends before an intervention, then the post-intervention divergence can be attributed to the intervention itself. This requires the strong assumption that trends would have remained parallel in the counterfactual world without intervention.
 \item \textbf{Regression discontinuity:} If assignment to treatment is determined sharply by crossing a threshold (e.g., students scoring exactly at the cutoff for financial aid eligibility), then comparing outcomes just above and just below the threshold can estimate the causal effect. The assumption is that other factors do not change discontinuously at the same threshold.
 \end{itemize}

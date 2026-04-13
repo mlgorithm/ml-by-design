@@ -416,8 +416,8 @@ For binary classification, a common choice is binary cross-entropy:
 \mathcal{L} = -\frac{1}{n}\sum_{i=1}^{n}\left[y_i \log \hat{p}_i + (1-y_i)\log(1-\hat{p}_i)\right].
 \]
 
-\begin{theorem}[Sigmoid cross-entropy produces the training signal \(\hat{p}-y\)]
-For a binary classifier with output score \(s\), predicted probability \(\hat{p}=\sigma(s)\), and label \(y\in\{0,1\}\), the derivative of binary cross-entropy with respect to the score simplifies to
+\begin{theorem}[Sigmoid cross-entropy produces the training signal \(\hat{p}-y\) for one example]
+For one example with binary-classifier output score \(s\), predicted probability \(\hat{p}=\sigma(s)\), and label \(y\in\{0,1\}\), the derivative of binary cross-entropy with respect to the score simplifies to
 \[
 \frac{d\mathcal{L}}{ds}=\hat{p}-y.
 \]
@@ -446,6 +446,8 @@ Multiplying and simplifying gives
 =\hat{p}-y.
 \]
 \end{proof}
+
+If the loss is averaged over \(n\) examples as in the definition above, then the derivative with respect to the score of example \(i\) is \((\hat p_i-y_i)/n\). The useful simplification is the same; the batch average just contributes the constant factor \(1/n\).
 
 This is the error signal for the output layer---the difference between what the model predicted and what the target required. The network is pushed upward when it underpredicts the true class and downward when it overpredicts it.
 
@@ -737,13 +739,14 @@ initialize first_moment and second_moment to zero
 initialize timestep = 0
 for each minibatch gradient grad:
     timestep = timestep + 1
+    reference_parameters = parameters
     first_moment = beta1 * first_moment + (1 - beta1) * grad
     second_moment = beta2 * second_moment + (1 - beta2) * (grad * grad)
     debiased_first = first_moment / (1 - beta1^timestep)
     debiased_second = second_moment / (1 - beta2^timestep)
     parameters = parameters - learning_rate * debiased_first / (sqrt(debiased_second) + epsilon)
     if using AdamW:
-        parameters = parameters - learning_rate * weight_decay * parameters
+        parameters = parameters - learning_rate * weight_decay * reference_parameters
 \end{codeexample}
 
 \begin{practicalnote}
@@ -832,7 +835,7 @@ For mini-batch activations \(a_1,\ldots,a_m\), batch normalization computes
 \[
 \hat a_i = \frac{a_i-\mu_B}{\sqrt{\sigma_B^2+\varepsilon}},
 \qquad
-y_i = \gamma \hat a_i + \beta,
+b_i = \gamma \hat a_i + \beta,
 \]
 where \(\mu_B\) and \(\sigma_B^2\) are the batch mean and variance, and \(\gamma,\beta\) are learned scale and shift parameters. The normalization stabilizes the signal; the learned affine step keeps the layer expressive.
 \end{mathlens}
@@ -864,7 +867,7 @@ If hidden activations are drifting in scale from batch to batch, batch normaliza
 \end{example}
 
 \begin{practicalnote}
-Batch normalization stabilizes the signal within a layer. A complementary technique called a \emph{residual connection} (or skip connection) helps the signal flow between layers. The idea is simple: instead of computing $h = f(x)$, the layer computes $h = f(x) + x$, adding the input directly to the output. If the transformation $f$ is unhelpful, the gradient can flow through the identity branch unchanged, so deep networks become much easier to train. Residual connections are a key design principle behind ResNets in vision and many transformer blocks in language.
+Batch normalization stabilizes the signal within a layer. A complementary technique called a \emph{residual connection} (or skip connection) helps the signal flow between layers. When the shapes match, instead of computing $h = f(x)$, the layer computes $h = f(x) + x$, adding the input directly to the output. When the shapes do not match, architectures typically insert a projection on the skip path before adding. If the transformation $f$ is unhelpful, the gradient can flow through the identity or projected branch, so deep networks become much easier to train. Residual connections are a key design principle behind ResNets in vision and many transformer blocks in language.
 \end{practicalnote}
 
 \subsection{Debugging a Broken Training Run}
