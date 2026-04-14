@@ -524,6 +524,76 @@ A concrete operating rule might be: if the audited night-rain miss rate exceeds 
 
 The details differ from the support assistant, but the readiness brief still asks the same questions about requirements, contracts, fallback behavior, monitoring, and ownership.
 
+\section{Production Infrastructure: Making Models Servable}
+\label{sec:production-infra}
+
+Building a model that works on a validation set is not the same as running a model reliably in production. The gap between ``the model is accurate'' and ``the system is operational'' is filled by infrastructure: feature stores, model registries, and inference optimization. This section introduces these concepts at a design level, not as tooling tutorials.
+
+\subsection{Feature Stores and Feature Freshness}
+
+A \emph{feature store} is a centralized system that computes, stores, and serves features consistently across training and inference. The core problem it solves is \emph{training-serving skew}: the features used at training time must be computed identically at serving time, or the model will see inputs it was not trained on.
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Offline features.} Computed in batch (e.g., a student's average submission time over the past semester). These change slowly and can be precomputed.
+\item \emph{Online features.} Computed in real time (e.g., a student's login count in the past hour). These require streaming computation and low-latency serving.
+\item \emph{Feature freshness.} How recently the feature was computed matters. A ``number of late submissions this week'' feature that is 3 days stale is not the same feature the model was trained on. Feature freshness requirements should be documented in the data contract.
+\end{itemize}
+
+\begin{practicalnote}
+Before building a feature store, ask: do I actually have training-serving skew? If your training pipeline and serving pipeline compute features with the same code on the same data, a feature store adds complexity without benefit. Feature stores are most valuable when features are shared across multiple models, when feature computation is expensive (so caching matters), or when the training and serving environments are different (e.g., Python for training, Java for serving).
+\end{practicalnote}
+
+\subsection{Model Registry and Version Control}
+
+A \emph{model registry} tracks which model version is deployed, what data it was trained on, what hyperparameters were used, and what evaluation metrics it achieved. It serves the same purpose as version control for code, but for models.
+
+Key capabilities:
+\begin{itemize}[leftmargin=*]
+\item \emph{Versioning.} Every trained model gets a unique version identifier. Rolling back to a previous version should be a one-step operation.
+\item \emph{Metadata.} Each version records: training data date range, hyperparameters, evaluation metrics (on validation and test sets), and the code commit that produced it.
+\item \emph{Promotion workflow.} Models move through stages: ``experimental'' $\to$ ``staging'' $\to$ ``production.'' Promotion requires passing a checklist (e.g., evaluation metrics exceed thresholds, reliability review card is filled, no regressions on critical slices).
+\item \emph{Lineage.} Track which training data, feature definitions, and preprocessing steps produced each model. If a data source is discovered to contain errors, lineage lets you identify all affected models.
+\end{itemize}
+
+\begin{warningbox}
+Without a model registry, the question ``which model is running in production?'' has no reliable answer. Teams that deploy models by copying files to a server inevitably lose track of versions, deploy untested models, or cannot reproduce results. A model registry is not optional infrastructure---it is the minimum standard for responsible deployment.
+\end{warningbox}
+
+\subsection{Inference Efficiency: Distillation, Quantization, and Pruning}
+
+A model that takes 500ms to produce a prediction may be too slow for a real-time system, too expensive to run at scale, or too large to deploy on an edge device. Three families of techniques reduce inference cost:
+
+\textbf{Knowledge distillation.} Train a smaller ``student'' model to mimic the predictions of a larger ``teacher'' model. The student learns from the teacher's soft predictions (probability distributions over classes), which contain more information than hard labels. The student is smaller and faster but approximates the teacher's behavior.
+
+\textbf{Quantization.} Reduce the numerical precision of the model's weights and activations (e.g., from 32-bit floating point to 8-bit integers). This reduces memory usage and speeds up computation, especially on hardware with efficient integer arithmetic. Post-training quantization requires no retraining; quantization-aware training fine-tunes the model to compensate for precision loss.
+
+\textbf{Pruning.} Remove weights, neurons, or entire layers that contribute little to the model's output. Structured pruning (removing entire channels or attention heads) produces models that are directly faster on standard hardware. Unstructured pruning (zeroing individual weights) produces sparse models that require specialized hardware or software to realize speed gains.
+
+\begin{example}[Inference Optimization for Pedestrian Detection]
+The campus pedestrian detector runs on an edge device in each shuttle. The full model (ResNet-50 backbone) takes 120ms per frame---too slow for 30fps real-time operation. The team applies three optimizations: (1) knowledge distillation to a MobileNet-v2 student (30ms, 2\% accuracy drop), (2) INT8 quantization (18ms, additional 0.5\% accuracy drop), and (3) structured pruning of the least-important channels (14ms, additional 0.3\% drop). The final model runs at 14ms per frame (71fps), well within the real-time budget, with a total accuracy drop of 2.8\% from the original---an acceptable trade-off documented in the system's readiness brief.
+\end{example}
+
+\subsection{Cost-Aware Serving}
+
+Running ML models in production costs money: compute, memory, network, and storage. Cost-aware serving makes these trade-offs explicit:
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Cascade architectures.} Use a cheap, fast model (e.g., a logistic regression filter) to handle easy cases and a more expensive model (e.g., a neural network) only for hard cases. The cheap model handles 80\% of traffic; the expensive model handles 20\%. Total cost drops while accuracy on hard cases is preserved.
+\item \emph{Batching and caching.} Batch multiple inference requests together to exploit GPU parallelism. Cache predictions for repeated inputs (e.g., the same resource page viewed by many students). Both reduce per-request cost.
+\item \emph{Auto-scaling.} Scale compute resources based on demand. A course-support system needs more capacity during midterm and finals weeks than during breaks. Over-provisioning wastes money; under-provisioning degrades latency.
+\end{itemize}
+
+\begin{decisionbox}
+\textbf{Inference efficiency checklist:}
+\begin{itemize}
+\item What is the latency budget for a single prediction? (e.g., $<$50ms for real-time, $<$1s for batch)
+\item What is the cost budget per prediction? (e.g., $<$\$0.001 for high-volume serving)
+\item Can a cascade architecture route easy cases to a cheaper model?
+\item Has distillation, quantization, or pruning been evaluated, and is the accuracy trade-off acceptable?
+\item Is the serving infrastructure auto-scaled to match demand patterns?
+\end{itemize}
+\end{decisionbox}
+
 \section{Common Mistakes in Systems Work}
 
 \begin{mistakebox}
@@ -545,7 +615,7 @@ For instance, the framing memo for the course-support assistant proposed answeri
 
 \section*{Chapter Summary}
 
-A real AI system includes more than a model: it includes contracts, policies, interfaces, queues, monitoring, staged release, and ownership. System quality depends on whether those pieces work together under real latency, workload, and failure constraints. The final professional standard is not model performance in isolation, but whether the whole service improves the task safely and sustainably.
+A real AI system includes more than a model: it includes contracts, policies, interfaces, queues, monitoring, staged release, and ownership. Production infrastructure---feature stores, model registries, inference optimization, and cost-aware serving---bridges the gap between a working model and a reliable service. System quality depends on whether those pieces work together under real latency, workload, and failure constraints. The final professional standard is not model performance in isolation, but whether the whole service improves the task safely and sustainably.
 
 \begin{studyquestions}
 \item Why can a high-performing offline model still produce a poor deployed system?
@@ -557,6 +627,10 @@ A real AI system includes more than a model: it includes contracts, policies, in
 \item Why might a team choose shadow mode or a canary release before a full rollout?
 \item In what situations is refusing deployment the correct systems decision?
 \item Why can a grounded support assistant with good answer quality still be unfit to launch as a real service?
+\item What problem does a feature store solve, and when is it not worth the complexity?
+\item Why is a model registry the minimum standard for responsible deployment?
+\item What is the trade-off in knowledge distillation, and when is the accuracy loss acceptable?
+\item How does a cascade architecture reduce serving costs without sacrificing accuracy on hard cases?
 \end{studyquestions}
 
 \begin{exercises}
@@ -578,4 +652,5 @@ A real AI system includes more than a model: it includes contracts, policies, in
 \item Compare two failure responses to post-deployment drift: retraining the model immediately versus disabling the model and falling back to a simpler policy. Explain when each is justified and what risks each creates.
 \item A team wants to replace its current model with a new one that improves offline quality but has never seen live traffic. Design the strongest staged-release plan you can, including one guardrail metric that would block expansion.
 \item A university wants to launch a course-support assistant before the start of term, but the latest policy pages are still changing daily. Explain the strongest systems argument for delaying launch or narrowing the use case.
+\item A pedestrian detector must run on an edge device with a 50ms latency budget. The full model takes 120ms. Compare three optimization strategies (distillation, quantization, pruning) and recommend a pipeline. What accuracy loss is acceptable, and how would you decide?
 \end{challengeexercises}

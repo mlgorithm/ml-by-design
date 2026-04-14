@@ -430,6 +430,84 @@ If a vector is projected onto a direction, we are asking how much of the vector 
 
 You do not need a full course in spectral methods to read this book, but one intuition is useful. Principal component analysis searches for directions in the data that capture high variance. Those directions are related to eigenvectors of a covariance matrix. The important modeling lesson is not the algebraic machinery itself. It is that high-dimensional data often contains lower-dimensional structure, and linear algebra provides tools for describing it.
 
+\section{Priors, Posteriors, and Latent-Variable Intuition}
+
+Several chapters use Bayesian reasoning and latent-variable models. This section provides the compact mathematical reference.
+
+\subsection{Priors and Posteriors}
+
+A \emph{prior} $P(\theta)$ encodes beliefs about a parameter before seeing data. A \emph{likelihood} $P(\text{data} \mid \theta)$ measures how well the parameter explains the observed data. Bayes' theorem combines them into a \emph{posterior}:
+\[
+P(\theta \mid \text{data}) = \frac{P(\text{data} \mid \theta) \, P(\theta)}{P(\text{data})}
+\]
+
+The denominator $P(\text{data}) = \int P(\text{data} \mid \theta) \, P(\theta) \, d\theta$ is called the \emph{evidence} or \emph{marginal likelihood}. It is a normalizing constant that ensures the posterior integrates to one. For many models, this integral is intractable, which motivates approximation methods (variational inference, MCMC).
+
+\subsection{MAP Estimation and Regularization}
+
+\emph{Maximum a posteriori} (MAP) estimation finds the mode of the posterior:
+\[
+\hat{\theta}_{\text{MAP}} = \arg\max_\theta \; P(\text{data} \mid \theta) \, P(\theta)
+\]
+
+Taking the log and expanding:
+\[
+\hat{\theta}_{\text{MAP}} = \arg\max_\theta \; \bigl[\log P(\text{data} \mid \theta) + \log P(\theta)\bigr]
+\]
+
+If $P(\theta) = \mathcal{N}(0, \sigma^2 I)$, then $\log P(\theta) \propto -\frac{1}{2\sigma^2}\|\theta\|^2$, which is exactly $L_2$ regularization with $\lambda = \frac{1}{2\sigma^2}$. If $P(\theta)$ is a Laplace distribution, the penalty becomes $L_1$ regularization. Regularization is Bayesian prior belief in disguise.
+
+\subsection{Latent Variables and the EM Algorithm}
+
+A \emph{latent variable} $z$ is an unobserved quantity that the model assumes exists. The observed data likelihood becomes:
+\[
+P(x \mid \theta) = \sum_z P(x, z \mid \theta) = \sum_z P(x \mid z, \theta) \, P(z \mid \theta)
+\]
+
+Because the sum (or integral) over $z$ makes direct maximization hard, the \emph{Expectation-Maximization} (EM) algorithm alternates:
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{E-step:} Compute $P(z \mid x, \theta^{(t)})$---the posterior over latent variables given current parameters.
+\item \textbf{M-step:} Update $\theta^{(t+1)}$ to maximize the expected complete-data log-likelihood under that posterior.
+\end{itemize}
+
+EM never decreases the observed-data log-likelihood (provable via Jensen's inequality), but it can converge to local optima. It underlies Gaussian mixture models, topic models, and many other latent-variable methods discussed in the main text.
+
+\subsection{The Evidence Lower Bound (ELBO)}
+
+When the E-step is intractable, \emph{variational inference} approximates the true posterior $P(z \mid x, \theta)$ with a simpler distribution $q(z)$. The ELBO provides a lower bound on $\log P(x)$:
+\[
+\log P(x) \geq \mathbb{E}_{q(z)}[\log P(x, z \mid \theta)] - \mathbb{E}_{q(z)}[\log q(z)] = \text{ELBO}
+\]
+
+Maximizing the ELBO simultaneously improves the model fit and brings $q(z)$ closer to the true posterior. Variational autoencoders (Chapter on Generative Representations) use the ELBO as their training objective.
+
+\section{State-Space Models and Sequential Inference}
+
+State-space models provide a unified framework for sequential data, connecting classical forecasting methods to modern sequence models.
+
+\subsection{The State-Space Framework}
+
+A state-space model consists of two equations:
+
+\textbf{State transition:} $\mathbf{h}_t = f(\mathbf{h}_{t-1}, \mathbf{u}_t) + \boldsymbol{\eta}_t$
+
+\textbf{Observation:} $\mathbf{y}_t = g(\mathbf{h}_t) + \boldsymbol{\epsilon}_t$
+
+The hidden state $\mathbf{h}_t$ evolves over time according to the transition function $f$. The observation $\mathbf{y}_t$ is generated from the hidden state via the observation function $g$. Both steps may include noise ($\boldsymbol{\eta}_t$ and $\boldsymbol{\epsilon}_t$).
+
+\subsection{Special Cases}
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Kalman filter:} $f$ and $g$ are linear, noise is Gaussian. Exact inference (computing $P(\mathbf{h}_t \mid \mathbf{y}_{1:t})$) is tractable via recursive updates. This is the classical solution for linear dynamical systems.
+\item \emph{Hidden Markov Models:} $\mathbf{h}_t$ is discrete (one of $K$ states). Inference uses the forward-backward algorithm. Transition and emission probabilities define the model.
+\item \emph{Exponential smoothing / ETS:} Special cases of linear state-space models where the state captures components such as level, trend, and seasonality.
+\item \emph{ARIMA:} Also admits a state-space form, but the state is typically built from lagged values and forecast-error terms (after differencing), not directly from structural level-trend-seasonal components.
+\item \emph{Recurrent Neural Networks:} The transition function $f$ is a learned neural network. The state $\mathbf{h}_t$ is a continuous vector updated by the network at each step. Inference is approximate (backpropagation through time).
+\end{itemize}
+
+The state-space view makes it clear that all these methods share the same core question: given a sequence of observations, what is the best estimate of the hidden state, and what will the next observation be? The methods differ in how they represent the state and how they perform inference.
+
 \section{A Tiny Bridge to Optimization Practice}
 
 The theory above becomes more useful when tied to the practical questions that appear in the main chapters:

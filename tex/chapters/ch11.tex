@@ -450,6 +450,92 @@ No-deploy condition & What finding would be strong enough to delay, narrow, or r
 For the course-support assistant, a disciplined review card would name critical slices such as multilingual phrasing, underrepresented language registers, visa-related questions, disability-accommodation requests, and distressed student messages; shift scenarios such as a new semester, revised syllabus wording, new learning-platform terminology, or policy-page reorganization; spurious cues such as course codes or standard-form wording that may not survive outside the training setting; privacy exposures such as student identifiers, health disclosures, and accommodation records; severe hazards such as answering high-risk questions directly when escalation is required; fallback path as human advising or specialist support teams; monitoring triggers as subgroup degradation, retrieval failures on policy pages, or rising escalation misses; and a no-deploy condition such as unacceptable failure on high-risk slices even when overall metrics remain strong.
 \end{example}
 
+\section{Interpretability and Explanations: The XAI Toolkit}
+\label{sec:xai-toolkit}
+
+Reliability does not always require a full explanation of every prediction, but it often benefits from understanding something about \emph{why} a model behaves as it does, not just \emph{what} it predicts. Interpretability methods---often grouped under ``Explainable AI'' (XAI)---aim to make model behavior legible to developers, auditors, and stakeholders. This section introduces the main families, what they actually show, and when they mislead.
+
+\subsection{Feature Attribution Methods}
+
+Feature attribution methods assign an importance score to each input feature for a given prediction. They answer: ``which features contributed most to this output?''
+
+\textbf{SHAP (SHapley Additive exPlanations).} Based on Shapley values from cooperative game theory, SHAP assigns each feature a contribution to the prediction, with a strong theoretical guarantee: the contributions sum to the difference between the model's output and the average prediction. SHAP values are \emph{local} (computed per prediction) but can be aggregated for global importance.
+
+\textbf{LIME (Local Interpretable Model-agnostic Explanations).} LIME explains a single prediction by fitting a simple, interpretable model (typically linear) to perturbed versions of the input. The simple model's coefficients indicate feature importance \emph{locally}, near the specific input. LIME is model-agnostic: it treats the model as a black box and only needs query access.
+
+\textbf{Partial Dependence Plots (PDP).} PDPs show how the model's average prediction changes as one feature varies, marginalizing over all other features. They are \emph{global} explanations: they show the model's overall reliance on a feature, not its behavior on a specific input. PDPs are easy to compute and interpret but can be misleading when features are correlated---the marginalization may create unrealistic feature combinations.
+
+\begin{practicalnote}
+Start with SHAP for local explanations (``why did the model flag this student?'') and PDPs for global explanations (``which features matter most overall?''). Use LIME when SHAP is too slow (SHAP's exact computation can be expensive for large models). Always compare at least two methods: if SHAP and LIME disagree on the important features for a prediction, treat that as a cue to inspect the background distribution, perturbation scheme, and local fidelity more carefully.
+\end{practicalnote}
+
+\subsection{Counterfactual Explanations}
+
+A counterfactual explanation answers: ``what is the smallest change to the input that would change the prediction?'' For a student flagged as CONCERNING, a counterfactual might be: ``if the student had submitted 2 more assignments on time, the prediction would have been ROUTINE.'' Counterfactuals are intuitive for stakeholders because they describe actionable changes, not abstract importance scores.
+
+\begin{example}[Counterfactual for Student Support]
+The early-warning model flags Student~A as URGENT. A counterfactual explanation identifies a joint change that would have produced a ROUTINE prediction: the student's login frequency was above 3 per week instead of 0, and the most recent message did not contain crisis-related keywords. The advisor can see that the prediction hinges on engagement drop \emph{and} message content together, not just one factor. This is more actionable than ``SHAP says login frequency has the highest importance.''
+\end{example}
+
+\begin{warningbox}
+Counterfactual explanations can suggest changes that are unrealistic or unethical. ``If the student were male, the prediction would change'' is a valid counterfactual but an inappropriate recommendation. Always constrain counterfactuals to actionable, non-protected features.
+\end{warningbox}
+
+\subsection{When Explanations Mislead}
+
+Interpretability methods have well-documented failure modes:
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Explanations can be unstable.} Small changes to the input can produce dramatically different SHAP values or LIME explanations, even when the prediction does not change. If the explanation is more sensitive than the prediction, it should not be trusted.
+\item \emph{Post-hoc explanations are not faithful to the model.} LIME fits a simple model to approximate the complex model locally. The approximation may be inaccurate. A LIME explanation that says ``feature A was most important'' does not guarantee that the model actually relied on feature A---it only guarantees that a linear approximation says so.
+\item \emph{Feature importance $\neq$ causation.} SHAP values measure statistical association, not causal influence. A feature can have high SHAP importance because it is correlated with the true causal factor, not because it caused the prediction. Stakeholders who interpret SHAP values as causal claims will reach wrong conclusions.
+\item \emph{Saliency maps can be manipulated.} For neural networks, gradient-based saliency maps (which highlight input regions the model is ``looking at'') can be adversarially manipulated: a model can be trained to produce misleading saliency maps that highlight human-intuitive regions while actually relying on different features.
+\end{itemize}
+
+\begin{thinkingtool}
+\textbf{Explanation audit.} Before trusting an explanation method, test it: does the explanation change when the prediction does not? Does it agree with other explanation methods? Does it identify features that domain experts consider relevant? If the answer to any of these is ``no,'' the explanation method needs more scrutiny than the model it is trying to explain.
+\end{thinkingtool}
+
+\section{Uncertainty Quantification for Reliability}
+\label{sec:uq-reliability}
+
+Chapter~\ref{ch:probabilistic-models} introduced aleatoric and epistemic uncertainty. This section connects uncertainty to reliability: how can uncertainty estimates make deployed systems safer?
+
+\subsection{Predictive Intervals and Conformal Prediction}
+
+A \emph{predictive interval} wraps a point prediction with a range: ``the predicted value is $\hat{y}$, and we are 90\% confident the true value lies in $[\hat{y} - \delta, \hat{y} + \delta]$.'' For a reliable system, the interval must be well-calibrated: 90\% intervals should contain the true value 90\% of the time.
+
+\emph{Conformal prediction} provides distribution-free predictive intervals with a finite-sample \emph{marginal} coverage guarantee under exchangeability. The key idea: use a calibration set to measure how wrong the model's predictions are (the \emph{nonconformity scores}), then use the empirical distribution of those scores to construct intervals for new predictions. The guarantee is that the resulting intervals have valid marginal coverage over future examples---regardless of the model family, the data distribution, or the sample size---as long as the calibration data is exchangeable with the test data. This does \emph{not} guarantee the same coverage for every individual input or subgroup.
+
+\begin{practicalnote}
+Conformal prediction is appealing because it makes few assumptions about the model family or score distribution. The trade-off is that the intervals may be wide (uninformative) if the underlying predictor is weak, the target coverage is high, or the nonconformity score is conservative, and the guarantee still depends on exchangeability between calibration and deployment data. Conformal prediction does not make a bad model reliable or automatically tighten its intervals---it makes uncertainty explicit while preserving valid marginal coverage under the stated assumptions.
+\end{practicalnote}
+
+\subsection{Ensemble Disagreement as a Reliability Signal}
+
+Deep ensembles (Chapter~\ref{ch:probabilistic-models}) provide a practical reliability signal: when ensemble members disagree strongly on a prediction, the system should not trust that prediction. This can be operationalized as a deployment rule:
+
+\begin{itemize}[leftmargin=*]
+\item If ensemble disagreement is below a threshold, serve the prediction automatically.
+\item If disagreement exceeds the threshold, flag the prediction for human review or defer the decision.
+\item Monitor the fraction of flagged predictions over time. If it increases, the deployment distribution may be shifting away from the training distribution.
+\end{itemize}
+
+\begin{example}[Ensemble Disagreement for Pedestrian Detection]
+The campus pedestrian detector uses an ensemble of 5 models. During normal daytime operation, ensemble disagreement (measured as the variance of detection probabilities across models) averages 0.02. During a heavy rainstorm---a condition rarely seen in training---disagreement spikes to 0.18. The system automatically switches to conservative mode: lower speed, higher sensitivity, and a human-driver alert. The ensemble disagreement served as an early warning that the model was operating outside its training distribution.
+\end{example}
+
+\begin{decisionbox}
+\textbf{Uncertainty-aware deployment rules:}
+\begin{itemize}
+\item Define a disagreement or uncertainty threshold based on validation-set performance.
+\item Below threshold: serve predictions automatically.
+\item Above threshold: defer to human judgment, increase safety margins, or abstain.
+\item Monitor the threshold-crossing rate as a drift indicator.
+\item Re-calibrate the threshold quarterly or after retraining.
+\end{itemize}
+\end{decisionbox}
+
 \section{Common Mistakes in Reliability Work}
 
 These mistakes are surface forms of the chapter's main enemy: confusing a good aggregate score with bounded reliability in deployment. Read them as signs that average-case performance has been mistaken for an acceptable failure envelope.
@@ -468,7 +554,7 @@ This chapter treated reliability as an engineering discipline across the full pi
 
 \section*{Chapter Summary}
 
-Reliability is a pipeline property, not a model property. Subgroup evaluation, robustness testing, privacy review, safety cases, fallback design, and monitoring are different views of the same question: does the system stay within acceptable bounds for the people, conditions, and harms that matter in deployment? The correct outcome is sometimes redesign, stronger constraint, or refusal to launch.
+Reliability is a pipeline property, not a model property. Subgroup evaluation, robustness testing, privacy review, safety cases, fallback design, and monitoring are different views of the same question: does the system stay within acceptable bounds for the people, conditions, and harms that matter in deployment? Interpretability methods (SHAP, LIME, counterfactual explanations) make model behavior legible but have well-documented failure modes---explanations can be unstable, unfaithful, or confused with causation. Uncertainty quantification (conformal prediction, ensemble disagreement) turns model confidence into actionable deployment rules: serve, defer, or abstain. The correct outcome is sometimes redesign, stronger constraint, or refusal to launch.
 
 \begin{studyquestions}
 \item Why should bias be treated as a property of the full pipeline rather than only the model?
@@ -478,6 +564,10 @@ Reliability is a pipeline property, not a model property. Subgroup evaluation, r
 \item What makes an error a safety issue rather than only a performance issue?
 \item Why can refusing deployment be the correct reliability decision?
 \item Why might a support assistant with good average performance still be unreliable on the questions that matter most?
+\item What is the difference between SHAP and LIME, and when might they disagree?
+\item Why should feature importance from SHAP not be interpreted as causal influence?
+\item What guarantee does conformal prediction provide, and what does it not guarantee?
+\item How can ensemble disagreement serve as a real-time reliability signal?
 \end{studyquestions}
 
 \begin{exercises}
@@ -495,4 +585,6 @@ Reliability is a pipeline property, not a model property. Subgroup evaluation, r
 \item A classifier has similar overall accuracy across two groups but very different false positive rates. Explain why this can still be a serious reliability concern, and give a domain in which it would matter.
 \item A team proposes deploying a model with excellent benchmark results but no subgroup analysis, no privacy review, and no fallback behavior. Write the strongest technical objection you can in one paragraph.
 \item Compare two mitigation strategies for a minority-group performance gap: collecting better data versus threshold adjustment. Explain when each might help, what it cannot fix, and what evidence would be needed to judge it.
+\item A team uses SHAP to explain a loan denial model and finds that ``zip code'' has the highest feature importance. A stakeholder concludes that the model discriminates by location. Critique this conclusion: what could SHAP be measuring that is not discrimination, and what additional evidence would you need?
+\item Design an uncertainty-aware deployment policy for the course-support early-warning system. Specify: what uncertainty method is used, what thresholds trigger deferral to a human advisor, and how the thresholds would be calibrated and monitored over time.
 \end{challengeexercises}

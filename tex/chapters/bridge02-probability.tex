@@ -8,6 +8,7 @@
 \item Interpret empirical risk as the average training signal over a dataset rather than as an abstract formula to memorize.
 \item Use a light functional-analysis viewpoint to explain why a predictor is a function and why a risk objective is a rule that assigns one number to the whole predictor.
 \item Read gradients and the chain rule as credit-assignment tools for reducing training loss.
+\item Distinguish generative and discriminative models at an intuitive level and connect priors and MAP to regularization.
 \end{learninggoals}
 
 \begin{prereqbridge}
@@ -482,6 +483,36 @@ how much did an earlier quantity contribute to the final error, and therefore ho
 
 That is why backpropagation is not just calculus drill. It is structured credit assignment through a composed function.
 
+\section*{Generative vs.\ Discriminative: Two Ways to Use Probability}
+
+All the models discussed so far learn to predict a label from an input: $P(Y \mid X)$. This is the \emph{discriminative} approach---the model discriminates between classes based on the observed features. Logistic regression, neural networks, and decision trees are all discriminative models.
+
+But there is a fundamentally different approach. A \emph{generative} model learns how the data is produced: it models $P(X \mid Y)$ (what does a typical input look like, given the class?) and $P(Y)$ (how common is each class?). To classify a new input, Bayes' theorem combines these:
+\[
+P(Y \mid X) = \frac{P(X \mid Y) \, P(Y)}{P(X)}
+\]
+
+The numerator is easy: multiply the class-conditional likelihood by the prior. The denominator $P(X)$ is the same for all classes, so for classification it can be ignored---we just pick the class that maximizes $P(X \mid Y) \, P(Y)$.
+
+\textbf{Why does this distinction matter?} It changes what the model learns and what it can do:
+
+\begin{itemize}[leftmargin=*]
+\item A discriminative model focuses all its capacity on the decision boundary. It is often more accurate for classification, but it cannot detect outliers or generate new data.
+\item A generative model learns the structure of the data itself. It can detect inputs that are unlike anything it has seen (outlier detection), handle missing features by marginalizing over them, and generate new examples. But it requires stronger assumptions about the data distribution.
+\end{itemize}
+
+\begin{example}[Generative Thinking for Spam]
+A discriminative spam filter learns: given these word frequencies, is this message spam? A generative spam filter learns: what do spam messages look like, and what do legitimate messages look like? The generative model can flag an email written in a language it has never seen---it is unlikely under \emph{both} models, suggesting it is out-of-distribution. The discriminative model has no mechanism for this; it must assign one of its known classes.
+\end{example}
+
+\textbf{Priors, posteriors, and MAP.} In Bayesian vocabulary, $P(Y)$ is the \emph{prior}---your belief about class probabilities before seeing the data. $P(Y \mid X)$ is the \emph{posterior}---your updated belief after seeing the input. The same logic applies to model parameters: a \emph{prior} on parameters $P(\boldsymbol{\theta})$ expresses which parameter values you believe are plausible before training. \emph{Maximum a posteriori} (MAP) estimation finds the parameters that maximize $P(\boldsymbol{\theta} \mid \text{data}) \propto P(\text{data} \mid \boldsymbol{\theta}) \, P(\boldsymbol{\theta})$. This turns out to be equivalent to regularization: $L_2$ regularization is MAP with a Gaussian prior, and $L_1$ regularization is MAP with a Laplace prior. What looked like an ad hoc penalty is actually a principled prior belief.
+
+These ideas---generative models, priors, posteriors, MAP---return in full force in Chapter~\ref{ch:probabilistic-models} (probabilistic models), Chapter~\ref{ch:structure-beyond-linearity} (Naive Bayes), and Chapter~\ref{ch:generative-representations} (generative representations). This bridge section provides just enough vocabulary to make those chapters readable.
+
+\begin{thinkingtool}
+\textbf{Discriminative or generative?} When designing a system, ask: do I only need to classify, or do I also need to detect the unfamiliar, handle missing information, or generate new examples? The answer determines whether a discriminative model suffices or whether a generative perspective is needed.
+\end{thinkingtool}
+
 \section*{Chapter Artifact: Learning-Signal Card}
 
 \begin{quote}
@@ -530,6 +561,8 @@ For a spam-filtering task, the two bridge artifacts work together. The \emph{rep
 \item A predictor can be viewed as a function, while empirical risk is a rule that assigns one number to the whole predictor.
 \item Gradients and the chain rule turn a loss into a usable update signal.
 \item The main deliverable of the chapter is a learning-signal card written before claiming that a training objective and a deployment goal are aligned.
+\item Generative models learn $P(X \mid Y)$ and can detect outliers and generate data; discriminative models learn $P(Y \mid X)$ and focus on the decision boundary.
+\item MAP estimation connects regularization to Bayesian prior beliefs about parameter values.
 \end{chaptersummary}
 
 \begin{table}[h]
@@ -545,6 +578,7 @@ Loss functions and scoring rules & Chapters~\ref{ch:prediction-loss-decision},~\
 Empirical vs.\ population risk & Chapters~\ref{ch:evaluation-discipline},~\ref{ch:experiments-claims} (evaluation, experiments) \\
 Gradient descent & Chapter~\ref{ch:optimization-neural-networks} (optimization, backpropagation) \\
 Cost-sensitive thresholds & Chapters~\ref{ch:prediction-loss-decision},~\ref{ch:vision} (decision rules, detection) \\
+Generative vs.\ discriminative, priors, MAP & Chapters~\ref{ch:structure-beyond-linearity},~\ref{ch:probabilistic-models},~\ref{ch:generative-representations} (Naive Bayes, probabilistic models, generative representations) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -554,6 +588,7 @@ Cost-sensitive thresholds & Chapters~\ref{ch:prediction-loss-decision},~\ref{ch:
 \item What is the practical difference between a pointwise loss and empirical risk?
 \item In plain language, what is the functional-analysis viewpoint on a loss function that this book actually needs?
 \item Why is the chain rule better understood as credit assignment than as symbol pushing?
+\item What can a generative model do that a discriminative model cannot, and why does this come at a cost?
 \end{studyquestions}
 
 \begin{exercises}

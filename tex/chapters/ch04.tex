@@ -69,6 +69,8 @@ Moving beyond the linear baseline is not a choice to make at random. It is a dia
 Structural deficit observed & Method family & What it contributes \\
 \midrule
 Threshold interactions, region-specific rules & Trees and ensembles & Different rules in different parts of feature space \\
+Wide-margin separation in existing geometry & SVM & Robust boundary that resists small perturbations \\
+Class-conditional feature distributions, need for outlier detection or probabilistic baseline & Naive Bayes & Generative model; interpretable, fast, handles small data and missing features \\
 Local similarity should drive prediction & Nearest neighbors & Borrow labels from nearby examples under a chosen metric \\
 No labels; seek grouping or compression & Clustering, PCA & Organize or compress without a target label \\
 \bottomrule
@@ -688,6 +690,66 @@ An SVM fits when the current representation already makes the classes look close
 An SVM is not a replacement for representation learning. If the problem needs many local rules, structured interactions, or a better geometry before any separator makes sense, a tree-based model or a learned representation can be the more honest next step.
 \end{failurebox}
 
+\section{Naive Bayes: Probability as Structure (Preview)}
+\label{sec:naive-bayes-ch4}
+
+Trees exploit region-specific logic. Ensembles reduce variance by averaging. SVMs find wide-margin boundaries. All are \emph{discriminative}: they learn to separate classes in the feature space. Naive Bayes takes a fundamentally different approach---it is a \emph{generative} model that asks: what does a typical input look like, given the class?
+
+This section previews the generative perspective as another structural lens. It connects to the probability vocabulary from Bridge~II and introduces enough of the method to use it as a baseline in the structural diagnosis. The full probabilistic treatment---including calibration, formal Bayesian reasoning, and the connection to latent-variable models---appears in Chapter~\ref{ch:probabilistic-models}.
+
+\subsection{The Generative Perspective}
+
+A discriminative classifier models $P(Y \mid X)$ directly: given the features, what is the most likely class? Naive Bayes instead models $P(X \mid Y)$: given the class, what features are likely? Classification then uses Bayes' theorem:
+\[
+P(Y = k \mid \mathbf{x}) \propto P(\mathbf{x} \mid Y = k) \, P(Y = k)
+\]
+
+The prior $P(Y = k)$ is estimated from class frequencies. The class-conditional distribution $P(\mathbf{x} \mid Y = k)$ is the heart of the model. Naive Bayes makes this tractable with a single strong assumption: \emph{conditional independence}---all features are independent given the class:
+\[
+P(\mathbf{x} \mid Y = k) = \prod_{j=1}^{d} P(x_j \mid Y = k)
+\]
+
+This reduces the problem from estimating a $d$-dimensional joint distribution (exponentially many parameters) to estimating $d$ one-dimensional distributions (linearly many parameters). For continuous features, each $P(x_j \mid Y = k)$ is typically modeled as a Gaussian with mean $\mu_{jk}$ and variance $\sigma^2_{jk}$. For text data, a multinomial over word counts is standard.
+
+\subsection{Why ``Naive'' and Why It Still Works}
+
+The conditional independence assumption is almost always wrong. Student messages that mention ``deadline'' are more likely to also mention ``extension.'' Pedestrian images where the sky is dark are more likely to also have visible headlights. Features are correlated.
+
+Yet Naive Bayes often classifies well. The reason is that classification only requires getting the \emph{ranking} of class probabilities right---the class with the highest probability wins. Even when the absolute probabilities are distorted by the independence assumption, the winning class is often still correct. This makes Naive Bayes a reliable, fast baseline.
+
+\begin{warningbox}
+The probabilities produced by Naive Bayes are typically poorly calibrated---pushed toward 0 or 1 because the independence assumption ignores correlations that would spread probability mass. Do not use Naive Bayes probabilities as calibrated confidence scores without post-hoc calibration (e.g., Platt scaling or isotonic regression).
+\end{warningbox}
+
+\begin{example}[Naive Bayes for Student Support Triage]
+The course-support team builds a Naive Bayes classifier as a first baseline for triaging student messages into ROUTINE, CONCERNING, and URGENT. Using a bag-of-words representation, the model learns which words are most likely under each class. The word ``quiz'' has high probability under ROUTINE; ``deadline'' is elevated under CONCERNING; ``emergency'' peaks under URGENT. The model trains in under a second, requires no GPU, and achieves 78\% accuracy. Each prediction is fully interpretable: the team can inspect which words pushed the model toward URGENT and verify whether they make sense. Any more complex model must meaningfully exceed 78\% to justify its additional complexity and opacity.
+\end{example}
+
+\subsection{When Naive Bayes Is the Right Structural Choice}
+
+Naive Bayes fits a specific niche in the structural diagnosis:
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Fast, interpretable baseline.} Naive Bayes is the cheapest meaningful classifier. If a neural network barely beats it, the task may be simpler than assumed---or the complex model is misconfigured.
+\item \emph{Small labeled data.} Because each feature is estimated independently, Naive Bayes has very few parameters relative to the feature dimension. It overfits less than models that estimate feature interactions, making it effective when labeled data is scarce.
+\item \emph{Text classification.} Multinomial Naive Bayes remains a strong baseline for document classification, spam filtering, and sentiment analysis. The bag-of-words assumption is a reasonable approximation in these settings.
+\item \emph{Outlier detection.} As a generative model, Naive Bayes can compute $P(\mathbf{x})$. An input with low probability under all classes may be an outlier or a new category. Discriminative models have no built-in mechanism for this.
+\end{itemize}
+
+\begin{decisionbox}
+\textbf{Adding Naive Bayes to the structural diagnosis:}
+\begin{itemize}
+\item If the task is classification with many features and limited data, try Naive Bayes first as a baseline.
+\item If interpretability matters (stakeholders need to see \emph{why} the model predicted a class), Naive Bayes is more transparent than trees for text data and comparable for tabular data.
+\item If you need outlier detection or want to flag out-of-distribution inputs, a generative model like Naive Bayes provides this capability where discriminative models do not.
+\item If feature interactions dominate the task (e.g., ``feature A matters only when feature B is high''), Naive Bayes will underperform because it cannot capture interactions. Use trees or ensembles instead.
+\end{itemize}
+\end{decisionbox}
+
+\begin{practicalnote}
+In the structural diagnosis workflow, Naive Bayes fills the ``probabilistic baseline'' slot. Run it alongside a logistic regression baseline (discriminative) and a decision tree baseline (region-based). If Naive Bayes wins, the task structure is better captured by class-conditional feature distributions than by decision boundaries or region splits. If it loses, the task likely requires feature interactions or more complex geometry.
+\end{practicalnote}
+
 \section{Local Similarity: When Geometry Is the Model}
 
 \begin{definition}[Nearest-Neighbor Method]
@@ -1226,13 +1288,15 @@ This chapter broadened structure beyond one weighted sum to branches, neighborho
 
 \section*{Chapter Summary}
 
-This chapter treated model choice as structural diagnosis. When a linear baseline fails, the important question is not merely whether more complexity is needed, but what form that missing structure takes. Trees and ensembles address region-specific decision logic, SVMs address robust geometric separation, nearest-neighbor methods treat similarity itself as the model, and clustering or dimensionality reduction address organization when labels are absent. Across all of these methods, the recurring lesson is that representation still matters: geometry, scaling, impurity, and cluster shape are part of the model, not just preprocessing details.
+This chapter treated model choice as structural diagnosis. When a linear baseline fails, the important question is not merely whether more complexity is needed, but what form that missing structure takes. Trees and ensembles address region-specific decision logic, SVMs address robust geometric separation, Naive Bayes introduces the generative perspective---modeling class-conditional feature distributions rather than decision boundaries---and provides a fast, interpretable probabilistic baseline. Nearest-neighbor methods treat similarity itself as the model, and clustering or dimensionality reduction address organization when labels are absent. Across all of these methods, the recurring lesson is that representation still matters: geometry, scaling, impurity, and cluster shape are part of the model, not just preprocessing details.
 
 \begin{studyquestions}
 \item Why is ``what kind of structure is missing?'' a better opening question than ``which classical method comes next?'' 
 \item Why should trees be understood as models for conditional logic rather than merely as nonlinear models?
 \item Why is the notion of distance the real modeling choice in nearest-neighbor methods?
 \item Why does maximizing margin make an SVM more robust than a separator that merely classifies correctly?
+\item Why does Naive Bayes classify well despite violating the conditional independence assumption?
+\item When is Naive Bayes a better structural choice than a tree or SVM?
 \item Why should clusters be interpreted more cautiously than labeled classes?
 \item What would count as evidence that a tree, neighbor, or unsupervised method is justified beyond the linear baseline?
 \end{studyquestions}

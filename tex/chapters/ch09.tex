@@ -646,6 +646,80 @@ Graph neural networks come with three major limitations:
 Heterogeneous graphs (where nodes and edges have different types) require extended message passing: a bank transaction network might have ``person'' nodes and ``account'' nodes with different features, and edges representing different transaction types. Heterogeneous graph neural networks learn type-specific aggregation functions. The audit becomes more complex: the graph structure includes edge types, and the model's representation learning must respect that structure. Do not assume a standard GNN designed for homogeneous graphs will work well without modification.
 \end{advancednote}
 
+\section{Classical Forecasting Toolkit}
+\label{sec:classical-forecasting}
+
+Before reaching for a neural network, many time-series tasks are better served by classical statistical methods that have been refined over decades. These methods are transparent, fast, and often surprisingly competitive. This section introduces the core ideas at a design level.
+
+\subsection{Exponential Smoothing}
+
+Exponential smoothing forecasts the next value as a weighted average of past observations, with exponentially decaying weights. Recent observations matter more; distant ones matter less. The simplest form---\emph{simple exponential smoothing}---maintains a single ``level'' estimate $\ell_t$ updated by:
+\[
+\ell_t = \alpha \, y_t + (1 - \alpha) \, \ell_{t-1}
+\]
+where $\alpha \in (0, 1)$ controls how fast the model forgets old data. The forecast is $\hat{y}_{t+1} = \ell_t$.
+
+\textbf{Holt's method} adds a trend component $b_t$, and \textbf{Holt-Winters} adds seasonality $s_t$ (additive or multiplicative). Holt-Winters is the classical workhorse for data with trend and seasonal patterns---and it requires no training data beyond the series itself.
+
+\begin{practicalnote}
+Exponential smoothing has very few parameters ($\alpha$, $\beta$ for trend, $\gamma$ for seasonality) and can be fit in seconds. It is an excellent naive baseline for any forecasting task: if a complex model cannot beat Holt-Winters, the complexity is not justified. Always include exponential smoothing in the baseline comparison.
+\end{practicalnote}
+
+\subsection{ARIMA Models}
+
+\emph{Autoregressive Integrated Moving Average} (ARIMA) models combine three ideas:
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Autoregressive (AR).} Predict the next value as a linear combination of the $p$ most recent values. This captures inertia: if the series was high yesterday, it tends to be high today.
+\item \emph{Integrated (I).} Difference the series $d$ times to make it stationary (constant mean and variance). Many real-world series have trends; differencing removes them.
+\item \emph{Moving Average (MA).} Predict the next value as a linear combination of the $q$ most recent forecast errors. This captures short-term shocks that decay over time.
+\end{itemize}
+
+An ARIMA($p, d, q$) model is specified by three integers. Seasonal ARIMA (SARIMA) adds seasonal analogues: ARIMA($p, d, q$)$\times$($P, D, Q$)$_s$ where $s$ is the seasonal period.
+
+\begin{example}[ARIMA for Student Engagement Forecasting]
+The course-support system tracks daily active logins. The series shows a weekly cycle (high Monday--Thursday, low weekends) and a gradual upward trend during the semester. A SARIMA(1,1,1)$\times$(1,1,1)$_7$ model captures both the trend (through differencing) and the weekly seasonality. It forecasts next week's engagement pattern within 8\% MAPE---a strong baseline for the early-warning system's anomaly detection module.
+\end{example}
+
+\subsection{When Classical Methods Suffice}
+
+Classical forecasting methods are the right choice when:
+
+\begin{itemize}[leftmargin=*]
+\item The series is univariate (one variable over time) with trend and/or seasonality.
+\item Interpretability matters: stakeholders need to understand \emph{why} the forecast looks the way it does.
+\item Data is limited: a single series with 100--1000 observations is enough for ARIMA or Holt-Winters but not enough for a neural network.
+\item The forecast horizon is short (1--10 steps ahead). Classical methods degrade gracefully at short horizons.
+\end{itemize}
+
+Neural sequence models (RNNs, Transformers) are better when:
+
+\begin{itemize}[leftmargin=*]
+\item Multiple related series are available and cross-series patterns can be exploited.
+\item The input includes exogenous features (weather, calendar events, sensor metadata).
+\item The forecast horizon is long or the relationship between past and future is nonlinear and complex.
+\end{itemize}
+
+\begin{decisionbox}
+\textbf{Forecasting method selection:}
+\begin{itemize}
+\item Always start with exponential smoothing (Holt-Winters) and ARIMA as baselines.
+\item If a neural model cannot beat the classical baseline by a meaningful margin, prefer the classical model for its transparency and lower maintenance cost.
+\item For multivariate forecasting with exogenous features, consider neural approaches but still report the classical univariate baseline.
+\item Match the evaluation protocol to the forecast horizon: rolling-window backtesting with the same horizon as deployment.
+\end{itemize}
+\end{decisionbox}
+
+\subsection{Connection to HMMs and State-Space Models}
+
+Exponential smoothing and ARIMA can both be viewed as special cases of \emph{state-space models}: models with a hidden state that evolves over time and generates the observed data. The Hidden Markov Models (HMMs) discussed earlier in this chapter are also state-space models, with discrete hidden states. The connection is that all of these methods share a common structure: infer a hidden state from past observations, then use the inferred state to predict the future.
+
+This state-space perspective unifies classical forecasting with the sequence models discussed in the rest of the chapter: RNNs maintain a hidden state that is updated at each time step, and Transformers can be viewed as models that attend to a context window of past states. The difference is in how the state is represented (continuous vs.\ discrete, parametric vs.\ learned) and how inference is performed (Kalman filter vs.\ backpropagation).
+
+\begin{thinkingtool}
+\textbf{State-space unification.} When choosing a sequence model, ask: what is the hidden state, how does it evolve, and how does it generate observations? Exponential smoothing has a simple scalar state (the level). ARIMA has a vector state (recent values and errors). An RNN has a learned vector state. A Transformer has an attended context window. The question is not ``which architecture is best?'' but ``what state representation does the task require?''
+\end{thinkingtool}
+
 \section{Common Mistakes in Sequential Modeling}
 
 The mistakes in this chapter are surface forms of one deeper error: pretending time does not change what counts as a valid claim. Randomly splitting a time series, ignoring the forecast horizon, or letting future-derived features slip into the pipeline all make the problem easier than deployment. So does confusing a representation with the process itself: a spectrogram or lag vector is a task-shaped view, not the full sequential reality.
@@ -658,7 +732,7 @@ This chapter treated sequences as processes, so evaluation had to respect predic
 
 \section*{Chapter Summary}
 
-Sequential modeling begins with the decision moment rather than with an architecture name. Once time matters, the model must respect horizon, allowed context, latency, and the difference between past information and forbidden future leakage. Audio and forecasting differ in signal type, but they share the same discipline: choose a representation that preserves the right temporal structure, evaluate chronologically, and test realism through baselines, noise, drift, and deployment constraints.
+Sequential modeling begins with the decision moment rather than with an architecture name. Once time matters, the model must respect horizon, allowed context, latency, and the difference between past information and forbidden future leakage. Classical forecasting methods---exponential smoothing, ARIMA, and their seasonal variants---remain essential baselines: they are transparent, fast, and often competitive with neural approaches on univariate series. The state-space perspective unifies classical and neural sequence models under a common framework of hidden-state inference. Audio and forecasting differ in signal type, but they share the same discipline: choose a representation that preserves the right temporal structure, evaluate chronologically, and test realism through baselines, noise, drift, and deployment constraints.
 
 \begin{studyquestions}
 \item Why should a sequential model be judged partly by what information was available at prediction time?
@@ -668,6 +742,8 @@ Sequential modeling begins with the decision moment rather than with an architec
 \item Why can random splits be especially misleading for time-series tasks?
 \item Why are naive baselines unusually important in sequential problems?
 \item Why can an offline sequential result be statistically strong but operationally invalid?
+\item When should you prefer ARIMA or Holt-Winters over a neural sequence model?
+\item How does the state-space perspective unify exponential smoothing, ARIMA, HMMs, and RNNs?
 \end{studyquestions}
 
 \begin{exercises}
