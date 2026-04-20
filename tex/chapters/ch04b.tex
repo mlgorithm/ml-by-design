@@ -115,6 +115,7 @@ Label ROUTINE otherwise
 Good guidelines reduce annotator variation and make the labeling task reproducible. But they cannot eliminate disagreement entirely.
 
 \subsection{Inter-Annotator Agreement and Soft Labels}
+\label{sec:soft-labels}
 
 When multiple annotators label the same example, they often disagree. This disagreement is usually treated as noise, but it is sometimes information. When two trained advisors disagree about whether a student message indicates ``urgent'' need, that disagreement reflects genuine ambiguity in the task, not one ``right answer'' that one rater found and another missed.
 
@@ -177,14 +178,14 @@ When labels are noisy, several strategies exist:
 
 \textbf{Clean the labels.} Have a senior expert audit and correct a sample of labels. This is expensive but effective if the noise is mostly systematic.
 
-\textbf{Use noise-robust losses.} Some loss functions are less sensitive to label noise. For example, the focal loss down-weights examples the model is already confident about, which reduces the impact of mislabeled examples that the model would otherwise try hard to memorize.
+\textbf{Use noise-aware training strategies.} Some training procedures reduce the influence of suspected label errors. For example, a team might estimate class-conditional noise rates and correct the loss, down-weight examples whose labels strongly contradict a clean validation signal, or use robust losses designed for noisy labels. Be careful with focal loss: it is mainly a class-imbalance and hard-example weighting tool, and by itself it can increase attention to mislabeled hard cases.
 
 \textbf{Estimate noise rates.} If you can estimate the rate at which each class is mislabeled, you can adjust the loss function to account for it. This requires a clean validation set or a held-out sample to estimate noise rates.
 
 \textbf{Threshold and filter.} Train the model and remove or down-weight examples that the model is highly confident were mislabeled (e.g., examples where the model's prediction strongly contradicts the given label).
 
 \begin{evidencebox}
-Northcutt et al.\ studied label errors in the CIFAR-10 benchmark dataset, a widely used image classification benchmark, and found that approximately 3.3\% of labels were wrong. They showed that training on cleaned labels improved model accuracy and that models trained on the original dataset had learned to compensate for the noise rather than learning the true underlying pattern. This demonstrates that cleaning important datasets is not busy work---it directly improves the generalization of trained models.
+Northcutt et al.\ found widespread label errors across common benchmark test sets, averaging at least 3.3\% across ten datasets, and showed that corrected labels can change which model appears best \citep{northcutt2021labelerrors}. Related confident-learning work shows how systematic label auditing can identify likely errors and improve downstream training \citep{northcutt2021confidentlearning}. This demonstrates that cleaning important datasets is not busy work---it can directly change the evidence used to judge trained models.
 \end{evidencebox}
 
 \begin{thinkingtool}
@@ -205,7 +206,7 @@ The default concern is that the model will learn to predict the majority class a
 
 If the deployment scenario is also 95--5 (95\% negative, 5\% positive), then training on a 95--5 distribution is appropriate. The model should predict the majority class frequently, just as the deployment requires.
 
-If the deployment scenario is 50--50 (e.g., a binary decision where both outcomes are equally likely or operationally important), then training on a 95--5 distribution is a mistake. The model will never learn rich decision boundaries for the minority class because that class appears so rarely.
+If the deployment scenario is 50--50, then training on a 95--5 distribution is a distribution-mismatch problem. The model will see too few minority-class examples to learn rich decision boundaries for the deployment setting. Separately, if the minority class is operationally more important than its prevalence suggests, that should be reflected through class weights, decision thresholds, and evaluation metrics rather than by pretending the deployment prevalence is different.
 
 \subsection{Addressing Imbalance}
 
@@ -229,8 +230,8 @@ When the training distribution does not match the deployment distribution, sever
 \textbf{When to keep the imbalance:}
 \begin{itemize}
 \item The training and deployment distributions match (both imbalanced the same way)
-\item The majority class is truly less important and mistakes on it are cheaper
-\item You have evaluation metric that handles imbalance (e.g., ROC-AUC instead of accuracy)
+\item Class importance and error costs are intended to follow the deployment distribution
+\item You evaluate with metrics appropriate for imbalance, such as PR-AUC, macro-F1, balanced accuracy, or cost-sensitive utility; ROC-AUC can help, but it is not sufficient by itself under extreme imbalance
 \end{itemize}
 \end{decisionbox}
 
@@ -258,7 +259,7 @@ Collecting more random examples is least helpful when label noise is the primary
 Better labels matter most when:
 \begin{itemize}[leftmargin=*]
 \item Label noise is high: multiple validation samples show disagreement or suspicious labels
-\item The current model exhibits high bias: both training and validation error are high
+\item Both training and validation error are high, and inspection suggests label ambiguity or systematic label errors
 \item Annotation guidelines are unclear or inconsistently applied
 \end{itemize}
 
@@ -350,7 +351,7 @@ Active learning is most valuable when:
 Active learning is least useful when labeling is cheap, the unlabeled pool is small, or the model is poorly calibrated.
 
 \begin{example}[Active Learning for Course Support]
-A university starts with 100 randomly labeled student messages. The early-warning model performs reasonably but could be improved. Instead of randomly labeling 100 more messages, the team uses uncertainty sampling: they ask the model for the 100 unlabeled messages where it is least confident. A domain expert (student advisor) labels only those 100 high-uncertainty messages. With 200 total labels but 100 of them strategically chosen, the model improves more than if 200 random labels had been collected. The team saved expert time by avoiding examples the model was already confident about.
+A university starts with 100 randomly labeled student messages. The early-warning model performs reasonably but could be improved. Instead of randomly labeling 100 more messages, the team uses uncertainty sampling: they ask the model for the 100 unlabeled messages where it is least confident. A domain expert (student advisor) labels only those 100 high-uncertainty messages. With 200 total labels but 100 of them strategically chosen, the model improves more than if 200 random labels had been collected. The team gets more model improvement from the same expert time by avoiding examples the model was already confident about.
 \end{example}
 
 \begin{practicalnote}
@@ -472,7 +473,7 @@ The critical design question is how much to trust silver labels. Three strategie
 
 \begin{itemize}[leftmargin=*]
 \item \emph{Train on silver, evaluate on gold.} Use silver labels for training but always evaluate on a small set of expert-annotated gold labels. This is the minimum standard---without gold evaluation, you cannot measure how much noise the silver labels introduce.
-\item \emph{Weight by confidence.} If the label model provides probabilistic outputs, weight training examples by the label model's confidence. Examples with high-confidence silver labels contribute more to the loss; low-confidence examples contribute less. This is analogous to soft labels from annotator disagreement (Section~\ref{sec:label-noise}).
+\item \emph{Weight by confidence.} If the label model provides probabilistic outputs, weight training examples by the label model's confidence. Examples with high-confidence silver labels contribute more to the loss; low-confidence examples contribute less. This is analogous to soft labels from annotator disagreement (Section~\ref{sec:soft-labels}).
 \item \emph{Mix gold and silver.} Train on a combination of gold labels (expensive, small) and silver labels (cheap, large). The gold labels anchor the model, and the silver labels provide coverage. The mixing ratio is a hyperparameter: too little gold and the model trusts noisy silver labels; too much gold and the silver labels add nothing.
 \end{itemize}
 
@@ -602,7 +603,7 @@ Synthetic data is risky because it can encode unrealistic assumptions.
 \textbf{False confidence.} A model trained entirely on synthetic data may perform well on held-out synthetic test data but fail on real data. If the model is evaluated against synthetic data, the numbers look good. But real-world deployment reveals the gap. This is why evaluation discipline is critical: synthetic data must be validated against real held-out performance, never against itself.
 
 \begin{evidencebox}
-In autonomous driving research, simulators like CARLA are used to generate training data because real driving data is expensive to collect and label. However, models trained in simulation often fail on real roads. Zahavy et al.\ and others have documented this sim-to-real gap: the distribution of rendered scenes differs enough from real camera imagery that simulation-trained models do not transfer well. The lesson is that synthetic data should be viewed as a starting point, not as a complete replacement for real data.
+In autonomous driving research, simulators like CARLA are used to generate training data because real driving data is expensive to collect and label. However, simulation studies repeatedly show that transfer depends on how closely the simulator matches the real sensing and control setting \citep{amini2020vista}. The distribution of rendered scenes can differ enough from real camera imagery that simulation-trained models do not transfer well unless the gap is measured and managed. The lesson is that synthetic data should be viewed as a starting point, not as a complete replacement for real data.
 \end{evidencebox}
 
 \begin{advancednote}
@@ -675,7 +676,7 @@ Version and refresh plan & The current version, when the data was last updated, 
 
 \textbf{Known gaps and limitations.} Dataset covers only one institution and one course. No non-native English speakers' data. No messages from summer sessions or condensed courses. Advisor background: two advisors have counseling training, one does not, which may bias URGENT labeling. Advisors may have unconscious bias toward certain student names or demographics.
 
-\textbf{Class distribution.} ROUTINE: 70\% (8,736 examples), CONCERNING: 22\% (2,738), URGENT: 8\% (996). Deployment is expected to have similar distribution (advisors report these ratios). No resampling applied; class-weighted loss was used during training to give higher weight to URGENT examples (weight = 3.0) and CONCERNING examples (weight = 1.5).
+\textbf{Class distribution.} ROUTINE: 70\% (8,736 examples), CONCERNING: 22\% (2,738), URGENT: 8\% (1,006). Deployment is expected to have similar distribution (advisors report these ratios). No resampling applied; class-weighted loss was used during training to give higher weight to URGENT examples (weight = 3.0) and CONCERNING examples (weight = 1.5).
 
 \textbf{Label-acquisition strategy.} All 12,480 labels are gold (expert-annotated). No semi-supervised or weak supervision methods were used because annotator time was available. However, future versions may use labeling functions (keyword matching for URGENT, engagement metrics for CONCERNING) to generate silver labels for an additional 50,000 unlabeled messages from earlier semesters, with gold evaluation on the existing test set.
 

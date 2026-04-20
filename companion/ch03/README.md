@@ -1,4 +1,4 @@
-# Chapter 3 Companion
+# Linear Models and Representation Companion
 
 This chapter is about the simplest durable predictive models:
 

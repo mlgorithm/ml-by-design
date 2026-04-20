@@ -487,18 +487,18 @@ Suppose $(0,0)$ and $(1,1)$ are class A, and $(1,0)$ and $(0,1)$ are class B. An
 \begin{figure}[t]
 \centering
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[font=\small, x=2.0cm, y=2.0cm]
-\begin{scope}
-\draw[->] (-0.2,0) -- (1.8,0) node[right] {$x_1$};
-\draw[->] (0,-0.2) -- (0,1.8) node[above] {$x_2$};
-\filldraw (0.3,0.4) circle (2pt) node[above right] {A};
-\filldraw (0.4,1.2) circle (2pt) node[above right] {A};
-\draw (1.2,0.8) circle (2pt) node[above right] {B};
-\draw (1.5,1.5) circle (2pt) node[above right] {B};
-\draw[thick, dashed] (0.8,-0.05) -- (0.8,1.8);
-\node at (0.9,-0.35) {separable};
+\begin{tikzpicture}[font=\small]
+\begin{scope}[x=0.75cm, y=0.75cm]
+\draw[->] (-0.2,0) -- (4.6,0) node[right] {$x_1$};
+\draw[->] (0,-0.2) -- (0,4.6) node[above] {$x_2$};
+\filldraw (1,1) circle (2pt) node[below left] {A};
+\filldraw (1,2) circle (2pt) node[above left] {A};
+\draw (3,3) circle (2pt) node[above right] {B};
+\draw (4,4) circle (2pt) node[above right] {B};
+\draw[thick, dashed] (0.6,4.4) -- (4.4,0.6);
+\node at (2.5,-0.55) {separable by $x_1+x_2=5$};
 \end{scope}
-\begin{scope}[xshift=5.2cm]
+\begin{scope}[xshift=5.3cm, x=2.0cm, y=2.0cm]
 \draw[->] (-0.2,0) -- (1.8,0) node[right] {$x_1$};
 \draw[->] (0,-0.2) -- (0,1.8) node[above] {$x_2$};
 \filldraw (0.0,0.0) circle (2pt) node[above right] {A};
@@ -545,14 +545,14 @@ Students do not need a full singular-value-decomposition treatment here. They do
 
 Later chapters (dimensionality reduction in Chapter~\ref{ch:structure-beyond-linearity}, embeddings in Chapter~\ref{ch:representation-foundation-models}, and latent-factor models in Chapter~\ref{ch:probabilistic-models}) use the \emph{singular value decomposition} (SVD) and eigendecomposition. A full treatment is not needed yet, but the intuition is worth building early.
 
-\textbf{Eigenvectors and eigenvalues.} For a square matrix $\mathbf{A}$, an eigenvector $\mathbf{v}$ satisfies $\mathbf{A}\mathbf{v} = \lambda \mathbf{v}$: the matrix stretches $\mathbf{v}$ by a factor $\lambda$ (the eigenvalue) without changing its direction. The eigenvectors of a covariance matrix point along the directions of greatest variance in the data. The eigenvalues tell you how much variance each direction captures.
+\textbf{Eigenvectors and eigenvalues.} For a square matrix $\mathbf{A}$, an eigenvector $\mathbf{v}$ satisfies $\mathbf{A}\mathbf{v} = \lambda \mathbf{v}$: the matrix stretches $\mathbf{v}$ by a factor $\lambda$ (the eigenvalue) without changing its direction. For a covariance matrix, eigenvectors are principal axes; ordered by eigenvalue, larger eigenvalues correspond to more variance along that direction.
 
 \textbf{Singular Value Decomposition.} Any matrix $\mathbf{X}$ (not just square ones) can be decomposed as $\mathbf{X} = \mathbf{U} \boldsymbol{\Sigma} \mathbf{V}^\top$, where $\mathbf{U}$ and $\mathbf{V}$ are orthogonal matrices and $\boldsymbol{\Sigma}$ is diagonal with non-negative entries (the singular values). The columns of $\mathbf{V}$ give orthogonal directions ordered by how much squared norm of the matrix they capture. When $\mathbf{X}$ is centered first, those directions become the principal-component directions of greatest variance. PCA is therefore computed from the SVD of a centered data matrix: the top $k$ columns of $\mathbf{V}$ are the first $k$ principal components.
 
 \textbf{Why this matters for ML.} Truncating the SVD to the top $k$ components gives the best rank-$k$ approximation of the matrix (in the Frobenius norm sense). This is why PCA works for dimensionality reduction, why matrix factorization works for recommendation (Chapter~\ref{ch:ranking-recommendation}), and why low-rank approximations appear throughout representation learning. The key intuition: most of the ``important'' structure in a matrix can often be captured by a small number of directions.
 
 \begin{mathlens}
-Given a centered data matrix $\mathbf{X} \in \mathbb{R}^{n \times d}$ (rows are examples, columns are features), the SVD yields $\mathbf{X} = \mathbf{U} \boldsymbol{\Sigma} \mathbf{V}^\top$. The top $k$ principal components are the first $k$ columns of $\mathbf{V}$. Projecting the data onto these components gives $\mathbf{X}_k = \mathbf{X} \mathbf{V}_k$, which captures the $k$ directions of greatest variance while discarding the rest. If the first 5 singular values capture 95\% of the total centered variance, the data effectively lives in 5 dimensions regardless of how many raw features exist.
+Given a centered data matrix $\mathbf{X} \in \mathbb{R}^{n \times d}$ (rows are examples, columns are features), the SVD yields $\mathbf{X} = \mathbf{U} \boldsymbol{\Sigma} \mathbf{V}^\top$. The top $k$ principal components are the first $k$ columns of $\mathbf{V}$. Projecting the data onto these components gives reduced coordinates $\mathbf{Z}_k = \mathbf{X} \mathbf{V}_k$; reconstructing from those coordinates gives the rank-$k$ approximation $\widetilde{\mathbf{X}}_k = \mathbf{Z}_k \mathbf{V}_k^\top$. Explained variance is tied to the squared singular values: if the first 5 principal components explain 95\% of the total centered variance, the data can often be well approximated in 5 dimensions even if it has many raw features.
 \end{mathlens}
 
 \section*{Chapter Artifact: Representation Card}
@@ -618,7 +618,7 @@ The SVD preview above gives just enough eigendecomposition intuition to prepare 
 \toprule
 \textbf{Bridge Topic} & \textbf{Used In} \\
 \midrule
-Dot products and weighted sums & Chapters~\ref{ch:prediction-loss-decision},~\ref{ch:optimization-neural-networks} (linear models, neural networks) \\
+Dot products and weighted sums & Chapters~\ref{ch:linear-models},~\ref{ch:optimization-neural-networks} (linear models, neural networks) \\
 Norms and distance & Chapters~\ref{ch:linear-models},~\ref{ch:representation-foundation-models} (nearest neighbors, regularization) \\
 Cosine similarity & Chapters~\ref{ch:representation-foundation-models},~\ref{ch:language-grounding} (embeddings, retrieval) \\
 Matrix--vector products & Chapter~\ref{ch:optimization-neural-networks} (forward pass, backpropagation) \\

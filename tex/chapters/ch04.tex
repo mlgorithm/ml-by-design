@@ -1,7 +1,7 @@
 \chapter{Structure Beyond Linearity}
 \label{ch:structure-beyond-linearity}
 
-A failed linear baseline does not merely say that the task is harder than expected. More often, it says something specific about the kind of structure that is missing. Sometimes the missing structure is conditional and region-specific, sometimes it is local and geometric, and sometimes the real task is not supervised prediction at all but exploratory organization. This chapter is about reading that failure correctly so that the next model family is chosen for a structural reason rather than out of habit.
+A failed linear baseline does not merely say that the task is harder than expected. More often, it says something specific about the kind of structure that is missing. Sometimes the missing structure is conditional and region-specific; sometimes the current feature space needs a margin-based separator; sometimes simple class-conditional assumptions give a transparent probabilistic baseline; sometimes the relevant structure is local and geometric; and sometimes the real task is not supervised prediction at all but exploratory organization. This chapter is about reading that failure correctly so that the next model family is chosen for a structural reason rather than out of habit.
 
 The central task is diagnostic. Trees, ensembles, support vector machines, nearest neighbors, clustering, and dimensionality reduction are presented here not as a bag of methods, but as different responses to different structural deficits. By the end, the reader should be able to name what the linear model missed and justify the next family for that reason.
 
@@ -11,12 +11,12 @@ Return to that same early student-support setting. Suppose a university wants to
 
 That rule is not just ``nonlinear.'' It is region-specific. Different logic applies in different parts of the feature space. That is one possible answer to a failed baseline.
 
-But it is not the only answer. Sometimes the right story is that similar examples should borrow judgment from one another. Sometimes it is that labels are absent and the job is exploratory organization rather than supervised prediction.
+But it is not the only answer. Sometimes the right story is that the representation already gives a plausible geometry and the task needs a wide-margin separator. Sometimes simple class-conditional assumptions give a useful probabilistic baseline. Sometimes similar examples should borrow judgment from one another. Sometimes labels are absent and the job is exploratory organization rather than supervised prediction.
 
 The opening question of the chapter should therefore be stated brutally clearly:
 
 \begin{center}
-\emph{When the linear baseline fails, is the missing structure mainly conditional thresholds and interactions, local similarity, or unlabeled organization?}
+\emph{When the linear baseline fails, is the missing structure mainly conditional thresholds and interactions, margin structure, class-conditional probabilistic structure, local similarity, or unlabeled organization?}
 \end{center}
 
 Everything that follows should be read as one answer to that question.
@@ -27,7 +27,7 @@ Before naming model families, it helps to name the diagnostic.
 
 The representation card from Bridge~I recorded what counts as an example and what its coordinates mean. The structural diagnostic asks what that representation \emph{missed}---and which model family can recover the missing structure.
 
-Before changing model families, state what structural mismatch the baseline has revealed. If the task sounds like branching logic, think trees. If prediction should come from nearby similar cases, think neighbors. If labels are absent and you are looking for organization or compression, think clustering or dimensionality reduction.
+Before changing model families, state what structural mismatch the baseline has revealed. If the task sounds like branching logic, think trees. If the representation already looks separable and you want a robust boundary, think SVM. If the task has many sparse features and a transparent class-conditional baseline is useful, think Naive Bayes. If prediction should come from nearby similar cases, think neighbors. If labels are absent and you are looking for organization or compression, think clustering or dimensionality reduction.
 
 \begin{table}[t]
 \centering
@@ -38,21 +38,23 @@ Before changing model families, state what structural mismatch the baseline has 
 Structural mismatch & Natural next family & What the family contributes \\
 \midrule
 Conditional thresholds and interactions & Trees and tree ensembles & Different rules in different regions of feature space \\
+Margin structure in a defended feature space & Support vector machines & Prefer wide-margin separators when the representation is already plausible \\
+Class-conditional signal with many features & Naive Bayes & Use simple likelihood assumptions as a transparent probabilistic baseline \\
 Local similarity & Nearest neighbors and related geometry-based methods & Borrow prediction from nearby examples under a chosen similarity notion \\
 Unlabeled organization & Clustering and dimensionality reduction & Summarize groupings, directions of variation, or lower-dimensional views without labels \\
 \bottomrule
 \end{tabular}
-\caption{This chapter is one diagnostic with three answers. The point is not to memorize method names, but to connect model families to structural mismatch.}
+\caption{This chapter is one diagnostic with five answers. The point is not to memorize method names, but to connect model families to structural mismatch.}
 \label{tab:structure-map}
 \end{table}
 
-Keep one tiny student-profile cloud in mind throughout the chapter. Students A and B have around 50{,}000 clicks and at most one late submission and look safe; students C and D have around 20{,}000 clicks and four or five late submissions and look risky. Trees read that cloud as threshold logic, k-NN reads it as distance, k-means reads it as grouping, and PCA reads it as a dominant direction of variation. The better question is therefore not ``Which stronger model should we try next?'' but ``What specific structure did the baseline miss: branching logic, local similarity, or unlabeled organization?''
+Keep one tiny student-profile cloud in mind throughout the chapter. Students A and B have around 50{,}000 clicks and at most one late submission and look safe; students C and D have around 20{,}000 clicks and four or five late submissions and look risky. Trees read that cloud as threshold logic, SVMs read it as a margin problem when the feature geometry is plausible, Naive Bayes reads it through class-conditional feature likelihoods, k-NN reads it as distance, k-means reads it as grouping, and PCA reads it as a dominant direction of variation. The better question is therefore not ``Which stronger model should we try next?'' but ``What specific structure did the baseline miss?''
 
 The chapter should therefore be read left to right as a diagnostic tree: first identify the missing structure, then choose the family that naturally expresses it.
 
 \section{Method Selection by Missing Structure}
 
-Moving beyond the linear baseline is not a choice to make at random. It is a diagnostic response to a specific structural deficit. When a linear model falls short, it usually does so in one of three identifiable ways, and each way points toward a different family of methods.
+Moving beyond the linear baseline is not a choice to make at random. It is a diagnostic response to a specific structural deficit. When a linear model falls short, it usually does so in several identifiable ways, and each way points toward a different family of methods.
 
 \paragraph{Conditional thresholds and interactions.} If the decision rule sounds like branching logic---``if this condition holds \emph{and} that other condition holds, then the outcome changes''---then a linear model will fail because it cannot express regions. Trees are the natural response. They partition the input space recursively, and each leaf can express a different rule. This is the right structure for problems like loan approval, customer segmentation, or academic risk scoring, where the relevant factors interact nonlinearly across subgroups.
 
@@ -279,13 +281,13 @@ print("weighted reduction:", round(reduction, 4))
   \definecolor{c4impGreenBg}{RGB}{210,238,220}
   \node[black!70, font=\small\bfseries] at (0,2.9) {After better split};
   %% Left child: pure
-  \fill[c4impB] (-2.2,0) rectangle (-0.8,2.0);
+  \fill[c4impA] (-2.2,0) rectangle (-0.8,2.0);
   \draw[black!50] (-2.2,0) rectangle (-0.8,2.0);
   \node[white, font=\small\bfseries] at (-1.5,1.0) {$G=0$};
   \node[black!70, font=\footnotesize] at (-1.5,-0.35) {left child};
   %% Right child: mixed but better
-  \fill[c4impA]  (0.2,0) rectangle (2.8,2.0);
-  \fill[c4impB] (0.2,0) rectangle (0.72,2.0);
+  \fill[c4impB]  (0.2,0) rectangle (2.8,2.0);
+  \fill[c4impA] (0.2,0) rectangle (0.72,2.0);
   \draw[black!50] (0.2,0) rectangle (2.8,2.0);
   \draw[black!30] (0.72,0) -- (0.72,2.0);
   \node[c4impLineA, font=\small\bfseries] at (1.5,1.0) {$G=0.32$};
@@ -640,9 +642,9 @@ The soft-margin form adds slack variables \(\xi_i\) and a penalty:
 \]
 This is equivalent in spirit to minimizing a regularized hinge-loss objective:
 \[
-\frac{1}{2}\|w\|_2^2 + C\sum_i \max(0, 1-y_i f(x_i)).
+\frac{\lambda}{2}\|w\|_2^2 + C\sum_i \max(0, 1-y_i f(x_i)).
 \]
-The first term prefers a wide margin. The second term is the \emph{hinge loss}: it is zero when an example is safely beyond the margin and grows linearly when that example falls inside the margin or on the wrong side of the boundary.
+The first term prefers a wide margin, with \(\lambda\) controlling the regularization strength. The second term is the \emph{hinge loss}, weighted by \(C\): it is zero when an example is safely beyond the margin and grows linearly when that example falls inside the margin or on the wrong side of the boundary.
 \end{mathlens}
 
 \begin{theorem}[Maximum margin is minimum norm under canonical scaling]
@@ -828,7 +830,7 @@ The nearest-neighbor order changes because the geometry changed. In $k$-NN, scal
 \toprule
 Representation & Nearest neighbors & $k{=}1$ pred. & $k{=}3$ pred. \\
 \midrule
-Raw $(\text{clicks},\,\text{late})$ & A, B, D & safe & safe \\
+Raw $(\text{clicks},\,\text{late})$ & B, A, D & safe & safe \\
 Scaled $(\text{clicks}/10\text{,}000,\,\text{late})$ & D, C, B & risk & risk \\
 \bottomrule
 \end{tabular}
@@ -868,14 +870,14 @@ This snippet is intentionally small. It exposes the whole method: store the exam
 \begin{scope}
   \draw[->,black!70] (0,0) -- (4.6,0) node[right] {clicks};
   \draw[->,black!70] (0,0) -- (0,4.0) node[above] {late submissions};
-  \filldraw[fill=c4knnCls1,draw=c4knnCls1] (0.8,0.4) circle (2.5pt) node[below,font=\footnotesize] {A};
-  \filldraw[fill=c4knnCls1,draw=c4knnCls1] (1.0,1.0) circle (2.5pt) node[below,font=\footnotesize] {B};
-  \draw[c4knnCls2,thick] (3.4,2.8) circle (2.5pt);
-  \node[right,font=\footnotesize,c4knnCls2] at (3.4,2.8) {C};
-  \draw[c4knnCls2,thick] (3.6,3.4) circle (2.5pt);
-  \node[right,font=\footnotesize,c4knnCls2] at (3.6,3.4) {D};
-  \filldraw[fill=c4knnQuery,draw=c4knnQuery] (1.4,3.3) circle (3pt);
-  \node[above,font=\footnotesize,c4knnQuery] at (1.4,3.3) {query};
+  \filldraw[fill=c4knnCls1,draw=c4knnCls1] (3.4,0.4) circle (2.5pt) node[below,font=\footnotesize] {A};
+  \filldraw[fill=c4knnCls1,draw=c4knnCls1] (3.6,1.0) circle (2.5pt) node[below,font=\footnotesize] {B};
+  \draw[c4knnCls2,thick] (0.8,2.8) circle (2.5pt);
+  \node[left,font=\footnotesize,c4knnCls2] at (0.8,2.8) {C};
+  \draw[c4knnCls2,thick] (1.0,3.4) circle (2.5pt);
+  \node[left,font=\footnotesize,c4knnCls2] at (1.0,3.4) {D};
+  \filldraw[fill=c4knnQuery,draw=c4knnQuery] (3.8,3.3) circle (3pt);
+  \node[above,font=\footnotesize,c4knnQuery] at (3.8,3.3) {query};
   \node[black!70,font=\small\bfseries] at (2.3,4.5) {raw scale};
 \end{scope}
 %% Panel B: after scaling
@@ -1240,6 +1242,7 @@ Single tree & You need explicit branching logic and readable rules & A single tr
 Random forest & Tabular data is strong and you want a safer default than one tree & Interpretation becomes weaker because the vote is spread across many trees \\
 Boosted trees & You want strong accuracy on structured data and can tune carefully & More tuning-sensitive; easy to overfit if pushed too far \\
 SVM & A wide-margin linear boundary is plausible in the current feature space & It depends on the representation; it will not repair missing structure by itself \\
+Naive Bayes & Many sparse features, limited data, or a transparent class-conditional baseline & Independence assumptions and calibration must be checked \\
 k-NN & Similar cases should borrow labels through a defended distance rule & Scaling and feature geometry are the model itself \\
 Clustering/PCA & You have no labels and want organization, grouping, or compression & The result is a summary, not a discovered truth \\
 \bottomrule
@@ -1262,8 +1265,8 @@ Diagnosis field & What must be written clearly \\
 \midrule
 Seven-question focus & Questions 4, 5, and 6: identify the missing structure, choose the next justified baseline family, and state what evidence would support the move \\
 Baseline failure & What the linear model is getting wrong and on what kind of examples \\
-Structural hypothesis & Conditional logic, local similarity, or unlabeled organization \\
-Candidate family & Tree, ensemble, nearest-neighbor, clustering, or dimensionality reduction method \\
+Structural hypothesis & Conditional logic, margin structure, class-conditional probabilistic structure, local similarity, or unlabeled organization \\
+Candidate family & Tree, ensemble, SVM, Naive Bayes, nearest-neighbor, clustering, or dimensionality reduction method \\
 Representation dependency & Which feature choices or scaling rules matter most for this family \\
 Main risk & Instability, weak geometry, cluster overinterpretation, or another failure mode \\
 Evidence needed & What validation or inspection result would justify moving beyond the baseline \\
@@ -1284,7 +1287,7 @@ The recurring mistakes here are conceptual rather than computational. Readers tr
 
 \section{Looking Ahead}
 
-This chapter broadened structure beyond one weighted sum to branches, neighborhoods, and low-dimensional views. The next chapter makes a conceptual leap: it asks when structure should be learned rather than engineered, and how neural networks learn internal representations and decision rules jointly through optimization. That shift from hand-designed features and splits to learned representations is where modern deep learning begins.
+This chapter broadened structure beyond one weighted sum to branches, margins, probabilistic baselines, neighborhoods, and low-dimensional views. The next chapter makes the data itself explicit: how examples, labels, class balance, annotation quality, and acquisition strategy shape what any later model can learn.
 
 \section*{Chapter Summary}
 

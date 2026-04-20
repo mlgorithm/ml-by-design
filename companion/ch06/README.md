@@ -1,4 +1,4 @@
-# Chapter 6 Companion
+# Representation Learning and Foundation Models Companion
 
 This chapter supports the move from task-specific neural networks to reusable representations.
 

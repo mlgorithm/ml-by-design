@@ -101,7 +101,7 @@ Consider the student-support example. Suppose the model assigns a probability of
 
 That question cannot be answered from the probability alone. It depends on:
 \begin{itemize}[leftmargin=*]
-\item the cost of a correct intervention: if it prevents serious academic harm, the benefit is large,
+\item the benefit of a correct intervention: if it prevents serious academic harm, the benefit is large,
 \item the cost of a false alarm: staff time and student inconvenience,
 \item the prevalence and workload context: if $30\%$ of students routinely score near $0.35$, routine outreach may be sustainable; if only $2\%$ ever reach that level, the same policy creates a very different workload.
 \end{itemize}
@@ -234,7 +234,7 @@ Accuracy, by contrast, is not a proper scoring rule for probabilities. Under acc
 A scoring rule $S(\hat{p}, y)$ is \emph{proper} if $\mathbb{E}_{y \sim p^*}[S(p^*, y)] \leq \mathbb{E}_{y \sim p^*}[S(\hat{p}, y)]$ for all $\hat{p}$, with equality only when $\hat{p} = p^*$ in the strictly proper case. Log loss and Brier score are proper. Accuracy-based rewards are not. Proper rules are the right losses to use when calibrated probabilities matter for downstream decisions.
 \end{mathlens}
 
-Why does this matter for AI practice? When a model output drives a threshold decision, the calibration of that output determines whether the threshold can be set reliably from a stated probability. A model that is $0.82$ overconfident at high scores will, under a threshold-as-policy interpretation, flag many cases that a properly calibrated model would not flag. The team may then tighten the threshold empirically, but without understanding that the underlying model probabilities are systematically distorted, they cannot trust that the threshold will transfer to a new semester, a new patient cohort, or a new deployment context.
+Why does this matter for AI practice? When a model output drives a threshold decision, the calibration of that output determines whether the threshold can be set reliably from a stated probability. A model that outputs $0.82$ for cases whose empirical event rate is much lower will, under a threshold-as-policy interpretation, flag many cases that a properly calibrated model would not flag. The team may then tighten the threshold empirically, but without understanding that the underlying model probabilities are systematically distorted, they cannot trust that the threshold will transfer to a new semester, a new patient cohort, or a new deployment context.
 
 \begin{practicalnote}
 When selecting a training loss, ask whether the loss rewards honest probability forecasts or merely correct binary predictions. For any application where the probability score will drive a downstream decision, prefer log loss or Brier score over accuracy as the training signal.
@@ -294,7 +294,7 @@ This gap is one of the deepest ideas in the book. Its consequences reach every c
 \end{itemize}
 
 \begin{example}[Why Low Training Loss Is Not Yet Evidence]
-Suppose a model memorizes every training example perfectly: for each student in the training set it has learned an exact rule that reproduces the label. Its training loss is zero. But when the model meets a new student---one it has never seen---it has no generalizable rule to fall back on. Its population risk may be high. The perfect training loss was a mirage: it said something about the sample but nothing about the distribution.
+Suppose a model memorizes every training example perfectly: for each student in the training set it has learned an exact rule that reproduces the label. Its training error is zero, and under some losses its training loss may be near zero. But when the model meets a new student---one it has never seen---it has no generalizable rule to fall back on. Its population risk may be high. The perfect training result was a mirage: it said something about the sample but nothing about the distribution.
 \end{example}
 
 The correct mental discipline is to treat training loss as a signal about optimization and population risk as the actual goal. Every time someone says ``the model improved,'' they should mean population risk improved, as estimated by held-out performance. Saying ``training loss went down'' without that translation is not yet evidence of learning in the useful sense.
@@ -497,15 +497,15 @@ The numerator is easy: multiply the class-conditional likelihood by the prior. T
 \textbf{Why does this distinction matter?} It changes what the model learns and what it can do:
 
 \begin{itemize}[leftmargin=*]
-\item A discriminative model focuses all its capacity on the decision boundary. It is often more accurate for classification, but it cannot detect outliers or generate new data.
+\item A discriminative model focuses all its capacity on the decision boundary. It is often more accurate for classification, but it does not model the data distribution directly, so it has no built-in density for outlier detection or sampling new data.
 \item A generative model learns the structure of the data itself. It can detect inputs that are unlike anything it has seen (outlier detection), handle missing features by marginalizing over them, and generate new examples. But it requires stronger assumptions about the data distribution.
 \end{itemize}
 
 \begin{example}[Generative Thinking for Spam]
-A discriminative spam filter learns: given these word frequencies, is this message spam? A generative spam filter learns: what do spam messages look like, and what do legitimate messages look like? The generative model can flag an email written in a language it has never seen---it is unlikely under \emph{both} models, suggesting it is out-of-distribution. The discriminative model has no mechanism for this; it must assign one of its known classes.
+A discriminative spam filter learns: given these word frequencies, is this message spam? A generative spam filter learns: what do spam messages look like, and what do legitimate messages look like? The generative model can flag an email written in a language it has never seen---it is unlikely under \emph{both} models, suggesting it is out-of-distribution. A plain closed-set discriminative classifier has no built-in mechanism for this; it needs an added rejection rule, uncertainty check, or out-of-distribution detector.
 \end{example}
 
-\textbf{Priors, posteriors, and MAP.} In Bayesian vocabulary, $P(Y)$ is the \emph{prior}---your belief about class probabilities before seeing the data. $P(Y \mid X)$ is the \emph{posterior}---your updated belief after seeing the input. The same logic applies to model parameters: a \emph{prior} on parameters $P(\boldsymbol{\theta})$ expresses which parameter values you believe are plausible before training. \emph{Maximum a posteriori} (MAP) estimation finds the parameters that maximize $P(\boldsymbol{\theta} \mid \text{data}) \propto P(\text{data} \mid \boldsymbol{\theta}) \, P(\boldsymbol{\theta})$. This turns out to be equivalent to regularization: $L_2$ regularization is MAP with a Gaussian prior, and $L_1$ regularization is MAP with a Laplace prior. What looked like an ad hoc penalty is actually a principled prior belief.
+\textbf{Priors, posteriors, and MAP.} In Bayesian vocabulary, $P(Y)$ is the \emph{prior}---your belief about class probabilities before seeing the data. $P(Y \mid X)$ is the \emph{posterior}---your updated belief after seeing the input. The same logic applies to model parameters: a \emph{prior} on parameters $P(\boldsymbol{\theta})$ expresses which parameter values you believe are plausible before training. \emph{Maximum a posteriori} (MAP) estimation finds the parameters that maximize $P(\boldsymbol{\theta} \mid \text{data}) \propto P(\text{data} \mid \boldsymbol{\theta}) \, P(\boldsymbol{\theta})$. This gives one principled interpretation of many regularizers: in penalized likelihood, an $L_2$ penalty corresponds to a Gaussian prior and an $L_1$ penalty corresponds to a Laplace prior. What looked like an ad hoc penalty can be read as a prior belief when the modeling assumptions match.
 
 These ideas---generative models, priors, posteriors, MAP---return in full force in Chapter~\ref{ch:probabilistic-models} (probabilistic models), Chapter~\ref{ch:structure-beyond-linearity} (Naive Bayes), and Chapter~\ref{ch:generative-representations} (generative representations). This bridge section provides just enough vocabulary to make those chapters readable.
 

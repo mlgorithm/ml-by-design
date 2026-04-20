@@ -1,4 +1,4 @@
-# Chapter 6b Companion
+# Learning from Interaction: Reinforcement Learning Companion
 
 This chapter supports learning from interaction through reinforcement learning.
 
@@ -29,7 +29,7 @@ python3 companion/ch06b/minimal/q_learning_gridworld.py
 
 What to notice:
 
-- Q-values converge toward the negative cumulative cost of reaching the goal
+- Q-values converge toward discounted return, balancing the `-1` step cost against the `+10` goal reward
 - the learned policy (greedy action per state) forms a coherent path
 - the training curve shows steady improvement and convergence
 - the agent discovers the path despite the walls blocking the naive route
@@ -50,7 +50,7 @@ What it shows:
 - a grid world environment built from scratch (no gym dependency)
 - Q-learning agent training and the effect of the learning curve
 - comparing exploration strategies: fixed epsilon vs. decaying epsilon
-- reward misspecification: how off-policy rewards distort learned behavior
+- reward misspecification: how a bad proxy reward distorts learned behavior
 - policy evaluation: computing state value functions under different discount factors
 
 Run it with:
@@ -72,4 +72,4 @@ Prerequisites:
 - MDPs and the Bellman equation
 - temporal difference learning and Q-learning
 - reward functions and their alignment with actual objectives
-- policy evaluation and value iteration
+- policy evaluation under a fixed policy

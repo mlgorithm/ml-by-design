@@ -292,7 +292,7 @@ This is the geometric meaning of best fit in a linear model: once the projection
 
 \subsection{Minimizing the Loss: Gradient Descent}
 
-The standard procedure for finding weights that minimize the MSE is gradient descent. Starting from some initial weight vector $w$, we repeatedly move the weights in the direction that decreases the loss the fastest. The gradient $\nabla_w \mathcal{L}$ points uphill, so we subtract a small multiple of it:
+Ordinary least squares also has a closed-form solution, but gradient descent is the reusable optimization procedure that will matter throughout the book. Starting from some initial weight vector $w$, we repeatedly move the weights in the direction that decreases the loss the fastest. The gradient $\nabla_w \mathcal{L}$ points uphill, so we subtract a small multiple of it:
 \[
 w \leftarrow w - \eta \, \nabla_w \mathcal{L}(w),
 \]
@@ -341,7 +341,7 @@ print(round(loss_before, 4))   # loss before the step
 print(round(loss_after, 4))    # loss after one correction
 \end{codeexample}
 
-Running this program produces a smaller loss after a single step. The point of the example is to show the mechanics of gradient descent rather than to establish the final semantic role of each feature from one update. Because the model begins from a symmetric near-zero state and the features are not centered, the earliest steps mainly reflect the network's attempt to move away from systematic underprediction. In a fitted model with an explicit bias term and centered or standardized inputs, the eventual sign and magnitude of each coefficient become easier to interpret.
+Running this program produces a smaller loss after a single step. The point of the example is to show the mechanics of gradient descent rather than to establish the final semantic role of each feature from one update. Because the model begins from a symmetric near-zero state and the features are not centered, the earliest steps mainly reflect the model's attempt to move away from systematic underprediction. In a fitted model with an explicit bias term and centered or standardized inputs, the eventual sign and magnitude of each coefficient become easier to interpret.
 
 \begin{figure}[t]
 \centering
@@ -476,7 +476,7 @@ P(y=1 \mid x) &= \sigma(w^\top x + b).
 
 In predictive language, this is the model's estimated conditional probability, not automatically a calibrated real-world frequency. This is why the generic pipeline matters. Linear regression uses the identity transform. Logistic regression uses the sigmoid transform. But the change is not only cosmetic. Logistic regression is trained against a classification objective such as log loss, and its output is meant to support probability estimation and threshold policy rather than unrestricted numeric prediction. The reader should keep three layers separate all the way through: score, probability, and decision rule.
 
-Logistic regression is linear in the score, the log-odds, and the decision boundary, not in the final probability output itself.
+Logistic regression has a linear score and a linear decision boundary in the encoded feature space, but the final probability is nonlinear in that score.
 
 \subsection{From Score to Probability}
 
@@ -910,7 +910,7 @@ A persistent misconception is that linear models are only a warm-up exercise bef
 
 \textbf{Text classification.} A bag-of-words or TF--IDF representation with logistic regression can achieve classification accuracy on tasks like news topic classification, spam filtering, or sentiment classification that deep models beat by only a few percentage points, at a fraction of the computational cost. The reason is straightforward: in text classification, the vocabulary already exposes the relevant signal. A word like ``inheritance'' is informative about legal topics. A word like ``free'' is informative about spam. A linear model on a well-engineered bag-of-words can identify those associations efficiently.
 
-\textbf{High-dimensional tabular prediction.} In fraud detection, credit scoring, and clinical risk modeling, datasets often have hundreds or thousands of engineered features over millions of examples. Many of those features are individually informative, and their combination is largely additive. A regularized linear model can handle this well. The L1 penalty selects a sparse subset of informative features, making the model both competitive and interpretable. Tree ensembles often win eventually, but rarely by a margin that justifies a tenfold increase in computational cost for the initial prototyping.
+\textbf{High-dimensional tabular prediction.} In fraud detection, credit scoring, and clinical risk modeling, datasets often have hundreds or thousands of engineered features over millions of examples. Many of those features are individually informative, and their combination is largely additive. A regularized linear model can handle this well. The L1 penalty can produce a sparse set of nonzero coefficients, making inspection easier, though selected features still need stability and domain checks before they are treated as genuinely informative or interpretable. Tree ensembles often win eventually, but rarely by a margin that justifies a tenfold increase in computational cost for the initial prototyping.
 
 \begin{example}[Linear Baseline on a Text Task]
 For a news topic classifier over four categories, a logistic regression with TF--IDF features might achieve $93\%$ accuracy. A fine-tuned transformer might reach $96\%$. That $3$-point gap may matter for a production system, but it does not mean the linear baseline was uninformative. It established that the task is solvable, identified which categories confuse the model, and provided a reference point against which the expensive model must justify its cost.
@@ -984,12 +984,14 @@ This is the right way to think about moving beyond linear models. Do not abandon
 The diagnostic questions are often more useful than the answer:
 \begin{itemize}[leftmargin=*]
 \item If interactions are missing, perhaps trees or engineered interaction features matter.
+\item If a plausible feature space needs a more robust separator, perhaps margin-based methods matter.
+\item If sparse class-conditional patterns matter, perhaps a probabilistic baseline such as Naive Bayes matters.
 \item If local neighborhoods matter, perhaps nearest-neighbor ideas matter.
 \item If unlabeled structure matters, clustering or dimensionality reduction may matter.
 \item If raw images or sequences matter, learned representations may matter later.
 \end{itemize}
 
-That is why the next chapter is the natural move. It does not replace linear thinking. It asks a sharper structural question: is the missing piece mainly conditional thresholds and interactions, local similarity, or unlabeled organization? The weighted-sum baseline is what makes that diagnosis possible.
+That is why the next chapter is the natural move. It does not replace linear thinking. It asks a sharper structural question: is the missing piece mainly conditional thresholds and interactions, margin structure, class-conditional probabilistic structure, local similarity, or unlabeled organization? The weighted-sum baseline is what makes that diagnosis possible.
 
 \section{Chapter Artifact: A First Baseline Design Sheet}
 
@@ -1032,7 +1034,7 @@ The common mistakes with linear models are predictable. Teams treat feature engi
 
 \section{Looking Ahead}
 
-This chapter showed that representation is already part of the model. The next chapter studies what kind of structure is missing when one global weighted sum is not enough: conditional thresholds and interactions, local similarity, or unlabeled organization.
+This chapter showed that representation is already part of the model. The next chapter studies what kind of structure is missing when one global weighted sum is not enough: conditional thresholds and interactions, margin structure, class-conditional probabilistic structure, local similarity, or unlabeled organization.
 
 \section*{Chapter Summary}
 

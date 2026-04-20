@@ -1,4 +1,4 @@
-# Chapter 8 Companion
+# Language: Context and Grounding Companion
 
 This chapter supports the move from visual structure to linguistic context and generation.
 
@@ -63,3 +63,14 @@ Prerequisites:
 - train, validation, and test splits
 - logistic regression
 - the concept of an embedding layer and sequence model
+
+## Notebook lab
+
+`practical/language_lab.ipynb`
+
+What it shows:
+
+- tokenization choices
+- bag-of-words and TF-IDF representations
+- similarity comparisons
+- a small text-classification workflow

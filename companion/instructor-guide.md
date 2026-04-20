@@ -65,23 +65,23 @@ This path is the default recommendation for a first serious undergraduate course
 
 1. `Week 1`: Chapters 1 and 2
    Focus: framing, proxy targets, metrics, splits, leakage, threshold as policy
-2. `Week 2`: Chapter 3
-   Focus: linear models, features, baseline design
-3. `Week 3`: Chapter 4
-   Focus: trees, neighbors, clustering, structural mismatch
-4. `Week 4`: Chapter 5
-   Focus: neural networks, optimization, training reports
-5. `Week 5`: Chapter 6
-   Focus: embeddings, transfer, reuse and adaptation
-6. `Week 6`: Chapter 7
+2. `Week 2`: Chapters 3 and 4
+   Focus: protected evaluation, leakage, linear models, features, baseline design
+3. `Week 3`: Chapters 5 and 6
+   Focus: trees, neighbors, clustering, structural mismatch, dataset design
+4. `Week 4`: Chapters 7 and 8
+   Focus: neural networks, optimization, probabilistic models, uncertainty
+5. `Week 5`: Chapters 9, 10, and 11
+   Focus: embeddings, transfer, generative representations, reinforcement learning
+6. `Week 6`: Chapter 12
    Focus: invariance, augmentation, shortcut learning, deployment-camera realism
-7. `Week 7`: Chapters 8 and 9
-   Focus: context, grounding, prediction-time realism
-8. `Week 8`: Chapter 10
+7. `Week 7`: Chapters 13, 14, and 15
+   Focus: context, grounding, prediction-time realism, ranking and exposure
+8. `Week 8`: Chapter 16
    Focus: experiments, ablations, repeated runs, claim audit
-9. `Week 9`: Chapter 11
+9. `Week 9`: Chapter 17
    Focus: reliability, subgroup checks, robustness, privacy, safety
-10. `Week 10`: Chapter 12
+10. `Week 10`: Chapter 18
     Focus: systems, selective prediction, monitoring, rollback, ownership
 
 ### Twelve-Week Course
@@ -91,14 +91,14 @@ This path leaves more room for exercises, mini-projects, and companion-code labs
 1. `Week 1`: Chapter 1
 2. `Week 2`: Chapter 2
 3. `Week 3`: Chapters 3 and 4
-4. `Week 4`: Chapter 5
-5. `Week 5`: Chapter 6
-6. `Week 6`: Chapter 7
-7. `Week 7`: Chapter 8
-8. `Week 8`: Chapter 9
-9. `Week 9`: Chapter 10
-10. `Week 10`: Chapter 11
-11. `Week 11`: Chapter 12
+4. `Week 4`: Chapters 5 and 6
+5. `Week 5`: Chapters 7 and 8
+6. `Week 6`: Chapters 9, 10, and 11
+7. `Week 7`: Chapter 12
+8. `Week 8`: Chapters 13 and 14
+9. `Week 9`: Chapter 15
+10. `Week 10`: Chapter 16
+11. `Week 11`: Chapters 17 and 18
 12. `Week 12`: capstone presentations, synthesis, or review
 
 ## Chapter Dependencies
@@ -107,29 +107,35 @@ Use these dependencies when compressing or expanding the course:
 
 - `Chapter 1` is the entry point and should not be skipped.
 - `Chapter 2` is foundational for every later claim about evidence.
-- `Chapter 3` should come before Chapter 5.
-- `Chapter 4` can be taught before or after Chapter 3, but works best after it.
-- `Chapter 5` should come before Chapter 6.
-- `Chapter 6` is helpful before Chapters 7 and 8, but not strictly required for Chapter 9.
-- `Chapters 7, 8, and 9` can be taught as a modality block once Chapters 1 to 6 are in place.
-- `Chapter 10` should precede Chapters 11 and 12.
-- `Chapter 11` should precede or accompany Chapter 12.
-- `Chapter 12` works best as the capstone chapter, not as an isolated systems appendix.
+- `Chapter 3` should come before claims about evidence or generalization.
+- `Chapter 4` should come before most nonlinear model chapters because it establishes features and linear baselines.
+- `Chapters 5 and 6` can be paired as structure and dataset-design foundations.
+- `Chapters 7, 8, 9, 10, and 11` form the models-and-representations block.
+- `Chapters 12, 13, 14, and 15` can be taught as a modality and interaction block once Chapters 1 to 9 are in place.
+- `Chapter 16` should precede Chapters 17 and 18.
+- `Chapter 17` should precede or accompany Chapter 18.
+- `Chapter 18` works best as the capstone chapter, not as an isolated systems appendix.
 
 ## What To Emphasize By Chapter
 
 - `Chapter 1`: use the framing memo as an assignment, not just reading.
 - `Chapter 2`: spend time on threshold as policy and leakage, not only metric formulas.
-- `Chapter 3`: teach linear models as the first serious baseline, not the old method chapter.
-- `Chapter 4`: emphasize structural mismatch rather than catalog coverage.
-- `Chapter 5`: keep optimization and generalization tied to the training report artifact.
-- `Chapter 6`: separate durable transfer ideas from current model-brand language.
-- `Chapter 7`: make shortcut learning and deployment-camera realism central.
-- `Chapter 8`: use the grounded support-assistant case throughout.
-- `Chapter 9`: keep the chapter centered on what is legally known at prediction time.
-- `Chapter 10`: force students to bound claims rather than celebrate score gains.
-- `Chapter 11`: teach reliability as one pipeline question, not four side topics.
-- `Chapter 12`: keep the unit of analysis at the system level rather than the model level.
+- `Chapter 3`: keep protected evaluation and leakage control central.
+- `Chapter 4`: teach linear models as the first serious baseline, not the old method chapter.
+- `Chapter 5`: emphasize structural mismatch rather than catalog coverage.
+- `Chapter 6`: make dataset design part of model design, not a preprocessing footnote.
+- `Chapter 7`: keep optimization and generalization tied to the training report artifact.
+- `Chapter 8`: use uncertainty as an operational object, not only a probability formula.
+- `Chapter 9`: separate durable transfer ideas from current model-brand language.
+- `Chapter 10`: teach generated data as an audited design choice.
+- `Chapter 11`: keep reward specification tied to the system's real objective.
+- `Chapter 12`: make shortcut learning and deployment-camera realism central.
+- `Chapter 13`: use the grounded support-assistant case throughout.
+- `Chapter 14`: keep the chapter centered on what is legally known at prediction time.
+- `Chapter 15`: emphasize exposure bias and feedback loops.
+- `Chapter 16`: force students to bound claims rather than celebrate score gains.
+- `Chapter 17`: teach reliability as one pipeline question, not four side topics.
+- `Chapter 18`: keep the unit of analysis at the system level rather than the model level.
 
 ## Companion Code Use
 
@@ -204,8 +210,8 @@ Instructor-only materials should normally include:
 Recommended policy:
 
 - keep short conceptual checks public
-- keep full worked solutions to multi-step applied problems instructor-only
-- keep synthesis-task rubrics instructor-only, but provide public checklists
+- treat `companion/instructor-solutions/` as a sample instructor package, not student-facing course material
+- keep additional full worked solutions and synthesis-task rubrics instructor-only unless intentionally released as samples
 - allow companion-code scripts to stay public, but do not publish graded answer reports tied to them
 
 Reason:
@@ -258,16 +264,16 @@ Best for:
 Pattern:
 
 - compress some middle chapters slightly
-- spend more time on Chapters 8 to 12
+- spend more time on the modality and systems arc, especially printed Chapters 13 to 18
 - require a final experiment claim sheet, reliability review card, and system readiness brief
 
 ## Risks To Watch In Teaching
 
 - students may default to model shopping instead of problem framing
-- students may confuse fluency with grounding in Chapter 8
-- students may treat Chapter 10 as research reporting style instead of scientific control
-- students may hear Chapter 11 as ethics commentary instead of technical reliability analysis
-- students may revert to model-only thinking in Chapter 12 unless the course keeps the system boundary visible
+- students may confuse fluency with grounding in Chapter 13
+- students may treat Chapter 16 as research reporting style instead of scientific control
+- students may hear Chapter 17 as ethics commentary instead of technical reliability analysis
+- students may revert to model-only thinking in Chapter 18 unless the course keeps the system boundary visible
 
 ## Definition Of A Successful Course Use
 

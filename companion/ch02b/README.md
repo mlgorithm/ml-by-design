@@ -1,6 +1,6 @@
-# Chapter 2b: Generalization and Evaluation Discipline
+# Chapter 3 (`ch02b`): Generalization and Evaluation Discipline
 
-This directory contains practical materials for Chapter 2b of "Machine Learning by Design," which covers generalization, overfitting, model selection, and evaluation discipline.
+This directory contains practical materials for Chapter 3 of "Machine Learning by Design," stored under the historical `ch02b` directory name. It covers generalization, overfitting, model selection, and evaluation discipline.
 
 ## Contents
 
@@ -18,14 +18,14 @@ This directory contains practical materials for Chapter 2b of "Machine Learning 
 
 ## Key Concepts
 
-- **Overfitting**: High training accuracy but low test accuracy. Indicates the model memorized noise.
-- **Cross-validation**: Use k-fold CV to get robust estimates of test error without consuming data.
+- **Overfitting**: High training performance or low training error with worse validation or test performance. Often indicates the model has learned noise or sample-specific structure.
+- **Cross-validation**: Use k-fold CV on the training data for model selection and stability checks; keep a final untouched test set when making a final claim.
 - **Sanity checks**: Always train on shuffled labels as a baseline. If performance is good, something is broken.
 - **Learning curves**: Show how train/val error change with dataset size. Diagnose whether you need more data or more capacity.
 
 ## Prerequisites
 
-- Python 3.7+
+- Python 3.11+ for current scikit-learn releases
 - numpy, matplotlib, scikit-learn
 
 Install with:

@@ -1,4 +1,4 @@
-# Chapter 9 Companion
+# Audio, Time, and Prediction-Time Realism Companion
 
 This chapter supports the move from token sequences to continuous signals and temporal processes.
 
@@ -44,7 +44,7 @@ What it shows:
 
 - a synthetic forecasting problem with trend, seasonality, and a regime shift
 - a naive persistence baseline
-- the same linear forecasting model under random-split and chronological evaluation
+- the same ridge forecasting model under random-split and chronological evaluation
 
 Run it with:
 

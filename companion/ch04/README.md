@@ -1,12 +1,16 @@
-# Chapter 4 Companion
+# Structure Beyond Linearity Companion
 
 This chapter expands the book beyond single weighted-sum models.
 
-It focuses on three kinds of structure:
+It focuses on five kinds of structure:
 
 - branching structure through trees
+- margin structure through support vector machines
+- probabilistic class-conditional structure through Naive Bayes
 - local geometric structure through nearest neighbors
-- unlabeled structure through clustering
+- unlabeled structure through clustering and dimensionality reduction
+
+The companion code emphasizes trees, nearest neighbors, clustering, and PCA; the SVM and Naive Bayes sections are text-first previews in the chapter.
 
 ## Minimal example
 

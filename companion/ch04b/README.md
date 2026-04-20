@@ -1,14 +1,16 @@
-# Chapter 4b Companion
+# Designing the Dataset Companion
 
 This chapter supports designing and preparing datasets for machine learning with realistic quality challenges.
 
-It focuses on seven ideas:
+It focuses on nine ideas:
 
 - annotation protocols and inter-annotator agreement
 - label noise and its effects on model performance
 - class imbalance and handling techniques
 - active learning and uncertainty sampling
-- data augmentation in feature space
+- semi-supervised learning
+- weak supervision and labeling functions
+- data augmentation and label-preserving transformations
 - synthetic data generation
 - measuring and monitoring dataset quality
 
@@ -52,9 +54,11 @@ What it shows:
 
 - label noise effects on model robustness across noise rates
 - class imbalance detection and the impact of weighted training
-- feature-space augmentation and decision boundary effects
+- label-preserving augmentation and decision boundary effects
 - pool-based active learning with uncertainty sampling
 - comparison of active learning vs. random sampling
+
+The notebook emphasizes the executable subset of the chapter. The printed chapter also develops semi-supervised learning, self-training, and weak supervision as dataset-design strategies.
 
 Run it with:
 
@@ -69,7 +73,7 @@ What to notice:
 - class weights and F1 score together reveal true classifier behavior
 - augmentation with noise can help generalization but may hurt tight decision boundaries
 - active learning queries uncertain points efficiently, reducing label cost
-- random sampling requires 2-3× more labels to reach the same accuracy as uncertainty sampling
+- in this controlled setup, random sampling may require 2-3x more labels to reach the same accuracy as uncertainty sampling
 
 Prerequisites:
 

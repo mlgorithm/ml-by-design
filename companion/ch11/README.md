@@ -1,4 +1,4 @@
-# Chapter 11 Companion
+# Reliability Companion
 
 This chapter supports the reliability perspective of the book.
 
@@ -16,7 +16,7 @@ What it shows:
 
 - two subgroup confusion matrices
 - accuracy, true positive rate, and false positive rate for each group
-- how the same model can look acceptable overall while behaving very differently across groups
+- how one subgroup can look acceptable while another behaves very differently
 
 Run it with:
 
@@ -44,7 +44,7 @@ What it shows:
 - a synthetic majority/minority classification problem
 - a baseline logistic-regression model and a simple group-balancing mitigation
 - subgroup accuracy on a clean test set
-- subgroup accuracy after a minority-group covariate shift
+- subgroup accuracy after a minority-group input shift
 
 Run it with:
 

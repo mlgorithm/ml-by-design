@@ -19,6 +19,7 @@ Point predictions hide what the model does not know. A probabilistic model makes
 \item Explain how the Expectation-Maximization algorithm iteratively discovers latent structure
 \item Apply Gaussian mixture models to clustering problems with soft assignments
 \item Understand Bayesian reasoning: priors, posteriors, and the difference between MAP and MLE
+\item Use Gaussian processes to place a prior over functions and obtain input-dependent predictive uncertainty
 \item Distinguish aleatoric uncertainty (inherent randomness) from epistemic uncertainty (model ignorance)
 \item Use Naive Bayes as a transparent, probabilistic baseline classifier
 \item Construct an uncertainty audit card that documents what a model knows it does not know
@@ -45,7 +46,7 @@ The course-support early-warning system classifies student messages as ROUTINE, 
 
 The distinction between generative and discriminative models is fundamental to probabilistic reasoning.
 
-\textbf{Discriminative models} learn the conditional distribution $P(Y \mid X)$---the probability of the label given the input. Logistic regression, support vector machines, and neural network classifiers are discriminative. They answer: ``given this input, what is the most likely label?''
+\textbf{Discriminative models} learn a decision rule or score for predicting $Y$ from $X$. Probabilistic discriminative models such as logistic regression estimate $P(Y \mid X)$, while models such as support vector machines are discriminative without being probability models unless they are separately calibrated. They answer: ``given this input, what is the most likely label?''
 
 \textbf{Generative models} learn the joint distribution $P(X, Y)$ or equivalently the class-conditional distribution $P(X \mid Y)$ and the prior $P(Y)$. They answer a different question: ``how is the data produced?'' Given a generative model, you can compute $P(Y \mid X)$ using Bayes' theorem:
 \[
@@ -60,7 +61,7 @@ Generative models are more flexible but harder to fit. The key trade-offs:
 \begin{itemize}[leftmargin=*]
 \item \emph{Classification accuracy.} When the only goal is to predict $Y$ from $X$, discriminative models often win. They focus all their capacity on the decision boundary, while generative models spend capacity modeling the full input distribution, which may not help with classification.
 \item \emph{Data efficiency.} Generative models can sometimes learn from less labeled data because they learn about the structure of $X$, not just the relationship between $X$ and $Y$. This connects to semi-supervised learning (Chapter~\ref{ch:dataset-design}).
-\item \emph{Outlier detection.} Generative models can detect inputs that are unlikely under the learned distribution. Discriminative models have no mechanism for this: they assign every input to some class.
+\item \emph{Outlier detection.} Generative models can support density-based checks for inputs that are unlikely under the learned distribution, but this must be validated because likelihood can be misleading out of domain. Plain discriminative classifiers have no built-in input-density model; they need an added rejection rule, uncertainty check, or out-of-distribution detector.
 \item \emph{Generation.} Only generative models can sample new data points. This is useful for data augmentation, creative applications, and understanding what the model has learned.
 \item \emph{Assumptions.} Generative models require specifying a distributional form for $P(X \mid Y)$---Gaussian, multinomial, or some other family. If the assumption is wrong, the model can be worse than a discriminative alternative that makes no such assumption.
 \end{itemize}
@@ -123,7 +124,7 @@ $K$-means, encountered in earlier chapters, assigns each data point to exactly o
 This is a direct application of Bayes' theorem. The soft assignment reflects genuine ambiguity: a data point near the boundary between two clusters should not be forced into one or the other. This connects to the soft labels discussion in Chapter~\ref{ch:dataset-design}---ambiguity is information, not noise.
 
 \begin{practicalnote}
-GMMs reduce to $K$-means in a special case: when all covariance matrices are $\sigma^2 \mathbf{I}$ (spherical, equal variance) and $\sigma \to 0$, the soft assignments become hard assignments and the EM algorithm (below) becomes the $K$-means update rule. $K$-means is a limiting case of GMMs, not a different algorithm.
+GMMs connect to $K$-means in a special case: when all covariance matrices are $\sigma^2 \mathbf{I}$ (spherical, equal variance) and $\sigma \to 0$, the soft assignments become hard assignments and the EM algorithm (below) becomes the $K$-means update rule. In that sense, $K$-means can be viewed as the hard-assignment limiting case of EM for a constrained spherical GMM, even though it is used as a distinct algorithm in practice.
 \end{practicalnote}
 
 \subsection{The Expectation-Maximization Algorithm}
@@ -208,6 +209,31 @@ A campus shuttle team uses linear regression to predict pedestrian density from 
 
 \begin{practicalnote}
 Full Bayesian inference (computing exact posteriors) is tractable for linear regression with Gaussian assumptions but becomes intractable for neural networks and other complex models. Approximate methods---variational inference, Monte Carlo dropout, and deep ensembles---are used in practice to approximate Bayesian uncertainty for larger models. These are discussed briefly in the uncertainty section below.
+\end{practicalnote}
+
+\subsection{Gaussian Processes}
+\label{sec:gaussian-processes}
+
+Bayesian linear regression reasons about a distribution over weights. A \emph{Gaussian process} (GP) reasons about a distribution over \emph{functions} directly, without committing to a parametric form. Given training inputs and outputs, a GP returns, for every possible new input, a Gaussian distribution over the function value at that input. The predictive mean gives the best point estimate; the predictive variance says how much the GP is willing to commit to that estimate at that particular location.
+
+The shift from weights to functions is not just philosophical. It changes what the prior encodes. In Bayesian linear regression, a prior on $\mathbf{w}$ expresses ``parameters should be small.'' In a GP, the prior is specified by a \emph{kernel} $k(\mathbf{x}, \mathbf{x}')$ that measures similarity between inputs, and the implicit belief is ``nearby inputs should produce nearby outputs.'' The choice of kernel therefore encodes what ``nearby'' means. A squared-exponential kernel assumes the underlying function is smooth; a Mat\'ern kernel allows rougher behavior; a periodic kernel expresses the belief that the function repeats with a known period. Every kernel is a hypothesis about the function family the data lives in.
+
+\textbf{Predictive distribution.} For a new input $\mathbf{x}_*$, the \emph{standard GP-regression} setting---Gaussian likelihood with observation noise variance $\sigma_n^2$ and a kernel with fixed hyperparameters---gives a predictive distribution that is Gaussian with mean $\mu(\mathbf{x}_*)$ and variance $\sigma^2(\mathbf{x}_*)$. Both depend on the training data and the kernel. Three properties make the variance particularly useful for reliability work. First, it is \emph{input-dependent}: the GP is confident in regions where training points cluster and unconfident in regions where training points are sparse. Second, under fixed kernel and noise hyperparameters it does \emph{not} depend on the observed outputs $\mathbf{y}$: the posterior variance is a function of the training-input locations, the kernel, and the assumed noise level only. Third, for stationary kernels whose covariance decays with distance, it grows smoothly toward the prior variance as $\mathbf{x}_*$ moves far from the training data, giving an honest ``I do not know'' signal rather than a falsely confident extrapolation. Other kernels extrapolate according to their own structure.
+
+\begin{warningbox}
+The ``variance does not depend on $\mathbf{y}$'' property is a feature of the exact GP-regression formula with \emph{fixed} hyperparameters. In practice the noise variance $\sigma_n^2$ and the kernel hyperparameters (length-scales, output scale) are almost always learned from the training data---typically by maximizing the marginal likelihood $p(\mathbf{y} \mid \mathbf{X})$---and that learning couples the predictive variance to $\mathbf{y}$ indirectly. The geometry-of-inputs intuition is right for a fixed kernel and is a useful teaching lens for why GPs extrapolate honestly, but a deployed GP whose hyperparameters were fitted to data does carry output information in its uncertainty. Non-Gaussian likelihoods (GP classification, count data) break the closed-form Gaussian posterior altogether and require approximate inference.
+\end{warningbox}
+
+\begin{thinkingtool}
+\textbf{Kernel as a hypothesis.} Every GP kernel is a claim about which inputs should share information. When choosing a kernel, ask: if two inputs are ``similar'' under this kernel, does that similarity predict anything the task actually cares about? A spatial kernel over GPS coordinates may be right for crowd density but wrong for student-message similarity, where lexical or semantic distance matters more than Euclidean distance in some feature space.
+\end{thinkingtool}
+
+\begin{example}[Gaussian Process for Pedestrian Counts with Sparse Sensors]
+The campus shuttle team deploys counting sensors at only eight locations along the main walking corridor, but the shuttle-routing system needs density estimates at twenty-five candidate stop locations. A GP with a squared-exponential kernel over walkway position interpolates between the eight measurements. Near each sensor the predictive mean tracks the observed count and the predictive variance is small. Midway between sensors the mean is a smooth interpolation and the variance grows. At the two ends of the corridor, outside the sensor placements, the variance approaches the prior variance, signaling that the estimate there is essentially a guess. The routing system uses the predictive variance directly: it proposes a new stop only at candidate locations where the predicted density is high \emph{and} the predictive variance is low, avoiding locations where the model is merely guessing confidently.
+\end{example}
+
+\begin{practicalnote}
+In standard GP regression with a Gaussian likelihood and fixed hyperparameters, inference is exact and non-parametric, but computing the predictive distribution requires solving an $n \times n$ kernel system at cost $O(n^3)$ where $n$ is the number of training points. GPs are therefore most useful when data is scarce (hundreds to a few thousand points) and calibrated uncertainty is valuable---spatial and temporal interpolation, small-sample scientific regression, and Bayesian optimization of expensive hyperparameters or experiments. For large-scale problems, sparse GP approximations or neural-network-based uncertainty methods (ensembles, Monte Carlo dropout, or variational inference, introduced in the uncertainty section below) scale better at the cost of giving up exact posterior guarantees.
 \end{practicalnote}
 
 \section{Naive Bayes: A Transparent Probabilistic Baseline}
@@ -349,17 +375,17 @@ The uncertainty audit card is not a one-time document. As the deployment environ
 
 \section{Common Mistakes in Probabilistic Modeling}
 
-Several mistakes recur when building probabilistic models. The first is treating all uncertainty as the same: using a single confidence score without distinguishing aleatoric from epistemic sources leads to poor decisions about when to collect more data and when to accept irreducible noise. The second is trusting uncalibrated probabilities: neural network softmax outputs are not calibrated by default, and using them as if they were leads to overconfident systems. A third is choosing $K$ for a mixture model based on aesthetics rather than evidence: always use information criteria or held-out likelihood. A fourth is assuming that the Naive Bayes independence assumption makes the model useless: it is wrong but often useful, and dismissing it means losing a fast, interpretable baseline. Finally, treating the EM algorithm as a black box without checking for convergence, sensitivity to initialization, or empty components leads to unreliable clustering.
+Several mistakes recur when building probabilistic models. The first is treating all uncertainty as the same: using a single confidence score without distinguishing aleatoric from epistemic sources leads to poor decisions about when to collect more data and when to accept irreducible noise. The second is trusting uncalibrated probabilities: neural network softmax outputs are not calibrated by default, and using them as if they were leads to overconfident systems. A third is choosing $K$ for a mixture model based on aesthetics rather than evidence: use evidence such as information criteria, held-out likelihood, stability checks, and domain constraints. A fourth is assuming that the Naive Bayes independence assumption makes the model useless: it is wrong but often useful, and dismissing it means losing a fast, interpretable baseline. Finally, treating the EM algorithm as a black box without checking for convergence, sensitivity to initialization, or empty components leads to unreliable clustering.
 
 \section{Looking Ahead}
 
-This chapter introduced probabilistic models as tools for reasoning about distributions, latent structure, and uncertainty. Gaussian mixture models showed how latent variables and the EM algorithm can discover hidden structure. Bayesian reasoning formalized the distinction between aleatoric and epistemic uncertainty and connected regularization to prior knowledge. Naive Bayes demonstrated that even a model with ``wrong'' assumptions can serve as a useful, interpretable baseline. The uncertainty audit card documented what the model knows it does not know.
+This chapter introduced probabilistic models as tools for reasoning about distributions, latent structure, and uncertainty. Gaussian mixture models showed how latent variables and the EM algorithm can discover hidden structure. Bayesian reasoning formalized the distinction between aleatoric and epistemic uncertainty and connected regularization to prior knowledge. Gaussian processes extended that reasoning from parametric to non-parametric modeling, placing a prior on functions rather than weights so that predictive uncertainty grows honestly in regions the training data never reached. Naive Bayes demonstrated that even a model with ``wrong'' assumptions can serve as a useful, interpretable baseline. The uncertainty audit card documented what the model knows it does not know.
 
 The next chapter moves from probabilistic structure to learned representations. The question shifts from ``what distribution generated this data?'' to ``what representation of the data makes downstream tasks easier?'' The probabilistic lens developed here---latent variables, generative models, and uncertainty---will return throughout Part~III and Part~IV, where reliable predictions and responsible deployment demand knowing not just what the model predicts, but how much to trust that prediction.
 
 \section*{Chapter Summary}
 
-Probabilistic models reason about distributions, not just point predictions. Generative models learn the joint distribution $P(X, Y)$ and can detect outliers, handle missing data, and generate new examples; discriminative models learn $P(Y \mid X)$ and typically achieve higher classification accuracy. Latent variables represent hidden structure that must be inferred from observations. Gaussian mixture models use latent cluster assignments and the EM algorithm to discover soft clusters. Bayesian reasoning treats parameters as random variables with prior distributions, connects regularization to prior beliefs, and produces posterior distributions that encode uncertainty. The posterior predictive distribution decomposes into aleatoric uncertainty (inherent noise) and epistemic uncertainty (model ignorance). Naive Bayes is a fast, interpretable generative baseline that works despite its strong independence assumption. An uncertainty audit card documents what kinds of uncertainty the model faces, how they are measured, and what downstream decisions depend on them.
+Probabilistic models reason about distributions, not just point predictions. Generative models learn the joint distribution $P(X, Y)$ and can support outlier checks, handle missing data, and generate new examples; discriminative models learn decision rules or conditional probability models for predicting $Y$ from $X$ and typically achieve higher classification accuracy. Latent variables represent hidden structure that must be inferred from observations. Gaussian mixture models use latent cluster assignments and the EM algorithm to discover soft clusters. Bayesian reasoning treats parameters as random variables with prior distributions, connects regularization to prior beliefs, and produces posterior distributions that encode uncertainty. Gaussian processes push this idea from parametric to non-parametric regression: by placing a prior on functions through a kernel, they yield predictive variance that grows where training data is sparse and shrinks where it is dense; under fixed kernel and noise hyperparameters, the latent-function posterior variance depends on the training input locations and kernel, not directly on observed output values. The posterior predictive distribution decomposes into aleatoric uncertainty (inherent noise) and epistemic uncertainty (model ignorance). Naive Bayes is a fast, interpretable generative baseline that works despite its strong independence assumption. An uncertainty audit card documents what kinds of uncertainty the model faces, how they are measured, and what downstream decisions depend on them.
 
 \begin{studyquestions}
 \item What is the difference between a generative and a discriminative model?
@@ -369,6 +395,7 @@ Probabilistic models reason about distributions, not just point predictions. Gen
 \item In what sense is $K$-means a special case of Gaussian mixture models?
 \item What is the difference between MLE and MAP estimation? How does MAP connect to regularization?
 \item Why does the posterior predictive distribution in Bayesian linear regression have two uncertainty terms?
+\item How does a Gaussian process's predictive variance behave as a new input moves away from the training data, and why is this pattern more honest than a parametric model's extrapolated confidence?
 \item Why does Naive Bayes classify well despite violating the conditional independence assumption?
 \item Why are Naive Bayes probabilities typically poorly calibrated?
 \item What is the difference between aleatoric and epistemic uncertainty, and why does the distinction matter for data collection?
@@ -380,7 +407,7 @@ Probabilistic models reason about distributions, not just point predictions. Gen
 \item Fit a Gaussian mixture model with $K=2$ to a two-dimensional dataset of your choice. Visualize the data, the fitted Gaussian components (means and covariance ellipses), and the soft assignments. Run EM from three different initializations and compare the results.
 \item Implement one iteration of the EM algorithm by hand for a simple 1D dataset with two Gaussian components. Start with initial guesses for the means and variances, compute the E-step (soft assignments), and then the M-step (updated parameters). Show all intermediate values.
 \item Train a Naive Bayes classifier on a text classification dataset (e.g., 20 Newsgroups or a sentiment dataset). Report accuracy and compare to a logistic regression baseline. Examine the top-10 most informative features for each class.
-\item For the Naive Bayes model from the previous exercise, plot a reliability diagram and compute the Expected Calibration Error. Apply temperature scaling and report the improvement.
+\item For the Naive Bayes model from the previous exercise, plot a reliability diagram and compute the Expected Calibration Error. Apply Platt scaling (for the binary setting) or isotonic regression to the Naive Bayes outputs and report the change in ECE. Explain why temperature scaling, which rescales logits in a softmax model, is not the natural post-hoc fix for Naive Bayes.
 \item Using Bayesian linear regression on a dataset with one input feature, plot the posterior predictive distribution: show the mean prediction and the uncertainty band. Observe how the band widens in regions with sparse training data.
 \item Compare the predictions of a single neural network to a deep ensemble of 5 networks on a regression task. Identify inputs where the ensemble members disagree most and explain whether the uncertainty is likely aleatoric or epistemic.
 \end{exercises}

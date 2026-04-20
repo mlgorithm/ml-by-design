@@ -86,15 +86,21 @@ Good chapter-level defaults:
 
 ## Suggested chapter mapping
 
-- Chapter 1: problem framing, data splits, baselines
-- Chapter 2: loss functions, metrics, overfitting demonstrations
-- Chapter 3: linear regression and logistic regression
-- Chapter 4: trees, nearest neighbors, clustering
-- Chapter 5: gradient descent and small neural networks
-- Chapter 6: embeddings and transfer learning
-- Chapter 7: image classification or detection starter examples
-- Chapter 8: text classification and sequence modeling
-- Chapter 9: spectrograms and time-series forecasting
-- Chapter 10: experiment tracking and error analysis
-- Chapter 11: subgroup evaluation and robustness checks
-- Chapter 12: simple deployment and monitoring workflows
+- Chapter 1: problem framing
+- Chapter 2: prediction, loss, and decision rules
+- Chapter 3: generalization, leakage, and evaluation discipline
+- Chapter 4: linear models and representation
+- Chapter 5: structure beyond linearity
+- Chapter 6: dataset design
+- Chapter 7: optimization and neural networks
+- Chapter 8: probabilistic models and latent structure
+- Chapter 9: representation learning and foundation models
+- Chapter 10: generative representations
+- Chapter 11: reinforcement learning
+- Chapter 12: vision
+- Chapter 13: language
+- Chapter 14: audio, time, and prediction-time realism
+- Chapter 15: ranking, recommendation, and exposure
+- Chapter 16: experiments and scientific claims
+- Chapter 17: reliability
+- Chapter 18: models to systems

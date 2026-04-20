@@ -26,7 +26,7 @@ This is the chapter's most reusable habit. The audit connects task formulation, 
 \label{fig:vision-pipeline}
 \end{figure}
 
-Vision performance cannot be interpreted before the invariance audit is clear. A model cannot be said to work unless we know what it was supposed to ignore, what it was supposed to preserve, and what the deployment camera will actually produce. A useful workflow is to start from the task and required output, run the invariance audit, make the annotation policy explicit, pick the smallest baseline that matches the output shape, add augmentations only for label-preserving variation, then compare a pretrained backbone, a frozen backbone, and fine-tuning on deployment-relevant slices. The running artifact is a vision design and stress-test card with six fields: task type, intended signal, nuisance variation, deployment camera, likely shortcut risks, and the slices or stress tests that would reveal failure before deployment.
+Vision performance cannot be interpreted before the invariance audit is clear. A model cannot be said to work unless we know what it was supposed to ignore, what it was supposed to preserve, and what the deployment camera will actually produce. A useful workflow is to start from the task and required output, run the invariance audit, make the annotation policy explicit, pick the smallest baseline that matches the output shape, add augmentations only for label-preserving variation, then compare training from scratch, a frozen pretrained backbone, and a fine-tuned pretrained backbone on deployment-relevant slices. The running artifact is a vision design and stress-test card with core fields for task type, intended signal, nuisance variation, deployment camera, likely shortcut risks, and the slices or stress tests that would reveal failure before deployment.
 
 \section{Task Formulation Before Architecture Depth}
 
@@ -381,7 +381,7 @@ Pooling helps with local stability, but architectural bias is only part of the s
 
 If convolution and pooling give an architectural bias toward useful local structure, augmentation states the same judgment at the data level. Augmentation is not just a bag of tricks for improving leaderboard performance. It is an explicit claim about which transformations should preserve the label.
 
-Common examples include random crops and translations, horizontal flips, small rotations, color jitter, and blur, noise, or cutout-style masking.
+Common examples include random crops and translations, with boxes or masks transformed for structured outputs, horizontal flips, small rotations, color jitter, and blur, noise, or cutout-style masking.
 
 These transformations can help a model learn that position, lighting, or small perturbations should not override the semantic content of the image. But augmentation must match the task. A horizontal flip may be harmless for generic object recognition and harmful for text recognition or medical laterality tasks.
 
@@ -405,7 +405,7 @@ Each augmentation is a claim. The claim is that the transformation leaves the la
 \toprule
 Augmentation & Implicit claim & When the claim fails \\
 \midrule
-Random crop and translate & Location within the frame should not change the label & Tasks where position is semantically relevant (e.g.\ reading a gauge value that depends on dial position) \\
+Random crop and translate & For classification, object location should not change the class; for detection or segmentation, transformed boxes or masks should remain valid & Tasks where position is semantically relevant, or crops that remove or truncate the target object \\
 Horizontal flip & Left-right orientation is irrelevant to the label & Text recognition, medical laterality (left/right hand), traffic signs \\
 Color jitter & Exact hue and saturation are not defining features & Ripeness grading by color, skin-condition classification, specific plant disease detection \\
 Gaussian blur & Fine-grained texture detail is not required & Texture classification tasks where fine-grained surface structure is the target \\
@@ -425,7 +425,7 @@ Before finalizing an augmentation pipeline, write down the claim for each augmen
 
 \section{Modern Visual Backbones and Transfer}
 
-Convolutional networks were dominant in vision for many years because their inductive biases fit images well. More recently, transformers and hybrid architectures also became important, especially when pretrained at scale. The high-level lesson from the previous chapter still applies: once a model learns a strong visual representation, many downstream tasks can reuse it. But backbone choice only becomes meaningful after the task, annotation policy, and invariance claims are already clear.
+Convolutional networks were dominant in vision for many years because their inductive biases fit images well. More recently, transformers and hybrid architectures also became important, especially when pretrained at scale. The high-level lesson from the representation-learning chapter still applies: once a model learns a strong visual representation, many downstream tasks can reuse it. But backbone choice only becomes meaningful after the task, annotation policy, and invariance claims are already clear.
 
 Pretrained visual backbones often learn reusable low-level and mid-level features such as edges, textures, contours, shapes, and object-part relationships. This is why transfer learning became so effective in vision long before many students encountered large language models.
 
@@ -434,7 +434,7 @@ In applied vision work, training from scratch should not be the default assumpti
 \end{practicalnote}
 
 \begin{practicalnote}
-Transfer learning is not automatic. When the source domain (e.g., ImageNet photographs) differs substantially from the target domain (e.g., satellite imagery or medical scans), even strong pretrained representations may fail. The decision between a frozen backbone with a linear head versus full fine-tuning depends on the size of the labeled target dataset: with few labels, freezing prevents overfitting; with many labels, fine-tuning can adapt features to the new domain. Monitor validation performance under both strategies before committing.
+Transfer learning is not automatic. When the source domain (e.g., ImageNet photographs) differs substantially from the target domain (e.g., satellite imagery or medical scans), even strong pretrained representations may fail. The decision between a frozen backbone with a linear head versus full fine-tuning depends on the size of the labeled target dataset: with few labels, freezing can reduce overfitting risk; with many labels, fine-tuning can adapt features to the new domain. Monitor validation performance under both strategies before committing.
 \end{practicalnote}
 
 Once the chapter has described how visual structure can be learned, it also has to ask how that same flexibility can go wrong.

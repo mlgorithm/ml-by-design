@@ -12,7 +12,7 @@ The key design rule is simple:
 - The manuscript should stay concept-first and durable.
 - The companion code should stay practical and updateable.
 
-AI-LAB follows that rule as a Markdown-first docs site under `ai-lab/docs/`, built with the configuration in `ai-lab/mkdocs.yml`.
+The companion materials live directly under the bridge and chapter directories in this `companion/` tree.
 
 ## Three coding layers
 
@@ -48,6 +48,7 @@ The companion code should prefer:
 - `Python`
 - `NumPy`
 - `matplotlib`
+- `SciPy`
 - `scikit-learn`
 - `PyTorch`
 

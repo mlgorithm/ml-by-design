@@ -30,7 +30,7 @@ A recommender system is not a neutral mirror of user preferences. It is an activ
 
 A recommendation system predicts which items a user will find relevant, then presents them in a ranked order. This framing connects to several ideas already encountered in the book.
 
-\textbf{Connection to classification.} At the item level, recommendation is binary classification: will this user find this item relevant (positive) or not (negative)? A predicted relevance score can be thresholded just like a classification probability. But the number of candidate items is typically enormous (millions of products, thousands of courses), so the system must rank rather than classify each item independently.
+\textbf{Connection to classification.} At the item level, recommendation can sometimes be framed as predicting a relevance or utility score for a user-item pair. That score may come from a pointwise classifier or regressor, a pairwise preference model, or a listwise ranker; the ranked list is produced by sorting or otherwise selecting from candidate scores.
 
 \textbf{Connection to retrieval.} Information retrieval---search engines, document retrieval---also produces ranked lists. The key difference is that search is query-driven (the user states what they want) while recommendation is profile-driven (the system infers what the user might want from past behavior). The evaluation metrics overlap: precision, recall, and normalized discounted cumulative gain (NDCG) appear in both settings.
 
@@ -102,7 +102,7 @@ The regularization term $\lambda(\|\mathbf{U}\|^2 + \|\mathbf{V}\|^2)$ prevents 
 The latent factors capture implicit structure. In a movie recommendation system, one factor might capture ``action vs.\ drama preference,'' another might capture ``preference for recent vs.\ classic films.'' In a course-resource system, one factor might capture ``prefers worked examples vs.\ conceptual explanations,'' another might capture ``prefers short vs.\ long content.'' The factors are not predefined---they are discovered from the interaction data.
 
 \begin{example}[Matrix Factorization for Course Resources]
-The course-support system has a sparse interaction matrix: 800 students $\times$ 500 resources, with only 16,000 observed interactions (4\% fill rate). Matrix factorization with $k=20$ latent factors learns user vectors that capture learning-style preferences and item vectors that capture resource characteristics. After training, the system predicts that Student~A (whose latent vector is similar to students who prefer worked examples) would benefit from Resource~247 (a worked example on regression), even though Student~A has never accessed it. The predicted relevance score is 4.2 out of 5, placing it in the student's top-5 recommendations.
+The course-support system has a sparse interaction matrix: 800 students $\times$ 500 resources, with only 16,000 observed interactions (4\% fill rate). Matrix factorization with $k=20$ latent factors learns user vectors that capture resource-format and study-pattern preferences and item vectors that capture resource characteristics. After training, the system predicts that Student~A (whose latent vector is similar to students who prefer worked examples) would benefit from Resource~247 (a worked example on regression), even though Student~A has never accessed it. The predicted relevance score is 4.2 out of 5, placing it in the student's top-5 recommendations.
 \end{example}
 
 \begin{practicalnote}
@@ -136,7 +136,7 @@ Common strategies for learning from implicit feedback:
 
 \begin{itemize}[leftmargin=*]
 \item \emph{Binary encoding.} Treat all interactions as positive (1) and all non-interactions as negative (0). This is simple but treats the ambiguous non-interactions as definitive negatives.
-\item \emph{Confidence weighting.} Assign higher confidence to observed interactions and lower confidence to non-interactions. The model trusts positive signals more than negative ones. This is the approach used in the influential ``implicit ALS'' framework.
+\item \emph{Confidence weighting.} Assign higher confidence to observed interactions and lower confidence to non-interactions. The model treats observed interactions as stronger evidence of preference and unobserved interactions as low-confidence zero-preference entries, not as certain dislikes. This is the approach used in the influential ``implicit ALS'' framework.
 \item \emph{Negative sampling.} Instead of treating all non-interactions as negatives, randomly sample a subset of non-interactions as negatives. This reduces the computational cost and avoids overwhelming the model with uninformative negatives.
 \item \emph{Exposure modeling.} Explicitly model whether the user \emph{saw} the item. If the item was never displayed to the user, the non-interaction is not a negative signal---it is missing data. This requires logging what was recommended, which connects to the exposure bias discussion below.
 \end{itemize}
@@ -168,14 +168,14 @@ NDCG@$k$ evaluates only the top $k$ positions. Choosing $k$ is a design decision
 
 \subsection{The Offline Evaluation Problem}
 
-Naive offline evaluation of recommender systems is unreliable unless the logging policy is accounted for. The test set contains only items the user \emph{actually interacted with}, which are items the \emph{previous} system chose to show. The system cannot be evaluated on items it never recommended, because there is no ground truth for those items. This is the \emph{missing-not-at-random} problem: the test data is biased by the policy that generated it.
+In logged implicit-feedback data, naive offline evaluation is unreliable when the test observations are generated by a previous exposure policy. The system may have observations only for items users saw and interacted with, not for equally relevant items the previous system never exposed. This is the \emph{missing-not-at-random} problem: the test data is biased by the policy that generated it.
 
-\textbf{Counterfactual estimation.} The most principled approach uses inverse propensity scoring (IPS): weight each test observation by the inverse of the probability that the previous system would have shown that item. Items the previous system was unlikely to show get higher weight, correcting for the selection bias. This requires logging the recommendation probabilities, which many production systems do not do.
+\textbf{Counterfactual estimation.} The most principled approach uses inverse propensity scoring (IPS): weight each test observation by the inverse of the probability that the previous system would have exposed that item in that position or slate. Items the previous system was unlikely to show get higher weight, correcting for the selection bias. This requires logging item-position exposure propensities, which many production systems do not do.
 
-\textbf{Replay methods.} When historical logs include randomized recommendations (e.g., a small fraction of random items mixed into the ranked list), replay methods can estimate how a new policy would have performed by replaying the historical data and using only the randomized portion as unbiased ground truth.
+\textbf{Replay methods.} When historical logs include randomized recommendations (e.g., a small fraction of random items mixed into the ranked list), replay methods can estimate how a new policy would have performed by replaying the historical data and using the randomized portion as unbiased logged observations.
 
 \begin{warningbox}
-Offline metrics for recommender systems are almost always optimistic for the \emph{current} system and pessimistic for novel systems. The current system generated the data, so items it would recommend are overrepresented in the test set. A novel system that recommends different items will appear to perform worse simply because those items were never tested. Always complement offline evaluation with online A/B tests before concluding that a new system is worse.
+Offline metrics on logged implicit-feedback data can favor policies similar to the logger and understate policies that recommend items outside the logged support. Randomized exposure, explicit relevance judgments, or counterfactual correction are needed before drawing strong conclusions. Complement offline evaluation with online A/B tests before concluding that a new system is worse.
 \end{warningbox}
 
 \section{Exposure Bias and Feedback Loops}
@@ -213,7 +213,7 @@ A university job board recommends positions to graduating students based on past
 \begin{itemize}[leftmargin=*]
 \item \emph{Exploration.} Deliberately recommend some items the system is uncertain about, not just items it is confident the user will like. This is analogous to the exploration-exploitation trade-off in reinforcement learning (Chapter~\ref{ch:reinforcementlearning}).
 \item \emph{Diversity constraints.} Impose constraints on the recommendation list: require that the top-$k$ items span multiple categories, topics, or providers. This prevents the list from converging on a single niche.
-\item \emph{Exposure fairness.} Allocate exposure proportionally across providers or content categories, ensuring that no group is systematically suppressed. This connects to the fairness discussion in Chapter~\ref{ch:reliability}.
+\item \emph{Exposure fairness.} Define a target exposure policy across eligible providers or content categories, then monitor deviations from that target while accounting for relevance, inventory, and user needs. This connects to the fairness discussion in Chapter~\ref{ch:reliability}.
 \item \emph{Logging and counterfactual evaluation.} Log what was recommended and with what probability. Use inverse propensity scoring to evaluate alternative policies on historical data. This allows detecting exposure bias before it becomes entrenched.
 \end{itemize}
 
@@ -271,15 +271,15 @@ Exploration mechanism & Whether and how the system explores uncertain or underre
 
 \textbf{Cold-start strategy.} New students receive recommendations based on content features and the course's most-accessed resources (popularity fallback). New resources are shown to a random 5\% of users for the first two weeks to collect initial interaction data (exploration).
 
-\textbf{Implicit feedback treatment.} Confidence-weighted: access events weighted by $1 + \alpha \cdot \log(\text{dwell time})$ with $\alpha = 0.5$. Items displayed but not clicked are treated as weak negatives (confidence 0.1). Items never displayed are excluded from training.
+\textbf{Implicit feedback treatment.} Confidence-weighted: access events weighted by $1 + \alpha \cdot \log(1 + t/t_0)$, where $t$ is dwell time in seconds, $t_0=60$ seconds is the reference duration, and $\alpha = 0.5$. Items displayed but not clicked are treated as weak negatives (confidence 0.1). Items never displayed are excluded from training.
 
-\textbf{Evaluation protocol.} NDCG@5 and MAP@5 on a held-out set of student-resource interactions from the most recent semester. Counterfactual correction via IPS using logged recommendation probabilities. Online A/B test planned for fall semester.
+\textbf{Evaluation protocol.} NDCG@5 and MAP@5 on a held-out set of student-resource interactions from the most recent semester. Counterfactual correction via IPS using logged item-position exposure propensities for the displayed slate. Online A/B test planned for fall semester.
 
 \textbf{Exposure analysis.} Worked examples and lecture recordings account for 68\% of all recommendations despite being only 40\% of the resource library. Office-hour transcripts and tutoring sessions are underrepresented. Resources uploaded in the current semester receive 3$\times$ less exposure than older resources due to less interaction data.
 
 \textbf{Diversity and fairness.} Top-5 list is constrained to include at least 2 distinct resource types (e.g., cannot show 5 worked examples). No instructor-side fairness constraint is currently enforced; this is a known gap.
 
-\textbf{Feedback loop risk.} High. The system generates the data it trains on. Worked examples dominate because they were recommended early, collected more clicks, and are now recommended even more. Monitoring: track the entropy of the resource-type distribution in training data quarterly. Alert if entropy drops below 1.5 (indicating dangerous narrowing).
+\textbf{Feedback loop risk.} High. The system generates the data it trains on. Worked examples dominate because they were recommended early, collected more clicks, and are now recommended even more. Monitoring: track normalized entropy of the resource-type distribution in training data quarterly, with 1 meaning perfectly balanced exposure across resource types and 0 meaning all exposure goes to one type. Alert if normalized entropy drops below 0.75, indicating dangerous narrowing.
 
 \textbf{Exploration mechanism.} $\epsilon$-greedy with $\epsilon = 0.05$: 5\% of recommendation slots are filled with a random resource the student has not yet seen. New resources receive a 2-week boost (shown to 5\% of users regardless of score).
 

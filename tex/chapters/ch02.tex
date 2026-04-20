@@ -43,22 +43,21 @@ In some systems, the action is thresholded: act on every case above a cutoff. In
   arrow/.style={-Latex, thick, gray!60}
 ]
 %% ── Top row: main analysis pipeline ─────────────────────────────────────
+\node[pipebox]  (loss)    at (-3.6, 0) {training loss};
 \node[pipebox]  (score)   at (0,    0) {model score};
 \node[pipebox]  (metric)  at (3.6,  0) {reported measure};
 \node[pipebox]  (policy)  at (7.2,  0) {decision rule};
-\node[pipebox]  (loss)    at (10.8, 0) {training loss};
 %% ── Bottom row: quality checks and output ────────────────────────────────
 \node[checkbox] (cal)     at (3.6, -2.2) {confidence check};
 \node[checkbox] (abstain) at (7.2, -2.2) {abstain or review};
 \node[claimbox] (claim)   at (10.8,-2.2) {operational signal};
 %% ── Row-1 horizontal arrows ──────────────────────────────────────────────
+\draw[arrow] (loss)   -- (score);
 \draw[arrow] (score)  -- (metric);
 \draw[arrow] (metric) -- (policy);
 %% ── Vertical drop arrows ─────────────────────────────────────────────────
 \draw[arrow] (metric) -- (cal);
 \draw[arrow] (policy) -- (abstain);
-%% ── Training loss → operational signal: straight down ────────────────────
-\draw[arrow] (loss)   -- (claim);
 %% ── Abstain → claim: straight right ─────────────────────────────────────
 \draw[arrow] (abstain) -- (claim);
 %% ── Confidence check → operational signal: right along bottom ────────────
@@ -587,7 +586,7 @@ This kind of tiny script belongs in the book because it exposes the mechanism. T
 
 Threshold choice becomes much clearer when we stop asking which threshold has the nicest generic metric and start asking what the downstream action costs.
 
-Suppose first that the system is a medical triage screen where a false negative is much worse than a false positive because a missed urgent case may delay treatment. If we assign cost $6$ to each false negative and cost $1$ to each false positive, then the total decision cost on the running eight-message threshold example would be:
+Suppose first that the system is a medical triage screen where a false negative is much worse than a false positive because a missed urgent case may delay treatment. If we assign cost $6$ to each false negative and cost $1$ to each false positive, then the total decision cost on the running eight-case threshold example would be:
 \begin{align*}
 \text{cost}_{0.3} &= 2(1)+0(6)=2, \\
 \text{cost}_{0.5} &= 1(1)+1(6)=7, \\
@@ -895,6 +894,18 @@ The judgment lesson is straightforward. Do not ask only whether the model is acc
 One modern way to express uncertainty is to output a prediction set or interval rather than a single label. Conformal prediction gives a general recipe for building such sets with finite-sample coverage guarantees under an exchangeability assumption \citep{shafer2008}. The key lesson for this book is conceptual rather than technical: in some applications, the honest prediction is not one label but a small set of plausible labels, or a decision to abstain until more evidence arrives.
 \end{advancednote}
 
+\subsection*{A Confidence Story That Runs Through the Book}
+
+Calibration, abstention, and prediction intervals are three checkpoints on a single thread that continues well past this chapter. Each one asks a slightly different version of the same operational question: \emph{how confident should a downstream decision be in this particular score?} Calibration asks whether a stated probability behaves like an honest probability on average. Abstention asks whether the system should even act automatically on a given case. Prediction intervals and prediction sets ask whether the model can express its answer as a \emph{range of plausible outcomes} rather than a single number.
+
+The distinction between a point prediction and an interval is pedagogically important. A regression model that reports ``expected delivery time is $42$ minutes'' gives operators no way to distinguish a confident estimate from a rough guess. The same model, reporting ``expected delivery time is $42$ minutes, with a $90\%$ interval from $31$ to $58$ minutes,'' invites a different class of decisions: whether to promise a time window, whether to request a human dispatcher's review, whether to queue a fallback courier. For classification, the analogous move is to output a prediction set---``the label is likely one of \{A, B\}, with about $90\%$ coverage''---rather than a single top-1 guess.
+
+\begin{practicalnote}
+A first-pass rule of thumb when designing an uncertainty-aware decision policy: decide in advance what the team will \emph{do differently} at low versus high confidence. If the downstream action is identical at $0.55$ and $0.95$, then calibration work and interval work cannot improve outcomes, and the team should invest elsewhere. If the actions differ---automatic approval versus human review, automatic dispatch versus manual scheduling---then confidence quality is on the critical path.
+\end{practicalnote}
+
+The same thread runs through later chapters. Chapter~\ref{ch:probabilistic-models} will show how Bayesian linear regression and Gaussian processes produce predictive distributions rather than point estimates, so that a regression answer naturally carries an interval. Chapter~\ref{ch:reliability} will return to uncertainty under the banner of reliability engineering (Section~\ref{sec:uq-reliability}): how to combine calibration, selective prediction, and conformal intervals into a deployment policy that is safe to trust. For now, the chapter-level takeaway is only this: when a point prediction is reported without any confidence signal, the decision policy that consumes it is implicitly assuming the number is trustworthy everywhere. Often it is not, and the operational cost of that assumption is invisible until a case near the boundary goes wrong.
+
 \section{Validation, Cross-Validation, and Test Discipline}
 
 By this point the chapter has separated metric from loss, score from action, and calibration from ranking quality. One more distinction is needed before any of those choices deserve trust: \emph{which data is allowed to choose them?} This is the bridge from Chapter 2's judgment logic to Chapter 3's evaluation discipline.
@@ -920,7 +931,7 @@ development_data, test_data = split_once(raw_data)
 
 candidate_settings = propose_settings()
 best_setting = None
-best_value = -inf
+best_value = float("-inf")
 
 for setting in candidate_settings:
     fold_values = []

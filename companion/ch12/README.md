@@ -1,4 +1,4 @@
-# Chapter 12 Companion
+# From Models to Systems Companion
 
 This chapter supports the systems view of the book.
 

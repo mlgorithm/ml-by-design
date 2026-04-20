@@ -1,4 +1,4 @@
-# Chapter 8 Exercise Solutions
+# Chapter 13 Exercise Solutions
 ## Language: Context and Grounding  
 
 **Instructor Notes**: This chapter introduces the context audit methodology - one of the book's most innovative contributions to NLP education. Students often jump to complex models without understanding what linguistic structure their task actually requires. The context audit flowchart forces systematic analysis before architecture selection.
@@ -286,6 +286,6 @@ EVALUATION CRITERIA:
 ### **Connection to Earlier Chapters**:
 - **Chapter 1**: NLP tasks need same framing discipline as any ML problem
 - **Chapter 2**: Evaluation metrics change based on output type (classification vs. generation)
-- **Chapter 7**: Similar invariance principles apply (linguistic vs. visual)
+- **Chapter 12**: Similar invariance principles apply (linguistic vs. visual)
 
 **Key Pedagogical Insight**: The context audit methodology transfers beyond NLP - students can apply similar systematic analysis to any representation choice problem.

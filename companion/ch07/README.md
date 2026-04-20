@@ -1,4 +1,4 @@
-# Chapter 7 Companion
+# Vision: Learning from Images Companion
 
 This chapter supports the move from general representation learning to image-specific modeling.
 
