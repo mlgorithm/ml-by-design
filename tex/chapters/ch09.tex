@@ -157,11 +157,11 @@ For the running wake-word case, short windows may preserve the onset of consonan
 Short windows give better time localization but blur frequency precision. Longer windows improve frequency resolution but blur timing. This tradeoff matters because different tasks value timing and frequency detail differently. A transient command and a slowly changing tone are not equally well served by the same window.
 
 \begin{advancednote}
-The short-time Fourier transform can be written schematically as
+The short-time Fourier transform can be written schematically for a length-\(L\) window and frequency bin \(k\) as
 \[
-S(t,f) = \left| \sum_n x[n]\,w[n-t]\,e^{-i2\pi fn} \right|^2,
+S(t,k) = \left| \sum_n x[n]\,w[n-t]\,e^{-i2\pi kn/L} \right|^2,
 \]
-where $x[n]$ is the waveform, $w$ is a local window, and $f$ is a frequency or frequency-bin variable. The key idea is not the formula itself, but the fact that local frequency analysis depends on both a signal and a windowing choice.
+where $x[n]$ is the waveform, $w$ is a local window, and \(k\) indexes the discrete frequency bin. The key idea is not the formula itself, but the fact that local frequency analysis depends on both a signal and a windowing choice.
 \end{advancednote}
 
 \begin{mathlens}
@@ -272,8 +272,8 @@ The evolution of sequence models reflects a progression in how context is stored
 \begin{itemize}[leftmargin=*]
   \item \textbf{Hidden Markov Models} maintain a discrete hidden state with fixed transition probabilities. They model uncertainty explicitly but struggle with long-range dependencies because the state space must be enumerated.
   \item \textbf{Recurrent Neural Networks} (RNNs) replace the discrete state with a continuous hidden vector updated at each step. This is more flexible, but gradients can vanish or explode across many steps, making long-range learning difficult.
-  \item \textbf{LSTMs and GRUs} add gating mechanisms that control what information flows forward and what is discarded. Gates solve the vanishing-gradient problem for moderately long sequences.
-  \item \textbf{Transformers} abandon sequential processing entirely. Attention computes direct pairwise connections between all positions, allowing any token to attend to any other without information passing through intermediate steps. This makes long-range context easy but requires encoding positional information explicitly.
+  \item \textbf{LSTMs and GRUs} add gating mechanisms that control what information flows forward and what is discarded. Gates mitigate vanishing-gradient problems and usually support longer dependencies than plain RNNs, though they do not remove optimization limits entirely.
+  \item \textbf{Transformers} replace recurrent state updates during training with attention over positions, allowing any token to attend to any other without information passing through intermediate steps. This makes long-range context easier to model in parallel, though autoregressive decoding at inference time can still proceed token by token and positional information must be encoded explicitly.
 \end{itemize}
 Each architecture solves a memory limitation of its predecessor, at the cost of additional assumptions or computation.
 \end{practicalnote}
@@ -428,7 +428,7 @@ Sequential tasks often have deceptively strong simple baselines. In forecasting,
 A complicated sequential model that cannot beat a naive baseline under an honest split is not a near-miss. It is a warning sign that the representation, split logic, or claim may be wrong.
 
 \begin{example}[Naive Baselines for the Running Cases]
-For the demand forecaster, the simplest credible baseline is \emph{persistence}: predict that the next hour's demand equals the same hour yesterday. A slightly stronger baseline adds the weekly pattern: predict from the same hour and same day of week last week. Any model that cannot beat persistence is not learning temporal structure.
+For the demand forecaster, the simplest credible baseline is true \emph{persistence}: predict that the next hour's demand equals the current hour's demand. A stronger seasonal-repeat baseline predicts from the same hour yesterday, and another adds the weekly pattern by using the same hour and same day of week last week. Any model that cannot beat these simple baselines is not clearly learning useful temporal structure.
 
 For the wake-word detector, the naive baseline is a fixed energy threshold: if the short-term energy of the audio buffer exceeds a threshold, flag it. This baseline has a high false-positive rate but exposes how much of the detector's value comes from spectral discrimination versus simple loudness.
 \end{example}
@@ -514,7 +514,7 @@ Multimodal systems must choose how information from different modalities flows i
 
 \begin{itemize}[leftmargin=*]
   \item \textbf{Early fusion}: Concatenate raw or preprocessed inputs from all modalities before the model sees them. This assumes that low-level structure is shared across modalities and that the model can learn useful interactions from the combined input.
-  \item \textbf{Late fusion}: Train separate models on each modality, then combine their outputs (scores, embeddings, or decisions) at the end. This assumes modalities are largely independent in their contribution to the final decision.
+  \item \textbf{Late fusion}: Train separate models on each modality, then combine their outputs (scores, embeddings, or decisions) at the end. This works best when modality-specific processing can stay mostly separate until the final decision.
   \item \textbf{Cross-modal attention}: Let modalities interact during processing through attention mechanisms that allow each modality to selectively focus on relevant parts of other modalities. This assumes learned interaction is beneficial and computationally feasible.
 \end{itemize}
 
@@ -526,16 +526,16 @@ Multimodal systems must choose how information from different modalities flows i
 \toprule
 Strategy & Assumption & Strength & Weakness \\
 \midrule
-Early fusion & Shared low-level structure & Captures joint patterns & High-dimensional input; all modalities equally weighted \\
-Late fusion & Modality independence & Interpretable per-modality; scalable & May miss complementary signals \\
-Cross-modal attention & Learned selective interaction & Flexible; modality-adaptive & Computationally expensive; requires rich supervision \\
+Early fusion & Aligned joint input or features & Can model low-level cross-modal interactions & High-dimensional input; all modalities equally weighted \\
+Late fusion & Separable modality-specific predictors & Interpretable per-modality; scalable & May miss complementary signals \\
+Cross-modal attention & Learned selective interaction & Flexible; modality-adaptive & Computationally expensive; often benefits from substantial pretraining or supervision \\
 \bottomrule
 \end{tabular}
 \caption{Fusion strategies trade off between assumption simplicity, computational cost, and flexibility in modeling multimodal interaction.}
 \label{tab:fusion-strategies}
 \end{table}
 
-Each strategy makes different assumptions about how modalities relate. Early fusion assumes shared low-level structure; late fusion assumes independence until the decision; cross-modal attention allows learned interaction. The right choice depends on the task, the computational budget, and whether modality interaction is theoretically justified.
+Each strategy makes different assumptions about how modalities relate. Early fusion assumes shared low-level structure; late fusion keeps the modalities separate until the decision stage; cross-modal attention allows learned interaction throughout processing. The right choice depends on the task, the computational budget, and whether modality interaction is theoretically justified.
 
 \subsection{The Multimodal Audit}
 
@@ -592,7 +592,7 @@ In a graph neural network with $k$ layers, a node $v$ at layer $\ell$ computes i
 \[
 h_v^{(\ell+1)} = \text{COMBINE}\left( h_v^{(\ell)}, \text{AGGREGATE}\left( \{ h_u^{(\ell)} : u \in \text{Neighbors}(v) \} \right) \right)
 \]
-where AGGREGATE pools messages from neighbors (e.g., sum, mean, max) and COMBINE updates the node's state (e.g., via a neural network). After $k$ layers, each node's representation encodes its $k$-hop neighborhood.
+where AGGREGATE pools messages from neighbors (e.g., sum, mean, max) and COMBINE updates the node's state (e.g., via a neural network). After $k$ layers, each node's representation can depend on aggregated information from its $k$-hop neighborhood, though different neighborhoods may still collapse to the same representation if the aggregation is not expressive enough.
 \end{definition}
 
 The key design choices in a graph neural network are:
@@ -608,7 +608,7 @@ The key design choices in a graph neural network are:
 Graph-aware models outperform flat models (logistic regression on node features alone) or sequence models only when the relational structure carries predictive information that cannot be captured by node features alone. This is the critical audit question: does the graph structure actually matter for this task?
 
 \begin{example}[Molecular Property Prediction]
-Consider predicting the boiling point of a molecule from its atomic composition. Two molecules with the same atoms in different bonding arrangements (isomers) have very different boiling points. A ``bag-of-atoms'' model that counts carbon, hydrogen, and oxygen atoms cannot distinguish isomers because it ignores structure. A graph model that represents atoms as nodes and bonds as edges can learn that carbon--carbon triple bonds (alkynes) have different effects than single bonds (alkanes). In this task, graph structure is essential. The audit would ask: what information does connectivity add beyond node features?
+Consider predicting the boiling point of a molecule from its atomic composition. Ethanol and dimethyl ether have the same formula, \(\mathrm{C_2H_6O}\), but very different bonding arrangements and boiling points. A ``bag-of-atoms'' model that counts carbon, hydrogen, and oxygen atoms cannot distinguish these isomers because it ignores structure. A graph model that represents atoms as nodes and bonds as edges can distinguish an O--H alcohol group from a C--O--C ether group. In this task, graph structure is essential. The audit would ask: what information does connectivity add beyond node features?
 \end{example}
 
 \begin{example}[Social Network Influence]
@@ -646,6 +646,81 @@ Graph neural networks come with three major limitations:
 Heterogeneous graphs (where nodes and edges have different types) require extended message passing: a bank transaction network might have ``person'' nodes and ``account'' nodes with different features, and edges representing different transaction types. Heterogeneous graph neural networks learn type-specific aggregation functions. The audit becomes more complex: the graph structure includes edge types, and the model's representation learning must respect that structure. Do not assume a standard GNN designed for homogeneous graphs will work well without modification.
 \end{advancednote}
 
+\section{Classical Forecasting Toolkit}
+\label{sec:classical-forecasting}
+
+Before reaching for a neural network, many time-series tasks are better served by classical statistical methods that have been refined over decades. These methods are transparent, fast, and often surprisingly competitive. This section introduces the core ideas at a design level.
+
+\subsection{Exponential Smoothing}
+
+Exponential smoothing forecasts the next value as a weighted average of past observations, with exponentially decaying weights. Recent observations matter more; distant ones matter less. The simplest form---\emph{simple exponential smoothing}---maintains a single ``level'' estimate $\ell_t$ updated by:
+\[
+\ell_t = \alpha \, y_t + (1 - \alpha) \, \ell_{t-1}
+\]
+where $\alpha \in (0, 1)$ controls how fast the model forgets old data. The forecast is $\hat{y}_{t+1} = \ell_t$.
+
+\textbf{Holt's method} adds a trend component $b_t$, and \textbf{Holt-Winters} adds seasonality $s_t$ (additive or multiplicative). Holt-Winters is the classical workhorse for data with trend and seasonal patterns---and it requires no training data beyond the series itself.
+
+\begin{practicalnote}
+Exponential smoothing has very few parameters ($\alpha$, $\beta$ for trend, $\gamma$ for seasonality) and can be fit in seconds. Within its home regime---univariate series with level, trend, and/or seasonal structure and a scalar point forecast as the deployment target---it is a strong naive baseline: if a complex model cannot beat Holt-Winters on that kind of data, the complexity is not justified. The same caveat applies in reverse: intermittent or zero-inflated demand, count or event processes, high-dimensional exogenous forecasting, and tasks where the deployment target is a distribution, an interval, or a multi-series forecast are outside exponential smoothing's design envelope and often need Croston's method, count-time-series models, or structural/multivariate alternatives.
+\end{practicalnote}
+
+\subsection{ARIMA Models}
+
+\emph{Autoregressive Integrated Moving Average} (ARIMA) models combine three ideas:
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Autoregressive (AR).} Predict the next value as a linear combination of the $p$ most recent values. This captures inertia: if the series was high yesterday, it tends to be high today.
+\item \emph{Integrated (I).} Difference the series $d$ times to remove trend and make the mean behavior closer to stationary. Variance may require separate treatment, such as a transformation or a model designed for changing volatility.
+\item \emph{Moving Average (MA).} Predict the next value as a linear combination of the $q$ most recent forecast errors. This captures short-term shocks that decay over time.
+\end{itemize}
+
+An ARIMA($p, d, q$) model is specified by three integers. Seasonal ARIMA (SARIMA) adds seasonal analogues: ARIMA($p, d, q$)$\times$($P, D, Q$)$_s$ where $s$ is the seasonal period.
+
+\begin{example}[ARIMA for Student Engagement Forecasting]
+The course-support system tracks daily active logins. The series shows a weekly cycle (high Monday--Thursday, low weekends) and a gradual upward trend during the semester. A SARIMA(1,1,1)$\times$(1,1,1)$_7$ model captures both the trend (through differencing) and the weekly seasonality. It forecasts next week's engagement pattern within 8\% MAPE---a strong baseline for the early-warning system's anomaly detection module.
+\end{example}
+
+\subsection{When Classical Methods Suffice}
+
+Classical forecasting methods are the right choice when:
+
+\begin{itemize}[leftmargin=*]
+\item The series is univariate (one variable over time) with trend and/or seasonality.
+\item Interpretability matters: stakeholders need to understand \emph{why} the forecast looks the way it does.
+\item Data is limited: a single series with 100--1000 observations is enough for ARIMA or Holt-Winters but not enough for a neural network.
+\item The forecast horizon is short (1--10 steps ahead). Classical methods degrade gracefully at short horizons.
+\end{itemize}
+
+Neural sequence models (RNNs, Transformers) are better when:
+
+\begin{itemize}[leftmargin=*]
+\item Multiple related series are available and cross-series patterns can be exploited.
+\item The input includes exogenous features (weather, calendar events, sensor metadata).
+\item The forecast horizon is long or the relationship between past and future is nonlinear and complex.
+\end{itemize}
+
+\begin{decisionbox}
+\textbf{Forecasting method selection:}
+\begin{itemize}
+\item For a univariate series with level/trend/seasonal structure, start with exponential smoothing (Holt-Winters) and ARIMA as baselines before reaching for anything more complex.
+\item If a neural model cannot beat the classical baseline on that regime by a meaningful margin, prefer the classical model for its transparency and lower maintenance cost.
+\item For multivariate forecasting with exogenous features, consider neural or structural multivariate approaches; still report the best available univariate baseline per series.
+\item For intermittent demand, count data, zero-inflated series, or non-scalar forecast targets (intervals, distributions, multi-horizon), pick a baseline designed for that regime (e.g.\ Croston's method, count-time-series models, quantile regression) rather than defaulting to Holt-Winters.
+\item Match the evaluation protocol to the forecast horizon: rolling-window backtesting with the same horizon as deployment.
+\end{itemize}
+\end{decisionbox}
+
+\subsection{Connection to HMMs and State-Space Models}
+
+Exponential smoothing and ARIMA can both be viewed as special cases of \emph{state-space models}: models with a hidden state that evolves over time and generates the observed data. The Hidden Markov Models (HMMs) discussed earlier in this chapter are also state-space models, with discrete hidden states. The connection is that all of these methods share a common structure: infer a hidden state from past observations, then use the inferred state to predict the future.
+
+This state-space perspective unifies classical forecasting with models that maintain a recursive hidden state, including HMMs and many RNNs. Transformers provide a different memory mechanism: instead of updating one latent state recursively, they attend over a context window of past representations. The difference is not only in how the state is represented, but in whether memory is carried forward through recursive filtering or retrieved through attention over context.
+
+\begin{thinkingtool}
+\textbf{State-space unification.} When choosing a sequence model, ask: what is the hidden state, how does it evolve, and how does it generate observations? Exponential smoothing has a simple scalar state (the level). ARIMA has a vector state (recent values and errors). An RNN has a learned vector state. A Transformer has an attended context window. The question is not ``which architecture is best?'' but ``what state representation does the task require?''
+\end{thinkingtool}
+
 \section{Common Mistakes in Sequential Modeling}
 
 The mistakes in this chapter are surface forms of one deeper error: pretending time does not change what counts as a valid claim. Randomly splitting a time series, ignoring the forecast horizon, or letting future-derived features slip into the pipeline all make the problem easier than deployment. So does confusing a representation with the process itself: a spectrogram or lag vector is a task-shaped view, not the full sequential reality.
@@ -654,11 +729,11 @@ The same mistake reappears when deployment constraints are treated as an afterth
 
 \section{Looking Ahead}
 
-This chapter treated sequences as processes, so evaluation had to respect prediction time. The next chapter generalizes that discipline into experiment claims themselves: once the protocol stops cheating through time, we still have to ask what any score actually justifies and what rival explanation survives.
+This chapter treated sequences as processes, so evaluation had to respect prediction time. The next chapter shifts from one prediction at a time to ranked lists, where exposure, position, and feedback loops become part of the modeling problem. A later chapter generalizes the same discipline into experiment claims themselves: once the protocol stops cheating through time, we still have to ask what any score actually justifies and what rival explanation survives.
 
 \section*{Chapter Summary}
 
-Sequential modeling begins with the decision moment rather than with an architecture name. Once time matters, the model must respect horizon, allowed context, latency, and the difference between past information and forbidden future leakage. Audio and forecasting differ in signal type, but they share the same discipline: choose a representation that preserves the right temporal structure, evaluate chronologically, and test realism through baselines, noise, drift, and deployment constraints.
+Sequential modeling begins with the decision moment rather than with an architecture name. Once time matters, the model must respect horizon, allowed context, latency, and the difference between past information and forbidden future leakage. Classical forecasting methods---exponential smoothing, ARIMA, and their seasonal variants---remain essential baselines: they are transparent, fast, and often competitive with neural approaches on univariate series. The state-space perspective unifies classical and neural sequence models under a common framework of hidden-state inference. Audio and forecasting differ in signal type, but they share the same discipline: choose a representation that preserves the right temporal structure, evaluate chronologically, and test realism through baselines, noise, drift, and deployment constraints.
 
 \begin{studyquestions}
 \item Why should a sequential model be judged partly by what information was available at prediction time?
@@ -668,6 +743,8 @@ Sequential modeling begins with the decision moment rather than with an architec
 \item Why can random splits be especially misleading for time-series tasks?
 \item Why are naive baselines unusually important in sequential problems?
 \item Why can an offline sequential result be statistically strong but operationally invalid?
+\item When should you prefer ARIMA or Holt-Winters over a neural sequence model?
+\item How does the state-space perspective unify exponential smoothing, ARIMA, HMMs, and RNNs?
 \end{studyquestions}
 
 \begin{exercises}

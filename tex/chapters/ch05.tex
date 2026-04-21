@@ -1,7 +1,7 @@
 \chapter{Optimization and Neural Networks}
 \label{ch:optimization-neural-networks}
 
-The previous chapter broadened the idea of structure by adding branches, margins, neighborhoods, and unsupervised organization. Neural networks take a different step. Instead of asking only which rule to place on top of a representation, they allow part of the representation itself to be learned from data. That added flexibility is useful only when it is disciplined by optimization, regularization, and careful evaluation.
+Chapter~\ref{ch:structure-beyond-linearity} broadened the idea of structure by adding branches, margins, neighborhoods, and unsupervised organization. Neural networks take a different step. Instead of asking only which rule to place on top of a representation, they allow part of the representation itself to be learned from data. That added flexibility is useful only when it is disciplined by optimization, regularization, and careful evaluation.
 
 This chapter explains that learning process without mystifying it. It moves from learned feature pipelines to forward passes, losses, optimization, debugging, and generalization, and it ends with a minimum credible neural training report. The goal is not only to show how neural networks work, but to show what evidence makes a neural result worth trusting.
 
@@ -17,7 +17,7 @@ This does not mean neural networks are always the best choice. On small tabular 
 
 The practical workflow is equally simple to state in prose. Start with the strongest simple baseline, decide what structure it is missing, build the smallest network that could plausibly learn that structure, train with a validation split while watching for optimization versus generalization failure, and then report the result in a minimum credible training report.
 
-Chapter 5 asked which kind of structure should be added next. This chapter asks what happens when the structure itself is not fully specified in advance and must instead be learned during training.
+Chapter~\ref{ch:structure-beyond-linearity} asked which kind of structure should be added next. This chapter asks what happens when the structure itself is not fully specified in advance and must instead be learned during training.
 
 \section{A Neural Network as a Learned Feature Pipeline}
 
@@ -92,7 +92,7 @@ z = w^\top x + b, \qquad a = \phi(z).
 \]
 Here $x$ is the input vector, $w$ is a vector of weights, $b$ is a bias term, $z$ is the raw weighted sum before the activation function is applied, called the \emph{pre-activation}, and $\phi$ is the activation function. The output $a$ is the transformed value after the nonlinearity and then becomes part of the input to the next layer.
 
-This should look like an extension of Chapter 4 rather than a complete break from it. The affine part $w^\top x + b$ is still a weighted sum plus bias. What changes is that the network repeats this process across layers and applies a nonlinear activation function to the output of each affine transformation. Those nonlinearities allow the model to reshape the representation itself.
+This should look like an extension of Chapter~\ref{ch:linear-models} rather than a complete break from it. The affine part $w^\top x + b$ is still a weighted sum plus bias. What changes is that the network repeats this process across layers and applies a nonlinear activation function to the output of each affine transformation. Those nonlinearities allow the model to reshape the representation itself.
 
 \begin{prereqbridge}
 An affine transformation is a linear transformation followed by a shift. In practice, students can think of $w^\top x + b$ as ``score the input, then move the score up or down with a bias.''
@@ -341,7 +341,7 @@ Final probability $\hat{p}$ & $\sigma(s)$ & $0.44$ & $0.61$ \\
 \end{table}
 
 \begin{warningbox}
-A sigmoid or softmax output is a model score, not yet an action. If the model will make decisions, choose the threshold on validation data. If the output will be interpreted as a probability, check calibration separately instead of assuming the network did that for free.
+A sigmoid or softmax output is a model output, not yet an action. If the model will make decisions, choose the threshold on validation data. If the output will be interpreted as a probability estimate, check calibration separately instead of assuming the network did that for free.
 \end{warningbox}
 
 \begin{codeexample}[caption={From scratch: a complete forward pass with numerical values}]
@@ -416,8 +416,8 @@ For binary classification, a common choice is binary cross-entropy:
 \mathcal{L} = -\frac{1}{n}\sum_{i=1}^{n}\left[y_i \log \hat{p}_i + (1-y_i)\log(1-\hat{p}_i)\right].
 \]
 
-\begin{theorem}[Sigmoid cross-entropy produces the training signal \(\hat{p}-y\)]
-For a binary classifier with output score \(s\), predicted probability \(\hat{p}=\sigma(s)\), and label \(y\in\{0,1\}\), the derivative of binary cross-entropy with respect to the score simplifies to
+\begin{theorem}[Sigmoid cross-entropy produces the training signal \(\hat{p}-y\) for one example]
+For one example with binary-classifier output score \(s\), predicted probability \(\hat{p}=\sigma(s)\), and label \(y\in\{0,1\}\), the derivative of binary cross-entropy with respect to the score simplifies to
 \[
 \frac{d\mathcal{L}}{ds}=\hat{p}-y.
 \]
@@ -446,6 +446,8 @@ Multiplying and simplifying gives
 =\hat{p}-y.
 \]
 \end{proof}
+
+If the loss is averaged over \(n\) examples as in the definition above, then the derivative with respect to the score of example \(i\) is \((\hat p_i-y_i)/n\). The useful simplification is the same; the batch average just contributes the constant factor \(1/n\).
 
 This is the error signal for the output layer---the difference between what the model predicted and what the target required. The network is pushed upward when it underpredicts the true class and downward when it overpredicts it.
 
@@ -737,13 +739,14 @@ initialize first_moment and second_moment to zero
 initialize timestep = 0
 for each minibatch gradient grad:
     timestep = timestep + 1
+    reference_parameters = parameters
     first_moment = beta1 * first_moment + (1 - beta1) * grad
     second_moment = beta2 * second_moment + (1 - beta2) * (grad * grad)
     debiased_first = first_moment / (1 - beta1^timestep)
     debiased_second = second_moment / (1 - beta2^timestep)
     parameters = parameters - learning_rate * debiased_first / (sqrt(debiased_second) + epsilon)
     if using AdamW:
-        parameters = parameters - learning_rate * weight_decay * parameters
+        parameters = parameters - learning_rate * weight_decay * reference_parameters
 \end{codeexample}
 
 \begin{practicalnote}
@@ -832,7 +835,7 @@ For mini-batch activations \(a_1,\ldots,a_m\), batch normalization computes
 \[
 \hat a_i = \frac{a_i-\mu_B}{\sqrt{\sigma_B^2+\varepsilon}},
 \qquad
-y_i = \gamma \hat a_i + \beta,
+b_i = \gamma \hat a_i + \beta,
 \]
 where \(\mu_B\) and \(\sigma_B^2\) are the batch mean and variance, and \(\gamma,\beta\) are learned scale and shift parameters. The normalization stabilizes the signal; the learned affine step keeps the layer expressive.
 \end{mathlens}
@@ -864,7 +867,7 @@ If hidden activations are drifting in scale from batch to batch, batch normaliza
 \end{example}
 
 \begin{practicalnote}
-Batch normalization stabilizes the signal within a layer. A complementary technique called a \emph{residual connection} (or skip connection) helps the signal flow between layers. The idea is simple: instead of computing $h = f(x)$, the layer computes $h = f(x) + x$, adding the input directly to the output. If the transformation $f$ is unhelpful, the gradient can flow through the identity branch unchanged, so deep networks become much easier to train. Residual connections are a key design principle behind ResNets in vision and many transformer blocks in language.
+Batch normalization stabilizes the signal within a layer. A complementary technique called a \emph{residual connection} (or skip connection) helps the signal flow between layers. When the shapes match, instead of computing $h = f(x)$, the layer computes $h = f(x) + x$, adding the input directly to the output. When the shapes do not match, architectures typically insert a projection on the skip path before adding. If the transformation $f$ is unhelpful, the gradient can flow through the identity or projected branch, so deep networks become much easier to train. Residual connections are a key design principle behind ResNets in vision and many transformer blocks in language.
 \end{practicalnote}
 
 \subsection{Debugging a Broken Training Run}
@@ -1192,7 +1195,7 @@ print("updated w11:                ", round(new_w11, 4))
 
 Neural networks are flexible enough to fit very complicated patterns. That flexibility is powerful and dangerous. A large network can capture real structure, but it can also memorize accidents of the training set.
 
-The Chapter 3 question returns in sharper form: are we reducing training loss in a way that helps on unseen data, or are we merely fitting noise more effectively?
+The evaluation-discipline question from Chapter~\ref{ch:evaluation-discipline} returns in sharper form: are we reducing training loss in a way that helps on unseen data, or are we merely fitting noise more effectively?
 
 The best way to understand regularization in this chapter is not as a list of tricks. It is as a bias toward less brittle learned representations. These tools matter after the model can learn; they are not substitutes for fixing a broken optimization setup.
 
@@ -1205,7 +1208,7 @@ These techniques are different in mechanism but similar in purpose. They push th
 Dropout deserves one extra caution. It is useful because it prevents a network from depending too heavily on one hidden pathway, but it does not magically create information that is absent from the data. If the core representation is wrong, dropout only regularizes a bad model.
 
 \begin{example}[What Dropout Actually Changes]
-Suppose a hidden layer currently produces activations \((1.2, 0.9, 0.0, 1.1)\). With dropout rate \(0.5\), one training step might keep only the first and fourth activations, while another might keep the second and fourth. The next layer therefore cannot rely on one fragile path always being present. Over many updates, the network is pushed to spread evidence across several features. At inference time, all units are available again, usually with a compensating rescaling so the expected signal size stays comparable.
+Suppose a hidden layer currently produces activations \((1.2, 0.9, 0.0, 1.1)\). With dropout rate \(0.5\), one training step might keep only the first and fourth activations, while another might keep the second and fourth. The next layer therefore cannot rely on one fragile path always being present. Over many updates, the network is pushed to spread evidence across several features. In standard inverted-dropout implementations, the kept activations are rescaled during training, so at inference time all units are available again and the forward pass is unchanged.
 \end{example}
 
 \begin{figure}[t]
@@ -1381,13 +1384,13 @@ An image classifier does not begin with hand-coded edge counters written by the 
 \draw[arr] (a2) -- (a3);
 \end{tikzpicture}%
 }
-\caption{Representation learning is the real bridge to the next chapter. The model is not merely drawing a final boundary; it is building the space in which the final boundary becomes easier to draw.}
+\caption{Representation learning is the real bridge to later reusable-model chapters. The model is not merely drawing a final boundary; it is building the space in which the final boundary becomes easier to draw.}
 \label{fig:representation-hierarchy}
 \end{figure}
 
 This is the culmination of the chapter. Optimization is not only fitting a final boundary. It is teaching the model which internal coordinates make the task easier.
 
-This is also the bridge to the next chapter. This chapter learned features for one task through one training loop. The next chapter asks when those learned spaces become reusable assets across tasks, domains, and label budgets. Once representation learning becomes strong enough, we can pretrain models on broad data and reuse those learned spaces across many downstream tasks. That is the foundation-model story in one sentence.
+This is also the bridge to a later chapter on reusable representations. This chapter learned features for one task through one training loop. A later chapter asks when those learned spaces become reusable assets across tasks, domains, and label budgets. Once representation learning becomes strong enough, we can pretrain models on broad data and reuse those learned spaces across many downstream tasks. That is the foundation-model story in one sentence.
 
 \section{Common Mistakes with Neural Networks}
 
@@ -1397,7 +1400,7 @@ The usual mistakes here are failures of scientific judgment rather than failures
 
 \section{Looking Ahead}
 
-This chapter explained how neural learning works: hidden features, loss, backpropagation, and regularization. The next chapter asks when those learned spaces are reusable across tasks and how to tell whether transfer is really helping.
+This chapter explained how neural learning works: hidden features, loss, backpropagation, and regularization. The next chapter asks what it means for predictions to carry uncertainty, and how probabilistic structure can expose hidden variables, calibration problems, and uncertainty bands.
 
 \section*{Chapter Summary}
 
@@ -1421,7 +1424,6 @@ Consider a one-dimensional loss $L(w) = (w - 3)^2$ with initial weight $w_0 = 0$
 \item Repeat with $\eta = 1.5$. What happens?
 \item What learning rate would reach $w = 3$ in exactly one step?
 \end{enumerate}
-\item Given a learning curve where training loss decreases steadily but validation loss begins increasing after epoch 10, identify the failure type and propose two interventions.
 \item \textbf{Reading a learning curve.}
 A colleague shows you a plot where training loss decreases steadily, but validation loss stops improving at epoch~10 and then rises.
 \begin{enumerate}[label=(\alph*)]
@@ -1438,7 +1440,7 @@ A colleague shows you a plot where training loss decreases steadily, but validat
 \item Using Table~\ref{tab:minimum-credible-training-report}, sketch a minimum credible training report for a small binary classifier and name the simpler baseline it must beat. If you are carrying one case through the book, use the same case as your structure diagnosis sheet and state which failure pattern justified moving to a neural model.
 \item Give one example of a task for which a neural network may be justified because representation learning matters, and one example of a task where a simpler model may still be preferable. State what evidence would decide between them.
 \item A training run shows steadily falling training loss but worsening validation performance after epoch 12. Name the failure type, one sensible intervention, and whether the next move should be better regularization, a better baseline comparison, or a transfer-learning workflow from Chapter~\ref{ch:representation-foundation-models}.
-\item Take the toy parabola from the gradient descent example. Compute three update steps with learning rates $\eta = 0.01$, $\eta = 0.5$, and $\eta = 1.5$. For which rate does the loss decrease fastest? For which does it diverge?
+\item For the loss \(L(w)=(w-3)^2\) with initial value \(w_0=0\), compute three update steps with learning rates \(\eta = 0.01\), \(\eta = 0.5\), and \(\eta = 1.5\). For which rate does the loss decrease fastest? For which does it diverge?
 \end{exercises}
 
 \begin{challengeexercises}

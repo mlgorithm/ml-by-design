@@ -1,4 +1,4 @@
-# Chapter 5 Companion
+# Chapter 7 Companion: Optimization and Neural Networks (`ch05`)
 
 This chapter supports the transition from fixed features to learned internal representations.
 
@@ -45,7 +45,7 @@ What it shows:
 - a linear classifier and multilayer perceptron on a nonlinear `make_moons` dataset
 - the effect of adding hidden layers beyond a linear baseline
 - mini-batch training with validation-based model selection
-- the difference between `SGD`, `AdamW`, and `AdamW` with weight decay on a small training set
+- a linear baseline and MLP variants trained with `SGD`, `AdamW`, and `AdamW` with weight decay on a small training set
 
 Run it with:
 

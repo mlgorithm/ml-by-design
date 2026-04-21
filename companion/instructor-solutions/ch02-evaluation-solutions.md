@@ -1,5 +1,5 @@
 # Chapter 2 Exercise Solutions  
-## Prediction, Loss, and Evidence
+## Prediction, Loss, and Decision Rules
 
 **Instructor Notes**: This chapter establishes evaluation discipline that prevents common ML mistakes. Students struggle most with threshold choice, calibration concepts, and train/validation/test discipline. The evaluation plan artifact forces systematic thinking before training begins.
 

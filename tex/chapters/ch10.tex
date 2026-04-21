@@ -43,7 +43,7 @@ A claim audit asks three questions before the result is overread: what weaker cl
 \begin{figure}[t]
 \centering
 \resizebox{\linewidth}{!}{\input{figures/ch10-experiment-workflow}}
-\caption{The seven-step scientific experiment workflow transforms scores into bounded claims by systematically blocking rival explanations. Each checkpoint prevents common failure modes, while decision diamonds and feedback loops ensure experimental rigor before deployment.}
+\caption{The seven-step scientific experiment workflow transforms scores into bounded claims by systematically blocking rival explanations. Each checkpoint prevents common failure modes, while feedback loops preserve experimental rigor before deployment.}
 \label{fig:experiment-workflow}
 \end{figure}
 
@@ -139,7 +139,7 @@ Henderson et al.\ showed that deep reinforcement learning results could shift su
 
 \subsection{Split Logic Is Part of the Premise}
 
-Chapter 3 introduced protected evaluation, and the previous chapter showed how split logic can break sequential claims entirely. The same principle applies broadly. If the validation set guides model development, then it is part of development. If the test set influences design choices, it is no longer a clean test. Leakage does not need to be dramatic to be destructive. Protocol control is what makes the later questions about baselines, uncertainty, and mechanism worth asking at all.
+Chapter 3 introduced protected evaluation, and Chapter~\ref{ch:audio-time} showed how split logic can break sequential claims entirely. The same principle applies broadly. If the validation set guides model development, then it is part of development. If the test set influences design choices, it is no longer a clean test. Leakage does not need to be dramatic to be destructive. Protocol control is what makes the later questions about baselines, uncertainty, and mechanism worth asking at all.
 
 \section{Baselines and Controls: Better Than What?}
 
@@ -296,14 +296,14 @@ which is only an approximation, but it gives the right intuition: a result is le
 
 \subsection{Worked Example: Mean Improvement Is Not the Whole Uncertainty Story}
 
-Suppose the support-assistant team runs the same comparison over six seeds and records answer accuracy:
+Suppose the support-assistant team runs the same comparison over five seeds and records answer accuracy:
 \[
-\text{baseline}: 0.842,\ 0.839,\ 0.847,\ 0.841,\ 0.844,\ 0.838
+\text{baseline}: 0.842,\ 0.839,\ 0.847,\ 0.841,\ 0.844
 \]
 \[
-\text{new system}: 0.846,\ 0.845,\ 0.850,\ 0.844,\ 0.848,\ 0.843
+\text{new system}: 0.846,\ 0.845,\ 0.850,\ 0.844,\ 0.848
 \]
-The new system still looks better on average, but now the evidence is more honest. The baseline mean is about $0.842$, the new-system mean is about $0.846$, and the average improvement is again roughly $0.004$. That result is more credible than the single-run table because it survives repeated stochastic variation. But the scientific judgment is still incomplete until we ask how variable the run-to-run gap itself is.
+The new system still looks better on average, but now the evidence is more honest. The baseline mean is about $0.843$, the new-system mean is about $0.847$, and the average improvement is again roughly $0.004$. That result is more credible than the single-run table because it survives repeated stochastic variation. But the scientific judgment is still incomplete until we ask how variable the run-to-run gap itself is.
 
 If one or two seeds erase the gain entirely, the correct interpretation changes. The practical question is not only whether the new mean is larger. It is whether the improvement is stable enough that another practitioner running the documented pipeline should expect a similar outcome rather than an arbitrary reversal.
 
@@ -345,7 +345,7 @@ with uncertainty governed by the spread of the differences rather than by two se
 \end{mathlens}
 
 \begin{theorem}[Paired intervals are built from within-example differences]
-If two systems are scored on the same $n$ cases and $d_i$ denotes the paired difference on case $i$, then a two-sided \(100(1-\alpha)\%\) $t$-interval for the mean paired difference is
+If two systems are scored on the same $n$ cases, let $d_i$ denote the paired difference on case $i$. Assuming the paired differences are independent draws from an approximately normal distribution (or $n$ is large enough for the $t$ approximation to hold), a two-sided \(100(1-\alpha)\%\) $t$-interval for the mean paired difference is
 \[
 \bar d \pm t_{1-\alpha/2,\,n-1}\frac{s_d}{\sqrt{n}},
 \]
@@ -622,7 +622,7 @@ A result showing failure under noise, subgroup shift, or strict chronological ev
 
 \section{Prediction Is Not Causation}
 
-A predictive model learns associations between inputs and outputs. This is its strength: it can capture complex patterns in data and make useful forecasts. But this is also a critical boundary: \emph{association is not causation}. Learning that umbrella sales predict rain does not mean selling umbrellas causes rain. Learning that students who visit the tutoring center have lower subsequent grades does not mean the tutoring center causes poor performance. Yet many machine learning systems are deployed as interventions---actions taken on the basis of a model's prediction---and interventions have causal consequences. When a course-support assistant flags a student as at-risk, the university may withdraw tutoring resources, increase advising touchpoints, or restrict elective choices. If the model learned a correlation that is actually spurious or confounded, the intervention can backfire catastrophically.
+A predictive model learns associations between inputs and outputs. This is its strength: it can capture complex patterns in data and make useful forecasts. But this is also a critical boundary: \emph{association is not causation}. Learning that umbrella sales predict rain does not mean selling umbrellas causes rain. Learning that students who visit the tutoring center have lower subsequent grades does not mean the tutoring center causes poor performance. Yet many machine learning systems are deployed as interventions---actions taken on the basis of a model's prediction---and interventions have causal consequences. When a course-support assistant flags a student as at-risk, the university may assign tutoring resources, increase advising touchpoints, or restrict elective choices. If the model learned a correlation that is actually spurious or confounded, the intervention can backfire catastrophically.
 
 This section explores the distinction between prediction and causation, shows why it matters for deployment, and outlines conditions under which a predictive model can responsibly guide action.
 
@@ -650,7 +650,7 @@ The risk is steepest when the modeler does not notice the causal assumption embe
 A \emph{confounder} is a third variable that influences both the feature and the outcome, creating a spurious association. Classic examples include:
 \begin{itemize}[leftmargin=*]
 \item A hospital that treats sicker patients appears to have worse survival outcomes. The confounder is \emph{illness severity}: sicker patients both receive more intensive treatment and have lower survival rates. A naive model trained on treatment type and outcome would learn that intensive treatment predicts poor outcomes, even if the treatment is actually beneficial.
-\item A study finds that people who take vitamin supplements have worse health outcomes. The confounder is \emph{health consciousness}: people with preexisting illness are more likely to take supplements and also more likely to have poor outcomes. The supplements did not cause the poor outcomes; the underlying condition did.
+\item A study finds that people who take vitamin supplements have worse health outcomes. The confounder is \emph{preexisting health status}: people with preexisting illness are more likely to take supplements and also more likely to have poor outcomes. The supplements did not cause the poor outcomes; the underlying condition did.
 \item In student support, a model might find that students who attend help sessions have lower subsequent exam scores. The confounder is \emph{academic struggle}: students who struggle seek help and also score lower on exams. The help sessions themselves might be beneficial, but the model learned a spurious association.
 \end{itemize}
 
@@ -679,15 +679,15 @@ It appears males are admitted at a higher rate overall. But stratifying by depar
 \toprule
 Department & Gender & Admission Rate & Sample Size \\
 \midrule
-STEM & Male & $50\%$ & $80$ \\
-STEM & Female & $60\%$ & $50$ \\
-Humanities & Male & $40\%$ & $120$ \\
-Humanities & Female & $35\%$ & $50$ \\
+STEM & Male & $30\%$ & $80$ \\
+STEM & Female & $35\%$ & $80$ \\
+Humanities & Male & $55\%$ & $120$ \\
+Humanities & Female & $60\%$ & $20$ \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Within \emph{each} department, females are admitted at equal or higher rates. Yet the aggregate rate favors males. The confounder is \emph{application volume}: more males apply to Humanities (a department with lower admission rates overall), while more females apply to STEM (higher rates). The aggregate trend is a statistical artifact of the distribution of applicants across departments, not evidence of gender-based bias in admission decisions.
+Within \emph{each} department, females are admitted at higher rates. Yet the aggregate rate favors males. The confounder is \emph{application volume}: more females apply to STEM, the more selective department, while more males apply to Humanities, the less selective one. The aggregate trend is a statistical artifact of the distribution of applicants across departments, not direct evidence of gender-based bias in admission decisions.
 \end{example}
 
 Simpson's paradox is not merely an academic curiosity. It shows that predictive associations learned from aggregate data can misguide deployment decisions. A model trained on the aggregate data would learn that gender predicts admission, but the causally relevant story is departmental selectivity and application distribution, not discrimination.
@@ -697,7 +697,7 @@ Simpson's paradox is not merely an academic curiosity. It shows that predictive 
 Not all deployments of predictive models rest on causal claims. A system that recommends a movie based on viewing history does not require a causal explanation for why you liked previous films; association is enough. But many real-world deployments are interventions: the system's prediction triggers an action that changes someone's experience or outcome.
 
 \begin{practicalnote}
-If your deployment decision is an \emph{intervention}---if acting on the model's prediction changes the feature the model learned from---then you must be explicit about the causal assumptions. Write them down in the claim sheet before deployment.
+If your deployment decision is an \emph{intervention}---if acting on the model's prediction changes a person's treatment, conditions, or outcome process---then you must be explicit about the causal assumptions. Write them down in the claim sheet before deployment.
 \end{practicalnote}
 
 For an intervention to rest safely on a predictive model, three conditions should hold:
@@ -715,17 +715,17 @@ A system learns that high school students who take Advanced Placement exams have
 Conversely, an intervention that respects causal direction is more likely to succeed:
 
 \begin{example}[When Model Predictions Can Guide Intervention]
-A model trained on randomized tutoring sessions learns that students assigned to tutoring improve their grades. Here, the causal direction is clear: the intervention (tutoring assignment) is the cause, and the outcome (grade improvement) is the result. A deployed system that uses this model to identify which students would benefit most from tutoring can safely recommend tutoring. The recommendation respects the causal structure learned in the experiment.
+A model trained on randomized tutoring sessions learns that students assigned to tutoring improve their grades on average. Here, the causal direction is clear: the intervention (tutoring assignment) is the cause, and the outcome (grade improvement) is the result. A deployed system can therefore use this evidence to justify tutoring as an intervention for similar students in the same operational setting. More ambitious claims about which students would benefit \emph{most} would require additional evidence about heterogeneous treatment effects.
 \end{example}
 
 \subsection{Observational Data, Experiments, and Causal Inference}
 
-The gold standard for establishing causation is a randomized experiment: randomly assign some units to treatment and others to control, keep everything else constant, and measure the difference in outcomes. Random assignment ensures that treatment and control groups do not differ on any confounder, measured or unmeasured.
+The gold standard for establishing causation is a randomized experiment: randomly assign some units to treatment and others to control, keep everything else constant, and measure the difference in outcomes. Random assignment aims to balance confounders, measured and unmeasured, across groups in expectation. In any finite experiment some imbalance can remain by chance, but randomization makes that imbalance analyzable rather than systematically tied to treatment choice.
 
 Observational data---data where the experimenter did not control assignment---cannot establish causation with certainty. But it is not useless. When an experiment is infeasible due to ethics, cost, or time, causal inference methods can offer partial remedies by making and testing strong assumptions about confounders.
 
 \begin{itemize}[leftmargin=*]
-\item \textbf{Instrumental variables:} If a variable $Z$ influences $X$ but does not directly influence $Y$ except through $X$, then $Z$ can help isolate the causal effect of $X$ on $Y$. Example: latitude determines temperature access to heating fuel (it influences fuel availability, which affects heating), but latitude does not directly affect health except through heating. Using latitude as an instrument can help estimate the causal effect of heating on health even though we cannot randomly assign heating to people.
+\item \textbf{Instrumental variables:} If a variable $Z$ influences $X$ but does not directly influence $Y$ except through $X$, then $Z$ can help isolate the causal effect of $X$ on $Y$. Example: random assignment to a tutoring voucher changes who actually attends tutoring, but the voucher itself should affect exam performance only through tutoring uptake. The voucher can therefore serve as an instrument for tutoring attendance when compliance is imperfect.
 \item \textbf{Difference-in-differences:} If two populations follow parallel trends before an intervention, then the post-intervention divergence can be attributed to the intervention itself. This requires the strong assumption that trends would have remained parallel in the counterfactual world without intervention.
 \item \textbf{Regression discontinuity:} If assignment to treatment is determined sharply by crossing a threshold (e.g., students scoring exactly at the cutoff for financial aid eligibility), then comparing outcomes just above and just below the threshold can estimate the causal effect. The assumption is that other factors do not change discontinuously at the same threshold.
 \end{itemize}
@@ -744,7 +744,7 @@ If your deployment decision is an intervention, and you cannot run an experiment
 
 \subsection{Causal and Predictive Reasoning in the Running Cases}
 
-The course-support assistant case illustrates the distinction vividly. Suppose the model uses ``number of help-desk visits in the first two weeks'' as a feature, and it learns that students with fewer visits score lower on midterms. An administrator might propose an intervention: place students with few visits into a mandatory tutoring program. But the causally relevant question is: does help-seeking \emph{itself} cause poor performance, or does help-seeking reveal struggling students who would score poorly regardless of whether they get additional tutoring? If the latter, then the feature is a symptom, not a cause, and the intervention may not help---or may even harm, if mandatory tutoring takes time away from independent study that weaker students need.
+The course-support assistant case illustrates the distinction vividly. Suppose the model uses ``number of help-desk visits in the first two weeks'' as a feature, and it learns that students with fewer visits score lower on midterms. An administrator might propose an intervention: place students with few visits into a mandatory tutoring program. But the causally relevant question is: does additional help-seeking improve performance, or do fewer visits proxy disengagement, schedule constraints, lack of access, or other barriers? If the latter, then the feature is a symptom, not a cause, and the intervention may not help---or may even harm, if mandatory tutoring takes time away from independent study that weaker students need.
 
 A safer interpretation is that help-seeking behavior is a proxy for struggle, and struggle is the true cause of lower scores. The intervention should target struggle directly: improved teaching, better prerequisite support, adaptive problem sets. Using the model to \emph{identify} at-risk students is reasonable. Using it to determine the \emph{nature} of the intervention requires causal evidence.
 
@@ -752,7 +752,7 @@ A safer interpretation is that help-seeking behavior is a proxy for struggle, an
 The model flags a student as at-risk because they have not visited the help desk. Two causal hypotheses:
 \begin{enumerate}[leftmargin=*]
 \item \textbf{Help-desk visits cause grade improvement.} Intervene by providing more tutoring, more accessible office hours, or more intensive one-on-one support.
-\item \textbf{Struggle causes low visits and low grades; tutoring is a symptom, not a cause.} Intervene by improving the curriculum, providing early warning feedback, or adjusting prerequisites.
+\item \textbf{Low visits are a symptom of disengagement, access barriers, or prerequisite gaps.} Tutoring may help some students, but it may not address the root cause. Intervene by improving the curriculum, providing early warning feedback, adjusting prerequisites, or making support easier to access.
 \end{enumerate}
 The model \emph{predicts} lower grades from fewer visits, but it does not disambiguate the causal hypotheses. A disciplined claim sheet would state which hypothesis the system relies on and note the evidence supporting it. If the evidence is observational only, the claim should be cautious.
 \end{example}
@@ -760,7 +760,7 @@ The model \emph{predicts} lower grades from fewer visits, but it does not disamb
 The pedestrian detection case is less causally loaded. The model predicts whether a pedestrian is in the image, and the downstream action is to brake if a pedestrian is detected. The causal chain is clear: a pedestrian exists in the world, the system detects them (imperfectly), and the vehicle brakes if detection is confident. The causal assumption---that a detected pedestrian is actually present---is modest. What matters for safety is the model's \emph{reliability}: false negatives (missed pedestrians) are costly, and false positives (phantom detections) cause wasted braking or annoyance. These are deployment-quality questions, not causal-inference questions. The prediction is faithful to the causal reality in a way that socioeconomic or medical predictions often are not, because the system is detecting a physical object rather than inferring a latent human trait or social outcome.
 
 \begin{practicalnote}
-Prediction is not causation, but some predictions are closer to causal truth than others. Detecting a pedestrian is closer to causal truth than inferring individual potential from test scores. When designing an intervention, ask: how much of the model's learned association captures a true causal mechanism, and how much is spurious correlation or confounder confusingly? The answer should be in the claim sheet.
+Prediction is not causation, but some predictions are closer to causal truth than others. Detecting a pedestrian is closer to causal truth than inferring individual potential from test scores. When designing an intervention, ask: how much of the model's learned association captures a true causal mechanism, and how much is spurious correlation or confounding? The answer should be in the claim sheet.
 \end{practicalnote}
 
 By the end of this chapter, the reader should be able to write down not only what result they obtained, but what scientific sentence it actually supports. Earlier artifacts in the book named the decision, the metric, the evaluation boundary, the baseline family, the structure diagnosis, the training claim, the reuse plan, the modality-specific deployment constraints, and the sequential prediction-time contract. This chapter's sheet adds the scientific-argument layer: which premise is fixed, which rival explanation is blocked, and what scope remains.
@@ -795,7 +795,7 @@ Stronger claim still unsupported & What the result does \emph{not} justify yet \
 \end{thinkingtool}
 
 \begin{example}[Filled Experiment Claim Sheet]
-For the $0.004$ gain in Table~\ref{tab:score-improved-so-what}, a disciplined sheet might read as follows: claim in one sentence is ``the contextual-retrieval support assistant improves held-out answer accuracy over the lexical-template baseline on this question set''; strongest baseline is the grounded lexical-template system rather than an ungrounded chatbot; protocol assumptions are identical question splits, frozen policy-document snapshot, fixed grading rubric, and no test-set reuse; sources of randomness include initialization, retrieval tie breaking, and generation stochasticity; repeated-run summary now shows a modest mean gain across six seeds, so the pilot no longer rests on one lucky run; essential ablations are still missing for that pilot comparison, so the mechanism behind the gain remains unresolved; critical slices include multilingual questions, distressed messages, and high-risk advising requests where aggregate accuracy may hide failure; remaining alternative explanations include weak controls, better retrieval rather than better generation, and unsafe slice tradeoffs; strongest supported claim right now is that under this protocol the contextual-retrieval system achieved a modest accuracy gain on this benchmark; stronger unsupported claim is that the new system is generally better for course support or safer for deployment.
+For the $0.004$ gain in Table~\ref{tab:score-improved-so-what}, a disciplined sheet might read as follows: claim in one sentence is ``the contextual-retrieval support assistant improves held-out answer accuracy over the lexical-template baseline on this question set''; strongest baseline is the grounded lexical-template system rather than an ungrounded chatbot; protocol assumptions are identical question splits, frozen policy-document snapshot, fixed grading rubric, and no test-set reuse; sources of randomness include initialization, retrieval tie breaking, and generation stochasticity; repeated-run summary now shows a modest mean gain across five seeds, so the pilot no longer rests on one lucky run; essential ablations are still missing for that pilot comparison, so the mechanism behind the gain remains unresolved; critical slices include multilingual questions, distressed messages, and high-risk advising requests where aggregate accuracy may hide failure; remaining alternative explanations include weak controls, better retrieval rather than better generation, and unsafe slice tradeoffs; strongest supported claim right now is that under this protocol the contextual-retrieval system achieved a modest accuracy gain on this benchmark; stronger unsupported claim is that the new system is generally better for course support or safer for deployment.
 \end{example}
 
 \section{Common Mistakes in Experimental Work}

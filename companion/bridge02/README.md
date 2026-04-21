@@ -5,7 +5,7 @@ This bridge supports probability, loss functions, and optimization concepts for 
 It focuses on four ideas:
 
 - Bayes' theorem and how priors affect posterior beliefs
-- the sigmoid function as a probability model
+- the sigmoid function as a probability link for binary models
 - log-loss (binary cross-entropy) and its role in measuring prediction quality
 - gradient descent and convergence with different learning rates
 
@@ -17,10 +17,10 @@ What it shows:
 
 - Bayes' theorem applied to a student crisis detection classifier
 - how varying the prior belief changes the posterior probability
-- the sigmoid function mapping real numbers to probabilities (0, 1)
+- the sigmoid function mapping real-valued scores to numbers in `(0, 1)` for binary probability estimates
 - effect of input scaling on sigmoid steepness
 - log-loss curves showing penalty for confident wrong predictions
-- gradient descent on a 1D nonconvex loss with multiple learning rates
+- gradient descent on a 1D convex quartic loss with multiple learning rates
 - a full logistic regression training loop: forward pass, log-loss, gradient computation, and weight updates
 - convergence comparison between learned and true decision boundaries
 

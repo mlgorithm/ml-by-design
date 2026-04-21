@@ -1,5 +1,5 @@
 # Week 2 Completion: Exercise Solutions Master Guide
-## Chapters 1, 2, & 8 - Complete Instructor Package
+## Companion ch01, ch02, and ch08 / printed Chapters 1, 2, and 13 - Complete Instructor Package
 
 **Date**: March 26, 2026  
 **Status**: Production Ready ✅
@@ -10,8 +10,8 @@
 
 ### **Complete Solution Sets Created**:
 1. **[Chapter 1 Solutions](ch01-framing-solutions.md)** - Framing Learning Problems (13 exercises)
-2. **[Chapter 2 Solutions](ch02-evaluation-solutions.md)** - Prediction, Loss, and Evidence (12+ exercises)  
-3. **[Chapter 3 Solutions](ch08-nlp-solutions.md)** - Language: Context and Grounding (12 exercises)
+2. **[Chapter 2 Solutions](ch02-evaluation-solutions.md)** - Prediction, Loss, and Decision Rules (12+ exercises)
+3. **[Chapter 13 Solutions](ch08-nlp-solutions.md)** - Language: Context and Grounding (12 exercises)
 
 ### **What Each Package Contains**:
 ✅ **Quick Check Solutions** - Complete worked answers with common mistakes identified  
@@ -39,9 +39,9 @@
 
 ---
 
-## **Three-Chapter Teaching Arc**
+## **Selected Solution Packages**
 
-### **Chapter 1 → 2 → 8 Learning Progression**:
+### **Foundations Plus Language Module**:
 
 **Chapter 1 (Framing)**: 
 - **Foundation**: Problem-first methodology  
@@ -53,7 +53,7 @@
 - **Artifact**: Evaluation plan (systematic thinking before training)  
 - **Key Skill**: Connecting metrics to decisions, avoiding common evaluation mistakes
 
-**Chapter 8 (NLP Context)**:
+**Printed Chapter 13 (NLP Context)**:
 - **Foundation**: Domain-specific systematic analysis (context audit)
 - **Artifact**: Context-and-grounding card (NLP system design)
 - **Key Skill**: Matching representation to task requirements
@@ -62,7 +62,7 @@
 Students who complete all three can:
 1. **Frame any ML problem** systematically (Ch 1)
 2. **Design valid evaluation** before building models (Ch 2)  
-3. **Apply systematic analysis** to domain-specific challenges (Ch 8)
+3. **Apply systematic analysis** to domain-specific challenges (Ch 13)
 4. **Produce professional artifacts** that transfer to industry/research
 
 ---
@@ -71,14 +71,14 @@ Students who complete all three can:
 
 ### **Course Integration Options**:
 
-**Option A: Full Adoption** 
-- Use all three chapters in sequence (weeks 1-3 of ML course)
-- Builds strong methodological foundation before algorithm instruction
+**Option A: Foundations + Language Module**
+- Use Chapters 1-2 early, then use the language package with printed Chapter 13
+- Builds strong methodological foundation before later domain-specific analysis
 - Recommended for 10+ week courses
 
 **Option B: Core + Specialty**
 - Require Ch 1-2 for all students (methodology core)
-- Ch 8 for NLP track or elective module
+- Printed Chapter 13 for NLP track or elective module
 - Good for courses with multiple specialization paths
 
 **Option C: Workshop Format**
@@ -171,8 +171,8 @@ As co-creator of this solution package, I can provide:
 ## **Next Steps for Publication**
 
 ### **Week 3-4 Priorities**:
-1. **Additional visual elements** - Chapter 7, 10, 11 key figures
-2. **Remaining exercise solutions** - Chapters 3-7, 9-12 (following same model)
+1. **Additional visual elements** - printed Chapters 12, 16, and 17 key figures
+2. **Remaining exercise solutions** - printed Chapters 3-12 and 14-18 (following same model)
 3. **External reviewer feedback** - Test solutions with 2-3 faculty reviewers
 4. **UiB integration feedback** - Incorporate institutional guidance
 

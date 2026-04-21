@@ -1,4 +1,4 @@
-# Chapter 2 Companion
+# Chapter 2 Companion: Prediction, Loss, and Decision Rules (`ch02`)
 
 This chapter is about three closely connected ideas:
 

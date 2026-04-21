@@ -1,7 +1,7 @@
 \chapter{Reliability: Bias, Robustness, Privacy, and Safety}
 \label{ch:reliability}
 
-Chapter~\ref{ch:experiments-claims} asked what an experiment justifies. This chapter asks a harder practical question: even if the result is real, is the system reliable enough to trust under changing conditions and real consequences? Evidence is necessary, but it is not sufficient. A model can be empirically strong and still be unacceptable because it fails under shift, harms subgroups unevenly, leaks private information, or cannot fail safely. This chapter treats bias, robustness, privacy, and safety as parts of one reliability question: does the system stay within acceptable bounds for the people, conditions, and harms that actually matter in deployment? By the end of the chapter, the reader should be able to judge reliability as bounded failure across the full pipeline.
+Chapter~\ref{ch:experiments-claims} asked what an experiment justifies. This chapter asks a harder practical question: even if the result is real, is the system reliable enough to trust under changing conditions and real consequences? Evidence is necessary, but it is not sufficient. A model can be empirically strong and still be unacceptable because it fails under shift, harms subgroups unevenly, leaks private information, cannot fail safely, or breaks the first time an adversary designs an input to cross its guardrails. This chapter treats bias, robustness, privacy, safety, and adversarial security as parts of one reliability question: does the system stay within acceptable bounds for the people, conditions, harms, and motivated attackers that actually matter in deployment? By the end of the chapter, the reader should be able to judge reliability as bounded failure across the full pipeline.
 
 \section{Reliability Is a Pipeline Property}
 
@@ -18,7 +18,7 @@ The opening vocabulary is worth fixing early. A \emph{harm taxonomy} is a simple
 \begin{figure}[t]
 \centering
 \resizebox{\linewidth}{!}{\input{figures/ch11-reliability-matrix}}
-\caption{The reliability evaluation matrix shows that each reliability dimension (bias, robustness, privacy, safety) requires specific checks across every pipeline stage. No single metric captures full reliability; systematic assessment across all cells prevents deployment of systems with hidden failure modes.}
+\caption{The reliability evaluation matrix shows that each reliability dimension (bias, robustness, privacy, safety) requires specific checks across every pipeline stage. No single metric captures full reliability; systematic assessment across all cells reduces the chance that systems with obvious unexamined failure modes are deployed.}
 \label{fig:reliability-matrix}
 \end{figure}
 
@@ -122,7 +122,7 @@ If equalized odds holds across groups, then $\mathrm{TPR}_a$ and $\mathrm{FPR}_a
 \end{advancednote}
 
 \begin{example}[When fairness metrics disagree]
-Consider a hiring classifier evaluated on two groups, A and B. Group A has a base rate of 40\% qualified candidates; Group B has 20\%. A model with equal true positive rates (TPR = 0.80 for both groups) satisfies \emph{equalized odds} but violates \emph{demographic parity}: it accepts 32\% of Group A ($0.80 \times 0.40$) but only 16\% of Group B ($0.80 \times 0.20$). No single threshold can satisfy both criteria when base rates differ---a fundamental tension that forces an explicit design choice about which fairness property the system should prioritize.
+Consider a hiring classifier evaluated on two groups, A and B. Group A has a base rate of 40\% qualified candidates; Group B has 20\%. In a simple toy case, suppose the model has the same true positive and false positive rates in both groups, with TPR $= 0.80$ and FPR $= 0$. It then satisfies \emph{equalized odds} but still violates \emph{demographic parity}: it accepts 32\% of Group A ($0.80 \times 0.40$) but only 16\% of Group B ($0.80 \times 0.20$). No nontrivial classifier can generally satisfy both criteria when base rates differ, except in degenerate cases such as predicting all negative or all positive. This tension forces an explicit design choice about which fairness property the system should prioritize.
 \end{example}
 
 \begin{example}[Real-World Callout: Aggregate Performance Hid Unequal Failure]
@@ -193,7 +193,7 @@ Suppose a course-support assistant is evaluated under two conditions:
 \end{itemize}
 Across repeated runs, a baseline support model achieves mean familiar-wording accuracy about $0.914$ but mean shifted-wording accuracy only about $0.627$. After adding paraphrase augmentation and more diverse retrieval-side query rewriting during training, the model's mean familiar-wording accuracy drops to about $0.892$ but shifted-wording accuracy rises to about $0.812$.
 
-This is a reliability result, not merely an accuracy result. The right claim is not that augmentation is universally better. It is that the new training procedure improves robustness to the specific wording shift of interest while trading away some performance on the familiar slice. Reliability often lives in these tradeoffs. The companion demo is useful for exactly this reason: mitigation may reduce one subgroup weakness or one shift failure without making the whole problem disappear.
+This is a reliability result, not merely an accuracy result. The right claim is not that augmentation is universally better. It is that the new training procedure improves robustness to the specific wording shift of interest while trading away some performance on the familiar slice. Reliability often lives in these tradeoffs: mitigation may reduce one subgroup weakness or one shift failure without making the whole problem disappear.
 
 \subsection{Stress Tests Should Be Designed, Not Improvised}
 
@@ -450,6 +450,200 @@ No-deploy condition & What finding would be strong enough to delay, narrow, or r
 For the course-support assistant, a disciplined review card would name critical slices such as multilingual phrasing, underrepresented language registers, visa-related questions, disability-accommodation requests, and distressed student messages; shift scenarios such as a new semester, revised syllabus wording, new learning-platform terminology, or policy-page reorganization; spurious cues such as course codes or standard-form wording that may not survive outside the training setting; privacy exposures such as student identifiers, health disclosures, and accommodation records; severe hazards such as answering high-risk questions directly when escalation is required; fallback path as human advising or specialist support teams; monitoring triggers as subgroup degradation, retrieval failures on policy pages, or rising escalation misses; and a no-deploy condition such as unacceptable failure on high-risk slices even when overall metrics remain strong.
 \end{example}
 
+\section{Interpretability and Explanations: The XAI Toolkit}
+\label{sec:xai-toolkit}
+
+Reliability does not always require a full explanation of every prediction, but it often benefits from understanding something about \emph{why} a model behaves as it does, not just \emph{what} it predicts. Interpretability methods---often grouped under ``Explainable AI'' (XAI)---aim to make model behavior legible to developers, auditors, and stakeholders. This section introduces the main families, what they actually show, and when they mislead.
+
+\subsection{Feature Attribution Methods}
+
+Feature attribution methods assign an importance score to each input feature for a given prediction. They answer: ``which features contributed most to this output?''
+
+\textbf{SHAP (SHapley Additive exPlanations).} Based on Shapley values from cooperative game theory, SHAP assigns each feature a contribution to the prediction, with a strong theoretical guarantee: the contributions sum to the difference between the model's output and the average prediction. SHAP values are \emph{local} (computed per prediction) but can be aggregated for global importance.
+
+\textbf{LIME (Local Interpretable Model-agnostic Explanations).} LIME explains a single prediction by fitting a simple, interpretable model (typically linear) to perturbed versions of the input. The simple model's coefficients indicate feature importance \emph{locally}, near the specific input. LIME is model-agnostic: it treats the model as a black box and only needs query access.
+
+\textbf{Partial Dependence Plots (PDP).} PDPs show how the model's average prediction changes as one feature varies, marginalizing over all other features. They are \emph{global} explanations: they show the model's overall reliance on a feature, not its behavior on a specific input. PDPs are easy to compute and interpret but can be misleading when features are correlated---the marginalization may create unrealistic feature combinations.
+
+\begin{practicalnote}
+Start with SHAP for local explanations (``why did the model flag this student?'') and PDPs for global explanations (``which features matter most overall?''). Use LIME when SHAP is too slow (SHAP's exact computation can be expensive for large models). Always compare at least two methods: if SHAP and LIME disagree on the important features for a prediction, treat that as a cue to inspect the background distribution, perturbation scheme, and local fidelity more carefully.
+\end{practicalnote}
+
+\subsection{Counterfactual Explanations}
+
+A counterfactual explanation answers: ``what is the smallest change to the input that would change the prediction?'' For a student flagged as CONCERNING, a counterfactual might be: ``if the student had submitted 2 more assignments on time, the prediction would have been ROUTINE.'' Counterfactuals are intuitive for stakeholders because they describe actionable changes, not abstract importance scores.
+
+\begin{example}[Counterfactual for Student Support]
+The early-warning model flags Student~A as URGENT. A counterfactual explanation identifies a joint change that would have produced a ROUTINE prediction: the student's login frequency was above 3 per week instead of 0, and the most recent message did not contain crisis-related keywords. The advisor can see that the prediction hinges on engagement drop \emph{and} message content together, not just one factor. This is more actionable than ``SHAP says login frequency has the highest importance.''
+\end{example}
+
+\begin{warningbox}
+Counterfactual explanations can suggest changes that are unrealistic or unethical. ``If the student were male, the prediction would change'' is a valid counterfactual but an inappropriate recommendation. Always constrain counterfactuals to actionable, non-protected features.
+\end{warningbox}
+
+\subsection{When Explanations Mislead}
+
+Interpretability methods have well-documented failure modes:
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Explanations can be unstable.} Small changes to the input can produce dramatically different SHAP values or LIME explanations, even when the prediction does not change. If the explanation is more sensitive than the prediction, it should not be trusted.
+\item \emph{Post-hoc explanations are not faithful to the model.} LIME fits a simple model to approximate the complex model locally. The approximation may be inaccurate. A LIME explanation that says ``feature A was most important'' does not guarantee that the model actually relied on feature A---it only guarantees that a linear approximation says so.
+\item \emph{Feature importance $\neq$ causation.} SHAP values measure statistical association, not causal influence. A feature can have high SHAP importance because it is correlated with the true causal factor, not because it caused the prediction. Stakeholders who interpret SHAP values as causal claims will reach wrong conclusions.
+\item \emph{Saliency maps can be manipulated.} For neural networks, gradient-based saliency maps (which highlight input regions the model is ``looking at'') can be adversarially manipulated: a model can be trained to produce misleading saliency maps that highlight human-intuitive regions while actually relying on different features.
+\end{itemize}
+
+\begin{thinkingtool}
+\textbf{Explanation audit.} Before trusting an explanation method, test it: does the explanation change when the prediction does not? Does it agree with other explanation methods? Does it identify features that domain experts consider relevant? If the answer to any of these is ``no,'' the explanation method needs more scrutiny than the model it is trying to explain.
+\end{thinkingtool}
+
+\section{Uncertainty Quantification for Reliability}
+\label{sec:uq-reliability}
+
+Chapter~\ref{ch:probabilistic-models} introduced aleatoric and epistemic uncertainty. This section connects uncertainty to reliability: how can uncertainty estimates make deployed systems safer?
+
+\subsection{Predictive Intervals and Conformal Prediction}
+
+A \emph{predictive interval} wraps a point prediction with a range: the predicted value is \(\hat{y}\), and a 90\% predictive interval is constructed so that, under its assumptions, intervals of this kind contain the true value about 90\% of the time. For a reliable system, the interval must be well-calibrated: 90\% intervals should contain the true value 90\% of the time.
+
+\emph{Conformal prediction} provides distribution-free predictive intervals with a finite-sample \emph{marginal} coverage guarantee under exchangeability. The key idea: use a calibration set to measure how wrong the model's predictions are (the \emph{nonconformity scores}), then use the empirical distribution of those scores to construct intervals for new predictions. The guarantee is that the resulting intervals have valid marginal coverage over future examples---regardless of the model family, the data distribution, or the sample size---as long as the calibration data is exchangeable with the test data. This does \emph{not} guarantee the same coverage for every individual input or subgroup.
+
+\begin{practicalnote}
+Conformal prediction is appealing because it makes few assumptions about the model family or score distribution. The trade-off is that the intervals may be wide (uninformative) if the underlying predictor is weak, the target coverage is high, or the nonconformity score is conservative, and the guarantee still depends on exchangeability between calibration and deployment data. Conformal prediction does not make a bad model reliable or automatically tighten its intervals---it makes uncertainty explicit while preserving valid marginal coverage under the stated assumptions.
+\end{practicalnote}
+
+\subsection{Ensemble Disagreement as a Reliability Signal}
+
+Deep ensembles (Chapter~\ref{ch:probabilistic-models}) provide a practical reliability signal: when ensemble members disagree strongly on a prediction, the system should not trust that prediction. This can be operationalized as a deployment rule:
+
+\begin{itemize}[leftmargin=*]
+\item If ensemble disagreement is below a threshold, serve the prediction automatically.
+\item If disagreement exceeds the threshold, flag the prediction for human review or defer the decision.
+\item Monitor the fraction of flagged predictions over time. If it increases, the deployment distribution may be shifting away from the training distribution.
+\end{itemize}
+
+\begin{example}[Ensemble Disagreement for Pedestrian Detection]
+The campus pedestrian detector uses an ensemble of 5 models. During normal daytime operation, ensemble disagreement (measured as the variance of detection probabilities across models) averages 0.02. During a heavy rainstorm---a condition rarely seen in training---disagreement spikes to 0.18. The system automatically switches to conservative mode: lower speed, higher sensitivity, and a human-driver alert. The ensemble disagreement served as an early warning that the model was operating outside its training distribution.
+\end{example}
+
+\begin{decisionbox}
+\textbf{Uncertainty-aware deployment rules:}
+\begin{itemize}
+\item Define a disagreement or uncertainty threshold based on validation-set performance.
+\item Below threshold: serve predictions automatically.
+\item Above threshold: defer to human judgment, increase safety margins, or abstain.
+\item Monitor the threshold-crossing rate as a drift indicator.
+\item Re-calibrate the threshold quarterly or after retraining.
+\end{itemize}
+\end{decisionbox}
+
+\section{Security and Abuse as Reliability Problems}
+\label{sec:security-reliability}
+
+Everything the chapter has covered so far assumed that the pressure on the system came from the world: noisy sensors, shifting populations, imperfect labels, unpredictable users. This section adds the pressure that comes from an \emph{adversary}: someone deliberately crafting inputs, data, or queries to make the system behave in a way it should not. Reliability under natural shift is not the same as reliability under adversarial pressure. A model can be perfectly robust to rain, lighting, and phrasing changes and still fail the moment someone designs an input to cross its guardrails.
+
+The book's framing still works here. Security is another bounded-failure problem: given a specific adversary, which failures are unacceptable, and what mitigation, monitoring, and rollback path keeps the envelope closed? The mistake is to treat security as either a separate discipline with its own jargon or as something ML teams can inherit wholesale from the security organization. Neither view survives contact with a real deployment. Adversaries adapt to the behavior of the deployed model, which means the ML team is the only group with enough context to name the threats that matter for its particular system.
+
+\subsection{Threat Modeling Before Controls}
+
+A threat model is a named story about who might attack the system, what they are trying to achieve, what input channels they can reach, and what a successful attack would look like. Controls come after, not before. A team that leaps to ``we should rate-limit the API'' before writing down the threat model has solved one narrow case---usually the most recent incident---and ignored the rest. The useful vocabulary is short:
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Asset:} what is worth protecting. Model weights, training data, user data, the integrity of output decisions, compliance with regulation.
+\item \textbf{Adversary:} who might attack, and with what capability. An external user with only the query API, a logged-in user, an insider with training-data access, or a supplier whose data enters the pipeline.
+\item \textbf{Attack surface:} every input path the adversary can influence. API endpoints, uploaded documents, feedback signals, third-party data feeds, and logs that feed future retraining.
+\item \textbf{Success criterion:} what would count as a successful attack. Making the model produce a forbidden answer, extracting training data, causing a classifier to misfire in a specific way, copying the model, or poisoning a future retraining run.
+\item \textbf{Mitigation and monitoring:} the pair of defenses. A mitigation blocks or shrinks the success case; a monitoring signal tells the team when an attack is being attempted or has succeeded.
+\end{itemize}
+
+Writing the threat model before choosing controls forces the team to decide which attacks are in scope and which are explicitly out of scope. The second list matters as much as the first. A deployed system that claims to defend against everything usually defends effectively against nothing.
+
+\subsection{Data and Feedback Poisoning}
+
+Data poisoning is the training-time version of an adversarial attack. The adversary places carefully chosen examples in the training or fine-tuning data so that the learned model behaves incorrectly in ways that serve the attacker. Poisoning ranges from \emph{availability attacks}, which aim to make the model generally worse (for example, injecting mislabeled examples to drag overall accuracy down), to \emph{targeted attacks}, which aim to introduce a specific backdoor behavior (``whenever the input contains the phrase X, output Y'') while leaving ordinary accuracy unchanged. The targeted case is more dangerous because ordinary evaluation will not catch it: the model looks fine on clean test data and still misbehaves on the trigger.
+
+The mechanism is easier to see in feedback-driven systems. A recommendation system that learns from clicks, a content moderation system that learns from user reports, or a course-support assistant that incorporates thumbs-up and thumbs-down signals all close a loop between user behavior and future model updates. Every loop of that shape is a potential poisoning channel. If a small coordinated group can shape the feedback, they can push the next model toward a policy that benefits them.
+
+A third variant deserves its own line because it is easy to miss: the model or the data may \emph{arrive} already poisoned. Pretrained weights downloaded from a public hub, an open instruction-tuning dataset, a third-party fine-tuning vendor, or a scraped web corpus all hand the team someone else's threat surface. Supply-chain poisoning is the training-time attack without a local trainer to blame; the mitigations are upstream rather than in the loss function: pin artifact versions and checksums, prefer sources with provenance and reproducible builds, evaluate backdoor triggers with targeted probes before promotion, and retain the option to retrain from a trusted subset if the supplier is compromised. For this chapter the point is only that the threat model must name the supplier, not only the local pipeline.
+
+\begin{practicalnote}
+A simple stress question: if an adversary controlled one percent of the feedback or retraining data, how different would the next deployed model be? If ``very'' is the answer, the pipeline needs either stronger provenance on feedback, anomaly detection on the feedback distribution, or a slower retraining cadence with human review before promotion.
+\end{practicalnote}
+
+\subsection{Adversarial Examples}
+
+An adversarial example is an input that has been \emph{deliberately perturbed} so that the model misclassifies it. The canonical image-domain results showed that small, human-imperceptible pixel changes can flip a confident classifier \citep{szegedy2014, goodfellow2015}. The pedestrian-detector case makes the physical risk concrete: a physical adversary does not need invisible pixel changes. A printed patch on a jacket, a patterned umbrella or backpack carried near a crosswalk, a poster mounted beside a pedestrian crossing, or a patterned patch painted onto the road or curb can be enough to move the detector's confidence in an attacker-chosen direction. Natural-robustness tests---rain, glare, new cameras---would not catch any of these, because they were never designed to.
+
+The defenses divide into two families. \emph{Training-time defenses} bake adversarial examples into the training procedure, either by augmenting with adversarially generated perturbations (\emph{adversarial training}) or by enforcing constraints on input sensitivity (certified defenses). \emph{Runtime defenses} add detectors or input-preprocessing steps that flag inputs likely to be adversarial. Both families trade clean-benchmark accuracy for adversarial robustness, and both can be circumvented by an attacker who moves outside the threat model the defense was designed for---certified defenses, for instance, hold only within the perturbation budget and norm they bound, and a physical-world adversary can step outside that budget by changing modality (a printed patch instead of a pixel-level perturbation) rather than by attacking the certificate itself. The lesson for this chapter is modest: natural robustness is a necessary but insufficient reliability condition whenever motivated adversaries exist.
+
+\begin{warningbox}
+``Attack-aware evaluation'' is not the same as ``attack-free evaluation.'' A pedestrian-detector paper that reports strong performance under weather and lighting corruptions has said nothing about its adversarial robustness. The two evaluations must be reported separately, and the threat model must state explicitly which one is in scope.
+\end{warningbox}
+
+\subsection{Model-Access Attacks: Extraction and Privacy-Motivated Inference}
+
+When a model is exposed through an API, the queries themselves become an attack surface. Three attacks matter in ordinary deployments:
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Model extraction} (``stealing''): the adversary issues queries and uses the responses to train a substitute model with behavior close to the original. This erodes the value of the proprietary model and, importantly, gives the adversary a local copy for crafting adversarial examples without being rate-limited.
+\item \textbf{Membership inference:} given a specific record, the adversary wants to determine whether that record was in the training set. For a medical model, this can reveal that a specific person was a patient; for a student-support model, that a specific student escalated. The attack exploits the fact that overfitted models are more confident on training examples than on unseen ones.
+\item \textbf{Model inversion:} the adversary tries to reconstruct training data itself from the model's outputs. For generative models, the analogous risk is \emph{memorization}: the model reproduces entire training passages when prompted in the right way.
+\end{itemize}
+
+These attacks matter partly because the defenses are often the same ones the privacy section already introduced: differential privacy in training, careful regularization, query rate limits, and avoiding training on sensitive records when feasible. The threat-modeling contribution is simpler: make sure the privacy threat model covers attacks that go \emph{through} the deployed API, not only direct database access.
+
+\subsection{Abuse Monitoring}
+
+Preventive controls cannot cover everything; the threat card's \emph{monitoring signal} row exists because some attacks will only be visible while they are in progress. The shortlist below names one signal per attack class introduced above. It is not a recipe for bespoke detectors; it is the minimum set of patterns the team should agree to watch on the live system before launch.
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Model extraction:} sudden change in the query distribution from a single caller---volume, diversity, or coverage of decision boundaries jumping above historical baselines.
+\item \textbf{Adversarial-example search:} clusters of near-duplicate queries with tiny perturbations, often from one account or IP range, with confidence scores that swing on small changes.
+\item \textbf{Feedback poisoning:} sharp shift in the feedback distribution from a small account cluster, especially if the shift correlates with a category the cluster benefits from.
+\item \textbf{Prompt-injection bypass:} rising rate of guardrail-violating outputs, or anomalous refusal patterns on high-risk categories that previously triggered escalation.
+\item \textbf{Retrieval poisoning:} corpus-change events not matched by a reviewed update, or a spike in answers that cite a newly-added passage.
+\item \textbf{Membership inference / extraction-of-training-data:} repeated probes that vary one record's attributes against a fixed query template, a signature of confidence-gap exploitation.
+\end{itemize}
+
+Each bullet is a candidate to write into the \emph{monitoring signal} row of the relevant threat card. Audit logs and the rollback paths named on each card are the response side. Chapter~\ref{ch:models-systems} wires these signals to specific production metrics, alert thresholds, and rollback commands; this chapter's responsibility is only to make sure the signals are named in the threat model rather than left as ``an operations problem.''
+
+\subsection{Chapter Artifact: A Security Threat Card}
+
+The chapter's reliability review card asked what might go wrong under natural pressure. The security threat card asks the same question under adversarial pressure. It should be written \emph{per attack class}---poisoning, adversarial examples, extraction, membership inference, prompt injection, retrieval poisoning---rather than as a single table for the whole system. A single card that says ``the attacker is any bad actor'' is too diffuse to drive controls.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{p{3.25cm}p{6.98cm}}
+\toprule
+Card field & What must be written clearly \\
+\midrule
+Asset & What is being protected (model weights, training data, integrity of decisions, user records) \\
+Adversary & Who might attack, with what capability (external API user, insider, supplier) \\
+Attack surface & Which input paths the adversary can reach (API, uploaded documents, feedback, retraining data) \\
+Success criterion & What would count as a successful attack from the adversary's point of view \\
+Mitigation & Preventive control that blocks or shrinks the success case \\
+Monitoring signal & Detective control: what pattern would reveal that the attack is being attempted or has succeeded \\
+Rollback path & What ``return to known-good'' looks like if the attack succeeds before detection \\
+Out of scope & Threats that are explicitly not defended against, with the reason \\
+\bottomrule
+\end{tabular}
+\caption{The security threat card is written once per attack class rather than once per system. The ``out of scope'' row is as important as the others: a card that tries to defend against everything usually defends against nothing.}
+\label{tab:security-threat-card}
+\end{table}
+
+\begin{thinkingtool}
+\textbf{Security threat card.} Before deployment, write one card per attack class in the threat model. If the monitoring signal for a given class cannot be named, the preventive control is operating blind and the card is not yet complete.
+\end{thinkingtool}
+
+\begin{example}[Filled Security Threat Card: Prompt Injection in the Course-Support Assistant]
+\textbf{Asset:} integrity of routing decisions and the assistant's refusal behavior on high-risk categories. \textbf{Adversary:} any student or external actor able to submit a message, and any contributor who can edit a policy document that will enter the retrieval index. \textbf{Attack surface:} the student-message channel and the retrieval corpus. \textbf{Success criterion:} getting the assistant to produce a direct answer on a high-risk topic that policy requires to be escalated, or causing the assistant to cite a poisoned policy passage as though it were authoritative. \textbf{Mitigation:} sanitize retrieved passages before they enter the prompt, separate instruction and data with explicit markers, do not let retrieved content trigger tool calls without additional policy checks, and require a review step before new documents enter the index. \textbf{Monitoring signal:} sudden change in the rate of guardrail overrides, anomalous refusal patterns on high-risk categories, and corpus-change logs that do not correspond to a reviewed policy update. \textbf{Rollback path:} roll the retrieval index back to the last reviewed snapshot; revert any model weights that were updated with contaminated feedback. \textbf{Out of scope:} adversaries who already have insider access to the deployment infrastructure; those are handled by the cloud security layer rather than by this card. Chapter~\ref{ch:language-grounding} works through the prompt-injection and retrieval-poisoning details specific to the RAG pipeline, and Chapter~\ref{ch:models-systems} covers the operational controls that implement these mitigations at runtime.
+\end{example}
+
+A companion card for supply-chain poisoning would look different. The adversary might be a compromised public source, a supplier, or a third-party fine-tuning vendor; the attack surface would include pretrained weights, public datasets, vendor-produced fine-tunes, and scraped corpora. The mitigation row should name pinned versions and checksums, provenance review, reproducible builds where feasible, and targeted backdoor probes before promotion. The rollback row should name a reviewed artifact or a retrain-from-trusted-subset path, because deleting a bad prompt or rolling back an index is not enough when the poison arrived inside the model or dataset.
+
+The pedestrian detector deserves its own cards. An adversarial-example card would name the physical-patch adversary, the physical-world attack surface, and a detection signal based on sudden shifts in the confidence-score distribution from roadside cameras. A model-extraction card would note that the detector is not exposed as a public API and that model extraction is consequently out of scope for that deployment. Writing the two cards side by side makes the difference between the two deployments---language assistant and on-vehicle vision system---operational rather than rhetorical.
+
 \section{Common Mistakes in Reliability Work}
 
 These mistakes are surface forms of the chapter's main enemy: confusing a good aggregate score with bounded reliability in deployment. Read them as signs that average-case performance has been mistaken for an acceptable failure envelope.
@@ -460,6 +654,7 @@ These mistakes are surface forms of the chapter's main enemy: confusing a good a
 \item \textbf{Confusing robustness with clean accuracy.} A model may be accurate on a benchmark and brittle under predictable shift.
 \item \textbf{Treating privacy as an afterthought.} Late privacy fixes are often expensive or insufficient.
 \item \textbf{Thinking safety is just the model's job.} Fallback logic, escalation, monitoring, and interface design often matter more than one extra point of accuracy.
+\item \textbf{Confusing natural robustness with adversarial robustness.} A system that is reliable under rain, phrasing, or camera changes can still fail the first time an attacker designs an input to cross a guardrail; security needs its own threat model and its own evaluation.
 \end{mistakebox}
 
 \section{Looking Ahead}
@@ -468,7 +663,7 @@ This chapter treated reliability as an engineering discipline across the full pi
 
 \section*{Chapter Summary}
 
-Reliability is a pipeline property, not a model property. Subgroup evaluation, robustness testing, privacy review, safety cases, fallback design, and monitoring are different views of the same question: does the system stay within acceptable bounds for the people, conditions, and harms that matter in deployment? The correct outcome is sometimes redesign, stronger constraint, or refusal to launch.
+Reliability is a pipeline property, not a model property. Subgroup evaluation, robustness testing, privacy review, safety cases, fallback design, and monitoring are different views of the same question: does the system stay within acceptable bounds for the people, conditions, and harms that matter in deployment? Interpretability methods (SHAP, LIME, counterfactual explanations) make model behavior legible but have well-documented failure modes---explanations can be unstable, unfaithful, or confused with causation. Uncertainty quantification (conformal prediction, ensemble disagreement) turns model confidence into actionable deployment rules: serve, defer, or abstain. Security and abuse extend the same bounded-failure discipline to adversarial pressure: data and feedback poisoning, adversarial examples, model extraction, membership inference, and prompt injection each need their own threat card with an asset, an adversary, a mitigation, and a monitoring signal. The correct outcome is sometimes redesign, stronger constraint, or refusal to launch.
 
 \begin{studyquestions}
 \item Why should bias be treated as a property of the full pipeline rather than only the model?
@@ -478,6 +673,12 @@ Reliability is a pipeline property, not a model property. Subgroup evaluation, r
 \item What makes an error a safety issue rather than only a performance issue?
 \item Why can refusing deployment be the correct reliability decision?
 \item Why might a support assistant with good average performance still be unreliable on the questions that matter most?
+\item What is the difference between SHAP and LIME, and when might they disagree?
+\item Why should feature importance from SHAP not be interpreted as causal influence?
+\item What guarantee does conformal prediction provide, and what does it not guarantee?
+\item How can ensemble disagreement serve as a real-time reliability signal?
+\item Why is natural robustness (to rain, phrasing, or sensor changes) not sufficient to conclude that a system is reliable under adversarial pressure? What additional evaluation is needed?
+\item A team writes a single security threat card that says ``the attacker is any malicious user and we will defend against all known attacks.'' What is wrong with this card, and how should it be restructured?
 \end{studyquestions}
 
 \begin{exercises}
@@ -489,10 +690,13 @@ Reliability is a pipeline property, not a model property. Subgroup evaluation, r
 \item Describe a deployment situation in which robustness to distribution shift matters more than clean benchmark accuracy.
 \item For a support assistant or a dashboard-camera pedestrian detector, list one subgroup slice, one shift scenario, one privacy exposure, and one severe hazard that should appear on the reliability review card.
 \item Use Table~\ref{tab:reliability-review-card} to sketch a one-page reliability review card for a system of your choice. If you are carrying one case through the book, write it for the same system as your experiment claim sheet and state which empirical claim survives this reliability review unchanged.
+\item Using Table~\ref{tab:security-threat-card}, fill a security threat card for one attack class against a deployed system you have studied (prompt injection, feedback poisoning, adversarial examples, model extraction, or membership inference). Name the asset, the adversary, the attack surface, the success criterion, a preventive control, a monitoring signal, a rollback path, and at least one threat that is explicitly out of scope.
 \end{exercises}
 
 \begin{challengeexercises}
 \item A classifier has similar overall accuracy across two groups but very different false positive rates. Explain why this can still be a serious reliability concern, and give a domain in which it would matter.
 \item A team proposes deploying a model with excellent benchmark results but no subgroup analysis, no privacy review, and no fallback behavior. Write the strongest technical objection you can in one paragraph.
 \item Compare two mitigation strategies for a minority-group performance gap: collecting better data versus threshold adjustment. Explain when each might help, what it cannot fix, and what evidence would be needed to judge it.
+\item A team uses SHAP to explain a loan denial model and finds that ``zip code'' has the highest feature importance. A stakeholder concludes that the model discriminates by location. Critique this conclusion: what could SHAP be measuring that is not discrimination, and what additional evidence would you need?
+\item Design an uncertainty-aware deployment policy for the course-support early-warning system. Specify: what uncertainty method is used, what thresholds trigger deferral to a human advisor, and how the thresholds would be calibrated and monitored over time.
 \end{challengeexercises}

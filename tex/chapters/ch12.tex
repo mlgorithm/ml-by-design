@@ -104,7 +104,7 @@ L=\lambda W,
 where \(L\) is the average number of items in the system, \(\lambda\) is the average arrival rate, and \(W\) is the average time an item spends in the system \citep{little1961}.
 \end{theorem}
 
-The toy backlog recurrence above is useful because it makes overload vivid one day at a time. Little's Law adds the more general systems statement: if escalations arrive faster than they can be cleared, then average waiting time must rise because the queue itself becomes part of the service.
+The toy backlog recurrence above is useful because it makes overload vivid one day at a time: if escalations arrive faster than they can be cleared, the backlog grows instead of settling. Little's Law adds the steady-state version of the same systems lesson: once the review process is stable, larger average backlog implies longer average waiting time because the queue itself becomes part of the service.
 
 This is not a trick example. Many deployments face exactly this issue. The useful prediction is not the one that looks best in isolation. It is the one that leads to the best action process under real constraints.
 
@@ -211,7 +211,7 @@ Let $a(x)\in\{0,1\}$ indicate whether the system answers on input $x$, and let $
 \[
 R_\phi(f)=\frac{\mathbb{E}[a(x)\,\ell(f(x),y)]}{\mathbb{E}[a(x)]}.
 \]
-On this automation-safety score, lowering the threshold usually raises coverage, but it can also raise selective risk if the newly accepted cases are too uncertain. This is why thresholding works best when confidence is reasonably calibrated.
+This quantity is defined when \(\mathbb{E}[a(x)]>0\), meaning the system answers at least some cases. On this automation-safety score, lowering the threshold usually raises coverage, but it can also raise selective risk if the newly accepted cases are too uncertain. This is why thresholding works best when confidence is reasonably calibrated.
 \end{mathlens}
 
 \begin{definition}[Selective Prediction]
@@ -271,6 +271,21 @@ Evidence for deployment should include a monitoring plan, alert thresholds, and 
 
 Good systems assume that some deployments will go wrong. They therefore include ways to disable the model, revert to an earlier version, or fall back to a safer baseline. In some settings the fallback may be human review. In others it may be a conservative rule-based heuristic. Recovery planning is part of reliability, not a sign that the model is weak. The next section asks how to generate that post-launch evidence carefully instead of exposing the full user population all at once.
 
+\subsection{Wiring the Security Threat Card in Production}
+\label{sec:security-boundaries}
+
+Post-deployment monitoring also carries the operational half of the security story. Chapter~\ref{ch:reliability} developed the threat-modeling discipline (Section~\ref{sec:security-reliability}) and introduced the Security Threat Card. That card names, per attack class, the preventive control, the monitoring signal, and the rollback path. This subsection asks what those three fields look like inside a running production system.
+
+\emph{Preventive controls} at the systems layer are mostly request-shaping mechanisms. Rate limits---per user, per API key, per IP---can block trivial model-extraction scraping and slow down adversarial-example search. Authenticated tiers separate anonymous query traffic from trusted workflows. Size and schema checks on uploaded documents keep obviously malformed or executable content out of the retrieval pipeline. Egress controls on tool-use systems prevent a compromised prompt from triggering a damaging external action.
+
+\emph{Detective controls} are the monitoring signals named on each threat card, wired into the same alerting stack used for drift and SLO violations. A sudden spike in near-duplicate queries from a single caller is a signature of adversarial-example search. A sharp shift in the feedback distribution from a small coordinated cluster is a signature of feedback poisoning. A jump in guardrail overrides or in abstention rates on high-risk categories is a signature of prompt-injection bypass. An unexplained change in the retrieval corpus---new passages appearing without a corresponding reviewed update---is a signature of retrieval poisoning. The point is not to build bespoke detectors for every conceivable attack. The point is that the threat card's ``monitoring signal'' row must correspond to a metric that the deployed system actually emits.
+
+\emph{Response paths} reuse the deployment mechanisms the chapter has already introduced. Model rollback returns the serving model to a reviewed version. Retrieval-index rollback returns the corpus to the last reviewed snapshot. Feature-store freezes prevent a suspected poisoning signal from leaking into the next retraining run. Human escalation routes queries that the system now suspects are adversarial to a reviewer. Audit logs---immutable enough to be usable after an incident---let the team reconstruct which queries, which corpus state, and which model version were in play when the attack succeeded.
+
+\begin{practicalnote}
+The cheapest pre-launch check is a simple one: for every row of the security threat card, write down the exact production metric or log that realizes the monitoring signal, the exact rollback command that realizes the response path, and the on-call runbook entry that triggers when the metric crosses threshold. Cards that name signals without wiring them to production are documentation, not defense.
+\end{practicalnote}
+
 \section{Post-Deployment Experimentation}
 
 Launching a new model to everyone at once creates two avoidable problems. First, it maximizes the blast radius if the new system behaves badly. Second, it makes it harder to learn whether the change actually improved the workflow under real usage. A safer pattern is staged release: observe the system without acting, expose a small slice of traffic first, and expand only when the evidence remains favorable.
@@ -321,7 +336,7 @@ How a model's output is presented to humans affects decision quality as much as 
 
 \subsection{The Interface Is Part of the System}
 
-The model produces a score or prediction. The interface turns that signal into action. A reinforcement for human oversight, selective prediction, and human-in-the-loop systems is that the display format, information density, and interaction cost all reshape the efficacy of human review. Consider a system that shows ten pieces of evidence, a confidence score, a model recommendation, and a red warning flag. Contrast it with a system that shows only the confidence number. Both rest on the same underlying model, but they will produce different human decisions and different override rates. Teams often focus on model training until launch, then delegate interface design to product teams or UI engineers. The result is that decisions about display format become a free variable, never studied as carefully as model hyperparameters.
+The model produces a score or prediction. The interface turns that signal into action. For human-oversight, selective-prediction, and human-in-the-loop systems, the display format, information density, and interaction cost all reshape the effectiveness of human review. Consider a system that shows ten pieces of evidence, a confidence score, a model recommendation, and a red warning flag. Contrast it with a system that shows only the confidence number. Both rest on the same underlying model, but they will produce different human decisions and different override rates. Teams often focus on model training until launch, then delegate interface design to product teams or UI engineers. The result is that decisions about display format become a free variable, never studied as carefully as model hyperparameters.
 
 \begin{decisionbox}
 The interface design for human review is not a separate product concern. It is part of the ML system's reliability. Changes to what information is shown, how uncertainty is rendered, and how much friction exists in accepting or overriding a model recommendation measurably affect decision quality.
@@ -337,7 +352,7 @@ Calibrated probabilities help only if the human understands their meaning. Teams
 
 \subsection{Automation Bias and Overtrust}
 
-A persistent failure mode in human-in-the-loop systems is automation bias: humans tend to accept machine recommendations uncritically, especially under time pressure. A system that is correct $90\%$ of the time may suffer worse automation bias than a system correct only $70\%$ of the time if users expect and trust the correct one. The worse the bias, the less useful the human review step becomes. Several design patterns mitigate this risk. One is to require the human to form an independent judgment before seeing the model's recommendation. Another is to show evidence or reasoning that supports the recommendation, rather than a bare score or yes-no label. A third is to design friction or friction for high-stakes decisions: require confirmation, ask for justification of an override, or require two-person sign-off on severe actions. These are not obstacles to speed. They are mechanisms to ensure the human actually reviews rather than rubber-stamps.
+A persistent failure mode in human-in-the-loop systems is automation bias: humans tend to accept machine recommendations uncritically, especially under time pressure. A system that is correct $90\%$ of the time may suffer worse automation bias than a system correct only $70\%$ of the time if users expect and trust the correct one. The worse the bias, the less useful the human review step becomes. Several design patterns mitigate this risk. One is to require the human to form an independent judgment before seeing the model's recommendation. Another is to show evidence or reasoning that supports the recommendation, rather than a bare score or yes-no label. A third is to design deliberate friction into high-stakes decisions: require confirmation, ask for a written justification of an override, or require two-person sign-off on severe actions. These are not obstacles to speed. They are mechanisms to ensure the human actually reviews rather than rubber-stamps.
 
 \begin{warningbox}
 Automation bias is worse when the model is usually correct. A highly accurate model can create false confidence in the system, leading humans to stop questioning its output. In that regime, the combined human-plus-model system may be worse than either the model alone or a less automated workflow where humans have more authority.
@@ -385,7 +400,7 @@ This partial-feedback structure makes offline policy evaluation difficult. A new
 
 \subsection{When Online Adaptation Is Appropriate}
 
-Adaptive systems make the most sense in low-stakes, high-volume, fast-feedback settings. Recommendation systems are a canonical example: showing a user different movie recommendations generates immediate feedback (did they click?), the stakes are low (a bad recommendation is a minor inconvenience), and the volume is high (millions of recommendations per day). Ad placement is similar. In contrast, adaptation is usually inappropriate in high-stakes settings where exploration has real ethical costs. A medical-treatment recommender should not randomly assign patients to different treatments to explore which works better; the patients are part of the exploration, and the costs to them are severe. Criminal-justice risk assessments should not try different scoring policies on defendants to learn which works better; the individuals are subject to the exploration. Even if the system eventually learns a better policy, the cost to those exposed during the exploration phase is unjustifiable.
+Adaptive systems make the most sense in low-stakes, high-volume, fast-feedback settings. Recommendation systems are a canonical example: showing a user different movie recommendations generates immediate feedback (did they click?), the stakes are low (a bad recommendation is a minor inconvenience), and the volume is high (millions of recommendations per day). Ad placement is similar. In contrast, adaptation is usually inappropriate in high-stakes settings where exploration has real ethical costs. A production medical-treatment recommender should not randomly assign patients to different treatments as an unreviewed learning mechanism; randomized assignment belongs only inside properly governed clinical trials with equipoise, consent, monitoring, and review. Criminal-justice risk assessments should not try different scoring policies on defendants to learn which works better; the individuals are subject to the exploration. Even if the system eventually learns a better policy, the cost to those exposed during the exploration phase is unjustifiable.
 
 There are also settings where adaptation is technically possible but poorly motivated. If feedback arrives weeks or months after the decision (as in many loan-approval or hiring systems), the training signal is too delayed to be useful. A system that adapts to feedback from decisions made six months ago is not learning the current distribution; it is chasing noise in a stale signal. In such cases, occasional full retraining with fresh data is more defensible than continuous online adaptation.
 
@@ -402,7 +417,7 @@ Off-policy evaluation works by asking: ``Given this log of past decisions under 
 This connects directly to Chapter~\ref{ch:experiments-claims}'s emphasis on claim discipline. A system that uses off-policy evaluation to adapt its policy without bounds may drift silently from its initial design. A more cautious approach is to treat off-policy evaluation as a screening step: if a new policy looks much worse than the current one, do not deploy it. If it looks similar or slightly better, deploy in shadow mode or a limited canary release and collect direct evidence before full rollout. The system learns from live feedback, but its learning is bounded by skepticism about what offline logs can fairly claim.
 
 \begin{example}[Bandit Algorithms in Course Support]
-The course-support assistant could use a contextual-bandit algorithm to adapt its routing policy over time. For each message, the system logs the routing decision, the advisor's response (was the escalation appropriate? did the advisor override?), and eventual student feedback (did the student find the answer helpful?). A learning algorithm can use this log to estimate which routing thresholds work best for which message types. If messages about housing-related issues consistently generate low override rates and high satisfaction, the system could gradually increase its threshold for housing, answering more such cases automatically. If messages about visa issues generate frequent overrides, the system could lower its threshold, escalating more visa questions to specialists. However, the system should also occasionally explore---answer a few visa questions despite lower confidence, escalate some housing questions despite higher confidence---to test whether its beliefs about those categories are still accurate. The logging and off-policy evaluation ensure that this adaptation does not cause silent drift away from fairness or coverage goals.
+The course-support assistant could use a contextual-bandit algorithm to adapt its routing policy over time. For each message, the system logs the routing decision, the advisor's response (was the escalation appropriate? did the advisor override?), and eventual student feedback (did the student find the answer helpful?). A learning algorithm can use this log to estimate which routing thresholds work best for which message types. If messages about housing-related issues consistently generate low override rates and high satisfaction, the system could gradually lower its threshold for housing, answering more such cases automatically. If messages about visa issues generate frequent overrides, the system could raise its threshold, escalating more visa questions to specialists. However, the system should also occasionally explore---answer a few visa questions despite lower confidence, escalate some housing questions despite higher confidence---to test whether its beliefs about those categories are still accurate. The logging and off-policy evaluation help detect and bound drift, but they do not ensure fairness or coverage by themselves; guardrail metrics, exploration constraints, and human review are still required.
 \end{example}
 
 \section{Documentation, Ownership, and Iteration}
@@ -518,11 +533,81 @@ This walkthrough shows the chapter's central point: the useful system is not jus
 
 The same readiness questions survive in the dashboard-camera pedestrian detector from Chapter~\ref{ch:vision}. The service objective is no longer ``answer routine questions quickly.'' It is ``surface likely pedestrian hazards early enough to support a safe braking or alerting decision without flooding the driver or controller with false alarms.'' The input contract includes camera calibration, frame rate, lens geometry, synchronization, and health checks for glare or dropout. The operating policy might require agreement between detection and short-term tracking before a high-confidence alert is issued, with conservative slowdown behavior when the visual evidence degrades.
 
-Monitoring also looks different without changing the systems logic. Useful signals include night-rain miss rate, alert rate by lighting condition, camera-health failures, latency spikes, and disagreement between the detector and downstream tracker. A no-launch trigger might be unacceptable failure on close-range pedestrians under dusk, glare, or unseen-camera slices even if average daytime metrics remain strong.
+Monitoring also looks different without changing the systems logic. Useful signals include audited night-rain miss rate on periodically labeled clips, alert rate by lighting condition, camera-health failures, latency spikes, and disagreement between the detector and downstream tracker. A no-launch trigger might be unacceptable failure on close-range pedestrians under dusk, glare, or unseen-camera slices even if average daytime metrics remain strong.
 
-A concrete operating rule might be: if the night-rain miss rate exceeds the safety threshold for three consecutive evaluation windows, the system automatically increases its sensitivity (lowering the detection threshold) and logs an alert for the engineering team. If the miss rate still exceeds the threshold after the sensitivity adjustment, the system should signal the driver-assistance module to reduce maximum speed until conditions improve or a human operator reviews the situation.
+A concrete operating rule might be: if the audited night-rain miss rate exceeds the safety threshold for three consecutive labeled evaluation windows, the service enters a conservative fallback mode and opens an incident for the engineering team. Any threshold change should go through reviewed shadow or canary evaluation before expansion, because lowering the detection threshold can increase false alerts and change downstream control behavior. Because those labels arrive with delay, the live service should also watch immediate proxy signals such as tracker disagreement, close-range near-miss reports, and camera-health failures; if those degrade sharply before the audit catches up, the driver-assistance module should reduce maximum speed until conditions improve or a human operator reviews the situation.
 
 The details differ from the support assistant, but the readiness brief still asks the same questions about requirements, contracts, fallback behavior, monitoring, and ownership.
+
+\section{Production Infrastructure: Making Models Servable}
+\label{sec:production-infra}
+
+Building a model that works on a validation set is not the same as running a model reliably in production. The gap between ``the model is accurate'' and ``the system is operational'' is filled by infrastructure: feature stores, model registries, and inference optimization. This section introduces these concepts at a design level, not as tooling tutorials.
+
+\subsection{Feature Stores and Feature Freshness}
+
+A \emph{feature store} is a centralized system that computes, stores, and serves features consistently across training and inference. The core problem it solves is \emph{training-serving skew}: the features used at training time must be computed identically at serving time, or the model will see inputs it was not trained on.
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Offline features.} Computed in batch (e.g., a student's average submission time over the past semester). These change slowly and can be precomputed.
+\item \emph{Online features.} Computed in real time (e.g., a student's login count in the past hour). These require streaming computation and low-latency serving.
+\item \emph{Feature freshness.} How recently the feature was computed matters. A ``number of late submissions this week'' feature that is 3 days stale is not the same feature the model was trained on. Feature freshness requirements should be documented in the data contract.
+\end{itemize}
+
+\begin{practicalnote}
+Before building a feature store, ask: do I actually have training-serving skew? If your training pipeline and serving pipeline compute features with the same code on the same data, a feature store adds complexity without benefit. Feature stores are most valuable when features are shared across multiple models, when feature computation is expensive (so caching matters), or when the training and serving environments are different (e.g., Python for training, Java for serving).
+\end{practicalnote}
+
+\subsection{Model Registry and Version Control}
+
+A \emph{model registry} tracks which model version is deployed, what data it was trained on, what hyperparameters were used, and what evaluation metrics it achieved. It serves the same purpose as version control for code, but for models.
+
+Key capabilities:
+\begin{itemize}[leftmargin=*]
+\item \emph{Versioning.} Every trained model gets a unique version identifier. Rolling back to a previous version should be a one-step operation.
+\item \emph{Metadata.} Each version records: training data date range, hyperparameters, evaluation metrics (on validation and test sets), and the code commit that produced it.
+\item \emph{Promotion workflow.} Models move through stages: ``experimental'' $\to$ ``staging'' $\to$ ``production.'' Promotion requires passing a checklist (e.g., evaluation metrics exceed thresholds, reliability review card is filled, no regressions on critical slices).
+\item \emph{Lineage.} Track which training data, feature definitions, and preprocessing steps produced each model. If a data source is discovered to contain errors, lineage lets you identify all affected models.
+\end{itemize}
+
+\begin{warningbox}
+Without a model registry, the question ``which model is running in production?'' has no reliable answer. Teams that deploy models by copying files to a server inevitably lose track of versions, deploy untested models, or cannot reproduce results. A model registry is not optional infrastructure---it is the minimum standard for responsible deployment.
+\end{warningbox}
+
+\subsection{Inference Efficiency: Distillation, Quantization, and Pruning}
+
+A model that takes 500ms to produce a prediction may be too slow for a real-time system, too expensive to run at scale, or too large to deploy on an edge device. Three families of techniques reduce inference cost:
+
+\textbf{Knowledge distillation.} Train a smaller ``student'' model to mimic the predictions of a larger ``teacher'' model. The student learns from the teacher's soft predictions (probability distributions over classes), which contain more information than hard labels. The student is smaller and faster but approximates the teacher's behavior.
+
+\textbf{Quantization.} Reduce the numerical precision of the model's weights and activations (e.g., from 32-bit floating point to 8-bit integers). This reduces memory usage and speeds up computation, especially on hardware with efficient integer arithmetic. Post-training quantization requires no retraining; quantization-aware training fine-tunes the model to compensate for precision loss.
+
+\textbf{Pruning.} Remove weights, neurons, or entire layers that contribute little to the model's output. Structured pruning (removing entire channels or attention heads) produces models that are directly faster on standard hardware. Unstructured pruning (zeroing individual weights) produces sparse models that require specialized hardware or software to realize speed gains.
+
+\begin{example}[Inference Optimization for Pedestrian Detection]
+The campus pedestrian detector runs on an edge device in each shuttle. The full model (ResNet-50 backbone) takes 120ms per frame---too slow for 30fps real-time operation. The team applies three optimizations: (1) knowledge distillation to a MobileNet-v2 student (30ms, 2\% accuracy drop), (2) INT8 quantization (18ms, additional 0.5\% accuracy drop), and (3) structured pruning of the least-important channels (14ms, additional 0.3\% drop). The final model runs at 14ms per frame (71fps), well within the real-time budget, with a total accuracy drop of 2.8\% from the original---an acceptable trade-off documented in the system's readiness brief.
+\end{example}
+
+\subsection{Cost-Aware Serving}
+
+Running ML models in production costs money: compute, memory, network, and storage. Cost-aware serving makes these trade-offs explicit:
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Cascade architectures.} Use a cheap, fast model (e.g., a logistic regression filter) to handle easy cases and a more expensive model (e.g., a neural network) only for hard cases. The cheap model handles 80\% of traffic; the expensive model handles 20\%. Total cost drops while accuracy on hard cases is preserved.
+\item \emph{Batching and caching.} Batch multiple inference requests together to exploit GPU parallelism. Cache predictions for repeated inputs (e.g., the same resource page viewed by many students). Both reduce per-request cost.
+\item \emph{Auto-scaling.} Scale compute resources based on demand. A course-support system needs more capacity during midterm and finals weeks than during breaks. Over-provisioning wastes money; under-provisioning degrades latency.
+\end{itemize}
+
+\begin{decisionbox}
+\textbf{Inference efficiency checklist:}
+\begin{itemize}
+\item What is the latency budget for a single prediction? (e.g., $<$50ms for real-time, $<$1s for batch)
+\item What is the cost budget per prediction? (e.g., $<$\$0.001 for high-volume serving)
+\item Can a cascade architecture route easy cases to a cheaper model?
+\item Has distillation, quantization, or pruning been evaluated, and is the accuracy trade-off acceptable?
+\item Is the serving infrastructure auto-scaled to match demand patterns?
+\end{itemize}
+\end{decisionbox}
 
 \section{Common Mistakes in Systems Work}
 
@@ -545,7 +630,7 @@ For instance, the framing memo for the course-support assistant proposed answeri
 
 \section*{Chapter Summary}
 
-A real AI system includes more than a model: it includes contracts, policies, interfaces, queues, monitoring, staged release, and ownership. System quality depends on whether those pieces work together under real latency, workload, and failure constraints. The final professional standard is not model performance in isolation, but whether the whole service improves the task safely and sustainably.
+A real AI system includes more than a model: it includes contracts, policies, interfaces, queues, monitoring, staged release, and ownership. Production infrastructure---feature stores, model registries, inference optimization, and cost-aware serving---bridges the gap between a working model and a reliable service. System quality depends on whether those pieces work together under real latency, workload, and failure constraints. The final professional standard is not model performance in isolation, but whether the whole service improves the task safely and sustainably.
 
 \begin{studyquestions}
 \item Why can a high-performing offline model still produce a poor deployed system?
@@ -557,6 +642,10 @@ A real AI system includes more than a model: it includes contracts, policies, in
 \item Why might a team choose shadow mode or a canary release before a full rollout?
 \item In what situations is refusing deployment the correct systems decision?
 \item Why can a grounded support assistant with good answer quality still be unfit to launch as a real service?
+\item What problem does a feature store solve, and when is it not worth the complexity?
+\item Why is a model registry the minimum standard for responsible deployment?
+\item What is the trade-off in knowledge distillation, and when is the accuracy loss acceptable?
+\item How does a cascade architecture reduce serving costs without sacrificing accuracy on hard cases?
 \end{studyquestions}
 
 \begin{exercises}
@@ -578,4 +667,5 @@ A real AI system includes more than a model: it includes contracts, policies, in
 \item Compare two failure responses to post-deployment drift: retraining the model immediately versus disabling the model and falling back to a simpler policy. Explain when each is justified and what risks each creates.
 \item A team wants to replace its current model with a new one that improves offline quality but has never seen live traffic. Design the strongest staged-release plan you can, including one guardrail metric that would block expansion.
 \item A university wants to launch a course-support assistant before the start of term, but the latest policy pages are still changing daily. Explain the strongest systems argument for delaying launch or narrowing the use case.
+\item A pedestrian detector must run on an edge device with a 50ms latency budget. The full model takes 120ms. Compare three optimization strategies (distillation, quantization, pruning) and recommend a pipeline. What accuracy loss is acceptable, and how would you decide?
 \end{challengeexercises}

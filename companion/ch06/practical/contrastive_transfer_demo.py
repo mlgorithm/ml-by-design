@@ -3,8 +3,6 @@ import copy
 import numpy as np
 import torch
 import torch.nn.functional as F
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -31,16 +29,19 @@ def make_dataset(
     style_view_a = style_scale * rng.normal(size=(n_samples, STYLE_DIM)).astype(np.float32)
     style_view_b = style_scale * rng.normal(size=(n_samples, STYLE_DIM)).astype(np.float32)
 
-    view_a = np.tanh(
-        signal @ signal_projection
-        + style_view_a @ style_projection
-        + 0.2 * rng.normal(size=(n_samples, FEATURE_DIM)).astype(np.float32)
-    ).astype(np.float32)
-    view_b = np.tanh(
-        signal @ signal_projection
-        + style_view_b @ style_projection
-        + 0.2 * rng.normal(size=(n_samples, FEATURE_DIM)).astype(np.float32)
-    ).astype(np.float32)
+    signal_part = np.einsum("ij,jk->ik", signal.astype(np.float64), signal_projection.astype(np.float64))
+    style_projection64 = style_projection.astype(np.float64)
+
+    def make_view(style_view):
+        combined = (
+            signal_part
+            + np.einsum("ij,jk->ik", style_view.astype(np.float64), style_projection64)
+            + 0.2 * rng.normal(size=(n_samples, FEATURE_DIM))
+        )
+        return np.tanh(combined).astype(np.float32)
+
+    view_a = make_view(style_view_a)
+    view_b = make_view(style_view_b)
     return view_a, view_b, labels.astype(np.int64)
 
 
@@ -151,6 +152,33 @@ def pretrain_encoder(train_view_a, train_view_b):
 def encode_numpy(encoder, features):
     with torch.no_grad():
         return encoder(torch.tensor(features, dtype=torch.float32)).numpy()
+
+
+def accuracy_score(labels, predictions):
+    return float(np.mean(np.asarray(labels) == np.asarray(predictions)))
+
+
+def linear_probe_accuracy(train_features, train_labels, test_features, test_labels):
+    torch.manual_seed(0)
+    classifier = nn.Linear(train_features.shape[1], NUM_CLASSES)
+    optimizer = torch.optim.AdamW(classifier.parameters(), lr=0.03, weight_decay=1e-3)
+    criterion = nn.CrossEntropyLoss()
+
+    x_train = torch.tensor(train_features, dtype=torch.float32)
+    y_train = torch.tensor(train_labels, dtype=torch.long)
+
+    for _ in range(500):
+        logits = classifier(x_train)
+        loss = criterion(logits, y_train)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    classifier.eval()
+    with torch.no_grad():
+        test_logits = classifier(torch.tensor(test_features, dtype=torch.float32))
+        predictions = test_logits.argmax(dim=1).numpy()
+    return accuracy_score(test_labels, predictions)
 
 
 def evaluate_classifier(model, dataset):
@@ -289,17 +317,13 @@ def main():
         val_per_class=20,
     )
 
-    raw_baseline = LogisticRegression(max_iter=5000)
-    raw_baseline.fit(train_set[0], train_set[1])
-    raw_accuracy = accuracy_score(test_set[1], raw_baseline.predict(test_set[0]))
+    raw_accuracy = linear_probe_accuracy(train_set[0], train_set[1], test_set[0], test_set[1])
 
     encoder = pretrain_encoder(train_view_a, train_view_b)
 
     embedded_train = encode_numpy(encoder, train_set[0])
     embedded_test = encode_numpy(encoder, test_set[0])
-    frozen_probe = LogisticRegression(max_iter=5000)
-    frozen_probe.fit(embedded_train, train_set[1])
-    probe_accuracy = accuracy_score(test_set[1], frozen_probe.predict(embedded_test))
+    probe_accuracy = linear_probe_accuracy(embedded_train, train_set[1], embedded_test, test_set[1])
 
     frozen_metrics = fine_tune(encoder, train_set, val_set, test_set, mode="frozen")
     partial_metrics = fine_tune(encoder, train_set, val_set, test_set, mode="partial")

@@ -1,6 +1,6 @@
 # Instructor Solutions Guide
 
-This document defines how to prepare instructor-only solutions and hints for **Solving AI Problems** without leaking full answer keys into the public companion repository.
+This document defines how to prepare instructor-only solutions and hints for **Machine Learning by Design: From Problem Framing to Reliable Systems** without leaking full answer keys into the public companion repository.
 
 ## Purpose
 
@@ -57,9 +57,9 @@ Prepare these privately:
 
 Build instructor-only support in this order:
 
-1. Chapters 1, 2, 8, 10, 11, and 12
-2. Chapters 3, 5, and 7
-3. Chapters 4, 6, and 9
+1. Chapters 1, 2, 3, 13, 16, 17, and 18
+2. Chapters 4, 5, 7, 8, and 9
+3. Chapters 6, 10, 11, 12, 14, and 15
 
 This order matches the book's main differentiator: framing, evidence, grounded language systems, experiments, reliability, and systems.
 
@@ -97,16 +97,30 @@ What to provide privately:
 Instructor-only focus:
 
 - threshold choice as policy
-- leakage detection
-- calibration and split logic
+- loss and metric interpretation
+- calibration and action rules
 
 What to provide privately:
 
 - toy metric calculations
+- one threshold-policy example
+- one calibration example with commentary
+
+### Chapter 3
+
+Instructor-only focus:
+
+- leakage detection
+- train/validation/test split discipline
+- baseline and sanity-check expectations
+
+What to provide privately:
+
 - one leakage diagnosis example
 - one full minimal evaluation plan with commentary
+- one weak baseline comparison and its corrected version
 
-### Chapter 8
+### Chapter 13
 
 Instructor-only focus:
 
@@ -120,7 +134,7 @@ What to provide privately:
 - one strong NLP context-and-grounding card
 - examples of fluent but ungrounded answers that should score poorly
 
-### Chapter 10
+### Chapter 16
 
 Instructor-only focus:
 
@@ -134,7 +148,7 @@ What to provide privately:
 - one experiment claim sheet with scoring notes
 - one example where aggregate performance hides deployment-relevant failure
 
-### Chapter 11
+### Chapter 17
 
 Instructor-only focus:
 
@@ -147,7 +161,7 @@ What to provide privately:
 - one annotated subgroup-metrics example
 - one mitigation tradeoff example that improves one dimension while leaving another unresolved
 
-### Chapter 12
+### Chapter 18
 
 Instructor-only focus:
 

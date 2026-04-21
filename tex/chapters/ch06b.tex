@@ -1,4 +1,4 @@
-% Chapter 6b: Learning from Interaction: Reinforcement Learning
+% Chapter 11 / source ch06b: Learning from Interaction: Reinforcement Learning
 % "Machine Learning by Design: From Problem Framing to Reliable Systems"
 % Sam Urmian
 
@@ -7,7 +7,7 @@
 
 The previous chapters built systems that learn from labeled examples (supervised learning) or from the structure of the data itself (representation learning). In both cases, the model receives a static dataset and fits a function to it. But many real problems require something more: the system must \emph{act}, observe the consequences of that action, and then decide what to do next. A course-support assistant does not merely predict what a good reply looks like---it sends a reply, and the student's subsequent behavior reveals whether the reply actually helped. A campus shuttle does not merely classify a pedestrian as present or absent---it must decide when to brake, and the outcome depends on what happens over the following seconds.
 
-Reinforcement learning (RL) formalizes this kind of problem. The agent interacts with an environment, receives feedback in the form of rewards, and improves its behavior over time. This chapter introduces the core framework---Markov Decision Processes, value functions, and policy optimization---and then turns to the problem that makes RL hardest in practice: specifying a reward signal that actually captures what we care about. It ends with RLHF, a modern technique that connects RL to the foundation-model workflows introduced in the previous chapter, and with an artifact---the Interaction Design Card---that forces practitioners to document the assumptions baked into any RL system before deployment.
+Reinforcement learning (RL) formalizes this kind of problem. The agent interacts with an environment, receives feedback in the form of rewards, and improves its behavior over time. This chapter introduces the core framework---Markov Decision Processes, value functions, and policy optimization---and then turns to the problem that makes RL hardest in practice: specifying a reward signal that actually captures what we care about. It ends with RLHF, a modern technique that connects RL to the foundation-model workflows introduced earlier in this part, and with an artifact---the Interaction Design Card---that forces practitioners to document the assumptions baked into any RL system before deployment.
 
 \begin{learninggoals}
 \item Understand when prediction alone is insufficient and why agents must learn from interaction.
@@ -80,7 +80,7 @@ A Markov Decision Process is defined by a tuple $(\mathcal{S}, \mathcal{A}, P, R
 \item $\mathcal{A}$: the set of \emph{actions} the agent can take.
 \item $P(s' | s, a)$: the \emph{transition probability}, the probability of reaching state $s'$ after taking action $a$ in state $s$.
 \item $R(s, a)$ or $R(s, a, s')$: the \emph{reward function}, a scalar signal received after taking action $a$ in state $s$ (or transitioning to $s'$).
-\item $\gamma \in [0, 1)$: the \emph{discount factor}, weighting immediate rewards more heavily than distant future rewards.
+\item $\gamma \in [0, 1]$: the \emph{discount factor}. Values below \(1\) weight immediate rewards more heavily than distant future rewards; finite-horizon episodic problems sometimes use \(\gamma=1\), while infinite-horizon discounted problems usually require \(\gamma<1\).
 \end{itemize}
 
 A \emph{policy} $\pi$ is a mapping from states to actions: $\pi(a | s)$ is the probability of choosing action $a$ in state $s$ (or $\pi(s) = a$ for a deterministic policy).
@@ -117,7 +117,7 @@ In RL, the agent must \emph{actively explore} to discover which actions are good
 \begin{example}[Course-support assistant, MDP framing]
 Let the state space be the student's query and past interactions: $s \in \mathcal{S}$ = \{encoded query, student profile\}. The action space is a discrete set of templated responses: $a \in \mathcal{A}$ = \{response 1, response 2, $\ldots$\}.
 
-The transition is nearly deterministic: the same query and response should lead to the same outcome. The reward is observed hours or days later: did the student report their issue as resolved, or did they escalate to a human advisor? We might define:
+The transition is stochastic and partially observed: the same observed query, profile, and response can lead to different outcomes because hidden student and institutional context matters. The reward is observed hours or days later: did the student report their issue as resolved, or did they escalate to a human advisor? We might define:
 \[
 R(s, a) = \begin{cases}
 +1 & \text{if issue resolved} \\
@@ -157,6 +157,8 @@ The key insight is a recursive structure: the value of a state is the immediate 
 
 \begin{mathlens}
 \textbf{The Bellman Equation.} The state-value and action-value functions satisfy:
+
+Let \(P(s', r \mid s, a)\) denote the environment's joint probability distribution over next state \(s'\) and immediate reward \(r\) after taking action \(a\) in state \(s\).
 \[
 V^\pi(s) = \sum_a \pi(a|s) \sum_{s', r} P(s', r | s, a) \left[r + \gamma V^\pi(s')\right].
 \]
@@ -235,9 +237,9 @@ For large state spaces (e.g., raw images), $Q$ cannot be stored in a table. Inst
 Instead of learning $Q$, we can directly learn a policy $\pi_\theta(a | s)$ by optimizing it to maximize expected return.
 
 \begin{mathlens}
-\textbf{Policy Gradient.} The expected cumulative return under policy $\pi_\theta$ is:
+\textbf{Policy Gradient.} Let $\rho_{\pi_\theta}$ denote the discounted state-visitation distribution induced by policy $\pi_\theta$. The expected cumulative return under that policy is:
 \[
-J(\theta) = \mathbb{E}_{s \sim \rho, a \sim \pi_\theta(\cdot|s)} \left[\sum_t \gamma^t r_t\right].
+J(\theta) = \mathbb{E}_{s \sim \rho_{\pi_\theta}, a \sim \pi_\theta(\cdot|s)} \left[\sum_t \gamma^t r_t\right].
 \]
 
 The policy gradient theorem \citep{sutton2000policy} shows that:
@@ -251,15 +253,16 @@ In words: increase the log-probability of actions that led to high returns; decr
 \begin{example}[Course-support assistant, policy gradient]
 Parameterize the policy as a neural network mapping queries to response probabilities: $\pi_\theta(\text{response} | \text{query}) = \text{softmax}(\text{nn}_\theta(\text{query}))$.
 
-On each interaction, compute the return (did the issue resolve?) and the Q-estimate. Update:
+On each interaction, compute the return (did the issue resolve?) and convert it into an estimated advantage \(\hat A(s,a)\), meaning how much better or worse the chosen response was than the policy's usual expectation in that state. Update:
 \[
-\theta \leftarrow \theta + \alpha \nabla_\theta \log \pi_\theta(a_{\text{chosen}} | s) \cdot Q(s, a_{\text{chosen}}).
+\theta \leftarrow \theta + \alpha \nabla_\theta \log \pi_\theta(a_{\text{chosen}} | s) \cdot \hat A(s, a_{\text{chosen}}).
 \]
 
-If the issue resolved ($Q > 0$), increase the probability of that response. If it escalated ($Q < 0$), decrease the probability. Over time, the policy learns to generate responses that resolve issues.
+If the chosen response resolved the issue better than the baseline expected (\(\hat A > 0\)), increase its probability. If it did worse than expected (\(\hat A < 0\)), decrease it. Over time, the policy learns to favor responses that outperform its current default behavior.
 \end{example}
 
 \subsection{Actor-Critic Methods}
+\label{sec:rl-credit-assignment}
 
 Value-based and policy-based methods have complementary strengths. Actor-critic methods combine them:
 \begin{itemize}
@@ -267,7 +270,7 @@ Value-based and policy-based methods have complementary strengths. Actor-critic 
 \item The \emph{critic} is the value function $V_\phi$ (how good is this state).
 \end{itemize}
 
-The training loop works as follows: the actor takes an action, the environment returns a reward and next state, the critic evaluates how much better or worse the outcome was compared to its prediction (the TD error from Section~3), and the actor adjusts its policy to favor actions that the critic rated positively. Over time, the critic's estimates improve (because it sees more data), and the actor's policy improves (because the critic's signal becomes more accurate).
+The training loop works as follows: the actor takes an action, the environment returns a reward and next state, the critic evaluates how much better or worse the outcome was compared to its prediction (the TD error from Section~\ref{sec:rl-credit-assignment}), and the actor adjusts its policy to favor actions that the critic rated positively. Over time, the critic's estimates improve (because it sees more data), and the actor's policy improves (because the critic's signal becomes more accurate).
 
 This combination is more stable than either component alone. Pure value-based methods like Q-learning can overestimate action values when combined with function approximation, because the $\max$ operator amplifies approximation errors. Pure policy gradient methods have high variance, because each gradient estimate depends on the noisy return of a single episode. The critic reduces that variance by providing a learned baseline, while the actor avoids the instability of the $\max$ by directly parameterizing the policy.
 
@@ -275,7 +278,7 @@ This combination is more stable than either component alone. Pure value-based me
 \textbf{Choosing between value-based, policy-based, and actor-critic:}
 \begin{itemize}
 \item \textbf{Value-based (Q-learning):} Good for discrete, small action spaces. Scales poorly with action dimensionality. Simple to implement.
-\item \textbf{Policy-based (policy gradient):} Good for continuous actions or large discrete spaces. Naturally handles exploration. High variance (needs many samples).
+\item \textbf{Policy-based (policy gradient):} Good for continuous actions or large discrete spaces. Can represent stochastic policies; exploration still needs to be encouraged or controlled explicitly. High variance (needs many samples).
 \item \textbf{Actor-critic:} Balances stability and sample efficiency. The critic reduces variance; the actor handles exploration. Good default choice for continuous control.
 \end{itemize}
 \end{decisionbox}
@@ -315,7 +318,7 @@ Instead of $\arg\max_a \hat{Q}(s, a)$, choose:
 \[
 \arg\max_a \left[\hat{Q}(s, a) + c \sqrt{\frac{\log N}{\text{count}(s, a)}}\right],
 \]
-where $\text{count}(s, a)$ is the number of times action $a$ has been taken in state $s$. The second term is an ``exploration bonus'': actions tried fewer times get an optimism bonus. As an action is tried more, the bonus shrinks.
+where $\text{count}(s, a)$ is the number of times action $a$ has been taken in state $s$, and $N=\sum_{a'}\text{count}(s,a')$ is the total number of action selections made from that state. In practice, unseen actions are tried once first, or treated as having an infinite exploration bonus, so the denominator is never zero. The second term is an ``exploration bonus'': actions tried fewer times get an optimism bonus. As an action is tried more, the bonus shrinks.
 
 UCB is principled: it balances known good actions with actions that could plausibly be better if we learned more about them.
 \end{definition}
@@ -393,7 +396,7 @@ The solution is a feedback loop: deploy RL systems carefully, monitor what they 
 \end{evidencebox}
 
 \begin{warningbox}
-\textbf{Do not ignore partial observability.} Often, the agent observes only part of the state. A student query might not reveal the student's true underlying problem; a pedestrian's position might not reveal their intent. If the reward depends on the hidden part of the state, the agent cannot learn a good policy. Invest in better sensors, better state representation, or simplify the problem.
+\textbf{Do not ignore partial observability.} Often, the agent observes only part of the state. A student query might not reveal the student's true underlying problem; a pedestrian's position might not reveal their intent. If the reward depends on the hidden part of the state, the agent may fail to learn a reliable policy from the current observations alone. Invest in better sensors, better state representation, or simplify the problem.
 
 Practical workarounds include \emph{frame stacking}---feeding the agent several recent observations rather than just one---and \emph{recurrent policies} that maintain a learned latent state summarising observation history. Both approaches give the agent implicit memory without requiring the full Partially Observable Markov Decision Process (POMDP) formalism.
 \end{warningbox}
@@ -473,15 +476,16 @@ RLHF is computationally expensive (multiple forward/backward passes through both
 Just as Chapter~\ref{ch:dataset-design} produced the Data Design Card and Chapter~\ref{ch:optimization-neural-networks} produced the Minimum Credible Neural Training Report, this chapter produces an \emph{Interaction Design Card}: a structured template for documenting an RL system before, during, and after deployment.
 
 \begin{center}
-\framebox{\begin{minipage}{\linewidth}
+\framebox{\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
+\small
 \textbf{Interaction Design Card}
 
-\vspace{0.3cm}
+\vspace{0.15cm}
 \noindent \textbf{System name:} \underline{\hspace{3cm}} \quad \textbf{Date:} \underline{\hspace{2cm}}
 
 \noindent \textbf{Decision context:} What does this system decide, and why does it need to learn from interaction?
 
-\vspace{0.5cm}
+\vspace{0.2cm}
 
 \noindent \textbf{State representation:}
 \begin{itemize}
@@ -490,7 +494,7 @@ Just as Chapter~\ref{ch:dataset-design} produced the Data Design Card and Chapte
 \item How do you ensure the state is Markovian (past is summarized in the present)?
 \end{itemize}
 
-\vspace{0.5cm}
+\vspace{0.2cm}
 
 \noindent \textbf{Action space:}
 \begin{itemize}
@@ -499,7 +503,7 @@ Just as Chapter~\ref{ch:dataset-design} produced the Data Design Card and Chapte
 \item Are there safety constraints (actions the agent should never take)?
 \end{itemize}
 
-\vspace{0.5cm}
+\vspace{0.2cm}
 
 \noindent \textbf{Reward signal:}
 \begin{itemize}
@@ -509,7 +513,7 @@ Just as Chapter~\ref{ch:dataset-design} produced the Data Design Card and Chapte
 \item How will you audit for reward hacking?
 \end{itemize}
 
-\vspace{0.5cm}
+\vspace{0.2cm}
 
 \noindent \textbf{Exploration strategy:}
 \begin{itemize}
@@ -518,7 +522,7 @@ Just as Chapter~\ref{ch:dataset-design} produced the Data Design Card and Chapte
 \item How will you ensure safety during exploration?
 \end{itemize}
 
-\vspace{0.5cm}
+\vspace{0.2cm}
 
 \noindent \textbf{Evaluation plan:}
 \begin{itemize}
@@ -548,11 +552,11 @@ Jumping straight to RL without first testing a simple heuristic or rule-based po
 \end{failurepattern}
 
 \begin{failurepattern}[Ignoring partial observability]
-The agent observes state $s$, but the reward depends on a hidden part of the state. The agent cannot learn a good policy because it cannot infer the full state from $s$. Cause: insufficient sensor data or poor state representation. Mitigation: invest in better observations, or simplify the problem to make it fully observable.
+The agent observes state $s$, but the reward depends on a hidden part of the state. The agent may fail to learn a reliable policy because it cannot infer the full state from $s$ alone. Cause: insufficient sensor data or poor state representation. Mitigation: invest in better observations, add memory or state estimation, or simplify the problem to make it closer to fully observable.
 \end{failurepattern}
 
 \begin{failurepattern}[Confusing on-policy and off-policy learning]
-On-policy methods (e.g., policy gradient) require data sampled from the current policy. Off-policy methods (e.g., Q-learning) learn from any data. Mixing them causes instability. Cause: misunderstanding when a method is valid. Mitigation: check the algorithm's assumptions; when in doubt, use on-policy methods (they are more forgiving).
+On-policy methods (e.g., policy gradient) require data sampled from the current policy. Off-policy methods (e.g., Q-learning) can reuse data from a different behavior policy when the logged data covers the actions and states needed by the target policy; arbitrary data is not automatically valid. Mixing these assumptions causes instability. Cause: misunderstanding when a method is valid. Mitigation: check the algorithm's assumptions; when in doubt, use on-policy methods (they are more forgiving).
 \end{failurepattern}
 
 \begin{failurepattern}[Inadequate exploration]
@@ -560,12 +564,24 @@ The agent converges to a local optimum and stops exploring. It never discovers b
 \end{failurepattern}
 
 \begin{failurepattern}[Evaluating RL with supervised metrics]
-You train an RL agent and then evaluate it using accuracy, precision, or other supervised metrics. But RL optimizes a different objective (cumulative reward), and a policy that maximizes reward might not maximize accuracy. Cause: misalignment between training and evaluation. Mitigation: evaluate using the true reward signal, not proxy metrics.
+You train an RL agent and then evaluate it using accuracy, precision, or other supervised metrics. But RL optimizes a different objective (cumulative reward), and a policy that maximizes reward might not maximize accuracy. Cause: misalignment between training and evaluation. Mitigation: evaluate cumulative return together with independent task, safety, and user-outcome metrics aligned with the true objective; do not rely on supervised accuracy alone.
 \end{failurepattern}
 
 \begin{failurepattern}[Non-stationary environments]
 The environment changes over time (e.g., student preferences shift, pedestrian behavior changes), but the learned policy does not adapt. Cause: static offline training. Mitigation: use online learning, with continuous data collection and retraining.
 \end{failurepattern}
+
+\section{Offline Evaluation and the Bandit Bridge}
+
+Two threads from this chapter resurface later in the book under different names, and it is worth flagging them now so the connection is not lost.
+
+The first thread is \emph{offline evaluation from logged data}. Most of this chapter has assumed the agent can interact freely with its environment: try an action, observe a reward, update. Real deployments rarely allow that. A pedestrian detector cannot rehearse crashes; a course-support assistant cannot route every student into every policy variant to see what works best. Instead, teams have logs: states the system saw, actions it chose under the \emph{old} policy, and outcomes that followed. Estimating how a \emph{new} policy would have behaved, using only those logs, is the problem of off-policy or \emph{counterfactual} evaluation. Chapter~\ref{ch:ranking-recommendation} returns to this under the label of offline ranking evaluation (Section~\ref{sec:ranking-eval}): recommendation systems face exactly the same asymmetry, because past clicks tell us only about items the old policy chose to expose, and any offline metric must correct for that exposure bias (Section~\ref{sec:exposure-bias}). The RL vocabulary of behavior policy, target policy, and importance-weighted returns is the same machinery under another name.
+
+The second thread is \emph{bandits}. A multi-armed bandit is the simplest reinforcement-learning problem: one state, many actions, stochastic rewards, and the only task is to balance exploration against exploitation. Bandits matter operationally because they fit the regime where real systems most often ``learn from interaction'': low-stakes routing and ranking decisions that happen thousands of times per hour, each producing a fast feedback signal. Chapter~\ref{ch:models-systems} treats this in the ``Bandits, Online Learning, and Adaptive Systems'' section, connecting the explore-exploit tradeoff from this chapter to the deployment question of when a production system should be allowed to adapt its own policy rather than wait for a human-driven retraining cycle.
+
+\begin{practicalnote}
+The practical rule of thumb is simple. Offline evaluation is the question ``would a new policy have been better than the old one, judging only by what we already logged?'' Bandits are the question ``can the system \emph{cheaply try} the new policy on a small fraction of traffic and decide?'' The two are complements: offline evaluation screens candidates; a bandit or A/B deployment confirms them under the real feedback loop.
+\end{practicalnote}
 
 \section{Looking Ahead: From RL to Modalities}
 

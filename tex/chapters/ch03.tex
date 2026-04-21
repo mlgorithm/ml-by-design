@@ -80,7 +80,7 @@ From this point forward, the notation will be slightly compressed: unless a dist
 \[
 x_{\text{raw}} \longrightarrow \phi(x_{\text{raw}}) \longrightarrow w^\top \phi(x_{\text{raw}}) + b.
 \]
-That small discipline prevents one of the most common beginner confusions in linear modeling. The coefficients do not multiply ``the email'' or ``the apartment'' in the abstract. They multiply the engineered features that someone chose to expose.
+That small discipline prevents a common beginner confusion. The coefficients do not multiply ``the email'' or ``the apartment'' in the abstract. They multiply the engineered features chosen for the model.
 
 \begin{example}[From Raw Input to Feature Vector]
 Suppose the raw email is ``FREE cash offer today,'' sent from an unfamiliar domain and containing two links. A simple feature map might turn that raw message into
@@ -292,7 +292,7 @@ This is the geometric meaning of best fit in a linear model: once the projection
 
 \subsection{Minimizing the Loss: Gradient Descent}
 
-The standard procedure for finding weights that minimize the MSE is gradient descent. Starting from some initial weight vector $w$, we repeatedly move the weights in the direction that decreases the loss the fastest. The gradient $\nabla_w \mathcal{L}$ points uphill, so we subtract a small multiple of it:
+Ordinary least squares also has a closed-form solution, but gradient descent is the reusable optimization procedure that will matter throughout the book. Starting from some initial weight vector $w$, we repeatedly move the weights in the direction that decreases the loss the fastest. The gradient $\nabla_w \mathcal{L}$ points uphill, so we subtract a small multiple of it:
 \[
 w \leftarrow w - \eta \, \nabla_w \mathcal{L}(w),
 \]
@@ -341,7 +341,7 @@ print(round(loss_before, 4))   # loss before the step
 print(round(loss_after, 4))    # loss after one correction
 \end{codeexample}
 
-Running this program produces a smaller loss after a single step. The point of the example is to show the mechanics of gradient descent rather than to establish the final semantic role of each feature from one update. Because the model begins from a symmetric near-zero state and the features are not centered, the earliest steps mainly reflect the network's attempt to move away from systematic underprediction. In a fitted model with an explicit bias term and centered or standardized inputs, the eventual sign and magnitude of each coefficient become easier to interpret.
+Running this program produces a smaller loss after a single step. The point of the example is to show the mechanics of gradient descent rather than to establish the final semantic role of each feature from one update. Because the model begins from a symmetric near-zero state and the features are not centered, the earliest steps mainly reflect the model's attempt to move away from systematic underprediction. In a fitted model with an explicit bias term and centered or standardized inputs, the eventual sign and magnitude of each coefficient become easier to interpret.
 
 \begin{figure}[t]
 \centering
@@ -476,7 +476,7 @@ P(y=1 \mid x) &= \sigma(w^\top x + b).
 
 In predictive language, this is the model's estimated conditional probability, not automatically a calibrated real-world frequency. This is why the generic pipeline matters. Linear regression uses the identity transform. Logistic regression uses the sigmoid transform. But the change is not only cosmetic. Logistic regression is trained against a classification objective such as log loss, and its output is meant to support probability estimation and threshold policy rather than unrestricted numeric prediction. The reader should keep three layers separate all the way through: score, probability, and decision rule.
 
-Logistic regression is linear in the score, the log-odds, and the decision boundary, not in the final probability output itself.
+Logistic regression has a linear score and a linear decision boundary in the encoded feature space, but the final probability is nonlinear in that score.
 
 \subsection{From Score to Probability}
 
@@ -713,7 +713,7 @@ In the extreme case of near-perfect collinearity, coefficients can become non-un
 
 In practice, this means two models trained on slightly different samples can make similar predictions while assigning noticeably different weights to correlated inputs. Prediction can remain stable while interpretation becomes fragile.
 
-\paragraph{Resampling reveals instability.} One diagnostic for coefficient fragility is to train the same model on bootstrap resamples of the training set, meaning repeated samples drawn with replacement from the original training data, and inspect how much each coefficient varies across those resamples. A coefficient that regularly switches sign, or that varies by more than its mean value (equivalently, check whether the bootstrap 95\% interval for the coefficient includes zero), should not be interpreted as evidence of a stable directional effect. It may be absorbing the variance of a correlated neighbor. A stable, interpretable coefficient stays in the same direction and roughly the same magnitude across resamples.
+\paragraph{Resampling reveals instability.} One diagnostic for coefficient fragility is to train the same model on bootstrap resamples of the training set, meaning repeated samples drawn with replacement from the original training data, and inspect how much each coefficient varies across those resamples. A coefficient that regularly switches sign, that varies wildly relative to its typical size, or whose bootstrap 95\% interval includes zero should not be interpreted as evidence of a stable directional effect. It may be absorbing the variance of a correlated neighbor. A stable, interpretable coefficient stays in the same direction and roughly the same magnitude across resamples.
 
 \paragraph{Adding or removing a feature changes the story.} Suppose a wage model is trained first with both years of experience and job tenure, then with only job tenure removed. If the coefficient on years of experience changes substantially when tenure is dropped, that is evidence of collinearity. The original coefficient was not measuring the ``pure effect'' of experience; it was absorbing part of the tenure effect as well. This is why coefficient narratives built on a single model fit can be misleading even when the model predicts well.
 
@@ -733,7 +733,7 @@ Imagine a customer-churn model in which the number of refund requests has a posi
 What you are usually allowed to say:
 \begin{itemize}[leftmargin=*]
 \item ``This feature is associated with higher predicted risk in this model.''
-\item ``Holding the encoded features fixed, increasing this variable raises the score.''
+\item ``Holding the encoded features fixed, changing this variable moves the score in the direction of its fitted coefficient.''
 \end{itemize}
 What you are usually not allowed to say from the model alone:
 \begin{itemize}[leftmargin=*]
@@ -770,7 +770,7 @@ Suppose a model finds that students who sign up for tutoring are less likely to 
 
 To move from predictive association to a causal claim, the evidence standard changes. Stronger causal language usually requires a design that supports intervention reasoning: a randomized experiment, a natural experiment with defensible assumptions, or a domain model that makes the required causal assumptions explicit and testable. A fitted linear model on observational data is rarely enough on its own.
 
-The practical rule for this book is conservative. If the task is prediction, say ``associated with,'' ``useful for prediction,'' or ``raises the model score when other encoded features are held fixed.'' Reserve words such as ``causes,'' ``effect,'' or ``would improve outcomes if changed'' for settings where the causal design has actually been defended.
+The practical rule for this book is conservative. If the task is prediction, say ``associated with,'' ``predictive of,'' or ``raises the score when encoded features are fixed.'' Reserve words such as ``causes,'' ``effect,'' or ``would improve outcomes if changed'' for settings where the causal design has actually been defended.
 
 \section{Controlled Simplicity: Regularization}
 
@@ -886,7 +886,7 @@ l1_penalty_subgradient = [lam * sign(w) for w in weights]
 # weights[j] -= learning_rate * (data_gradient[j] + l1_penalty_subgradient[j])
 \end{codeexample}
 
-The L2 penalty nudges every weight toward zero by an amount proportional to the weight's current value, so large weights shrink faster than small ones but none ever reaches exactly zero. The L1 penalty moves every non-zero weight by the same fixed step regardless of magnitude, which is why it can drive weights all the way to zero and produce sparse models. Because the absolute-value penalty is not differentiable at zero, the code above is intentionally a subgradient-style sketch rather than a literal everywhere-differentiable gradient update.
+The L2 penalty nudges every weight toward zero by an amount proportional to the weight's current value, so large weights shrink faster than small ones and, under ordinary gradient-style updates, are usually driven toward zero smoothly rather than snapped exactly to zero by the penalty alone. The L1 penalty moves every non-zero weight by the same fixed step regardless of magnitude, which is why it can drive weights all the way to zero and produce sparse models. Because the absolute-value penalty is not differentiable at zero, the code above is intentionally a subgradient-style sketch rather than a literal everywhere-differentiable gradient update.
 
 \section{Why Linear Models Are the Right First Baseline}
 
@@ -910,7 +910,7 @@ A persistent misconception is that linear models are only a warm-up exercise bef
 
 \textbf{Text classification.} A bag-of-words or TF--IDF representation with logistic regression can achieve classification accuracy on tasks like news topic classification, spam filtering, or sentiment classification that deep models beat by only a few percentage points, at a fraction of the computational cost. The reason is straightforward: in text classification, the vocabulary already exposes the relevant signal. A word like ``inheritance'' is informative about legal topics. A word like ``free'' is informative about spam. A linear model on a well-engineered bag-of-words can identify those associations efficiently.
 
-\textbf{High-dimensional tabular prediction.} In fraud detection, credit scoring, and clinical risk modeling, datasets often have hundreds or thousands of engineered features over millions of examples. Many of those features are individually informative, and their combination is largely additive. A regularized linear model can handle this well. The L1 penalty selects a sparse subset of informative features, making the model both competitive and interpretable. Tree ensembles often win eventually, but rarely by a margin that justifies a tenfold increase in computational cost for the initial prototyping.
+\textbf{High-dimensional tabular prediction.} In fraud detection, credit scoring, and clinical risk modeling, datasets often have hundreds or thousands of engineered features over millions of examples. Many of those features are individually informative, and their combination is largely additive. A regularized linear model can handle this well. The L1 penalty can produce a sparse set of nonzero coefficients, making inspection easier, though selected features still need stability and domain checks before they are treated as genuinely informative or interpretable. Tree ensembles often win eventually, but rarely by a margin that justifies a tenfold increase in computational cost for the initial prototyping.
 
 \begin{example}[Linear Baseline on a Text Task]
 For a news topic classifier over four categories, a logistic regression with TF--IDF features might achieve $93\%$ accuracy. A fine-tuned transformer might reach $96\%$. That $3$-point gap may matter for a production system, but it does not mean the linear baseline was uninformative. It established that the task is solvable, identified which categories confuse the model, and provided a reference point against which the expensive model must justify its cost.
@@ -984,12 +984,14 @@ This is the right way to think about moving beyond linear models. Do not abandon
 The diagnostic questions are often more useful than the answer:
 \begin{itemize}[leftmargin=*]
 \item If interactions are missing, perhaps trees or engineered interaction features matter.
+\item If a plausible feature space needs a more robust separator, perhaps margin-based methods matter.
+\item If sparse class-conditional patterns matter, perhaps a probabilistic baseline such as Naive Bayes matters.
 \item If local neighborhoods matter, perhaps nearest-neighbor ideas matter.
 \item If unlabeled structure matters, clustering or dimensionality reduction may matter.
 \item If raw images or sequences matter, learned representations may matter later.
 \end{itemize}
 
-That is why the next chapter is the natural move. It does not replace linear thinking. It asks a sharper structural question: is the missing piece mainly conditional thresholds and interactions, local similarity, or unlabeled organization? The weighted-sum baseline is what makes that diagnosis possible.
+That is why the next chapter is the natural move. It does not replace linear thinking. It asks a sharper structural question: is the missing piece mainly conditional thresholds and interactions, margin structure, class-conditional probabilistic structure, local similarity, or unlabeled organization? The weighted-sum baseline is what makes that diagnosis possible.
 
 \section{Chapter Artifact: A First Baseline Design Sheet}
 
@@ -1032,7 +1034,7 @@ The common mistakes with linear models are predictable. Teams treat feature engi
 
 \section{Looking Ahead}
 
-This chapter showed that representation is already part of the model. The next chapter studies what kind of structure is missing when one global weighted sum is not enough: conditional thresholds and interactions, local similarity, or unlabeled organization.
+This chapter showed that representation is already part of the model. The next chapter studies what kind of structure is missing when one global weighted sum is not enough: conditional thresholds and interactions, margin structure, class-conditional probabilistic structure, local similarity, or unlabeled organization.
 
 \section*{Chapter Summary}
 

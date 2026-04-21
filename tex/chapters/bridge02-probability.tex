@@ -8,6 +8,7 @@
 \item Interpret empirical risk as the average training signal over a dataset rather than as an abstract formula to memorize.
 \item Use a light functional-analysis viewpoint to explain why a predictor is a function and why a risk objective is a rule that assigns one number to the whole predictor.
 \item Read gradients and the chain rule as credit-assignment tools for reducing training loss.
+\item Distinguish generative and discriminative models at an intuitive level and connect priors and MAP to regularization.
 \end{learninggoals}
 
 \begin{prereqbridge}
@@ -94,15 +95,15 @@ The purpose of this calculation is not to claim that life has units called \(3.8
 
 Probability and action are different things. A model may produce a well-calibrated probability estimate, yet the right action can still differ across teams, deployments, and time periods, even when the probability stays the same.
 
-The bridge from probability to action goes through three factors: the estimated probability, the costs of the available actions, and the base rate of the relevant event.
+The bridge from probability to action goes through three factors: the estimated probability, the costs of the available actions, and the prevalence and workload context of deployment.
 
 Consider the student-support example. Suppose the model assigns a probability of $0.35$ to the event that a student will disengage. Is that high enough to trigger an outreach call?
 
 That question cannot be answered from the probability alone. It depends on:
 \begin{itemize}[leftmargin=*]
-\item the cost of a correct intervention: if it prevents serious academic harm, the benefit is large,
+\item the benefit of a correct intervention: if it prevents serious academic harm, the benefit is large,
 \item the cost of a false alarm: staff time and student inconvenience,
-\item the base rate: if $30\%$ of students routinely score near $0.35$, routine outreach may be sustainable; if only $2\%$ ever reach that level, the same policy creates a very different workload.
+\item the prevalence and workload context: if $30\%$ of students routinely score near $0.35$, routine outreach may be sustainable; if only $2\%$ ever reach that level, the same policy creates a very different workload.
 \end{itemize}
 
 \begin{example}[Same Probability, Different Action]
@@ -116,10 +117,10 @@ Bayes-optimal decisions formalize this idea. In the simplest binary setup, suppo
 If false negatives are nine times more costly than false positives, the optimal threshold is $0.1$, not $0.5$. The default threshold of $0.5$ therefore encodes an implicit equal-cost assumption that is often wrong in practice. Base-rate changes still matter, but they matter through the calibrated posterior probabilities the threshold is applied to.
 
 \begin{thinkingtool}
-\textbf{Separate three questions.} Does the model output an honest probability? What are the costs of each kind of mistake? What is the current base rate? Only when all three are answered does it make sense to ask what the action should be.
+\textbf{Separate three questions.} Does the model output an honest probability? What are the costs of each kind of mistake? What is the current prevalence and score distribution in deployment? Only when all three are answered does it make sense to ask what the action should be.
 \end{thinkingtool}
 
-A common undergraduate mistake is to assume that the best classifier, the best probability forecaster, and the best decision policy are automatically the same object. They are not. A model with strong ranking quality may still produce poorly calibrated probabilities. A well-calibrated model may still imply a different threshold in a high-stakes setting than in a low-stakes one. And both of those may be further adjusted when the base rate changes seasonally, demographically, or across deployment contexts.
+A common undergraduate mistake is to assume that the best classifier, the best probability forecaster, and the best decision policy are automatically the same object. They are not. A model with strong ranking quality may still produce poorly calibrated probabilities. A well-calibrated model may still imply a different threshold in a high-stakes setting than in a low-stakes one. And both of those may be further adjusted when prevalence or the score distribution changes seasonally, demographically, or across deployment contexts.
 
 \section*{Logarithms, Exponentials, and Why They Keep Appearing}
 
@@ -233,7 +234,7 @@ Accuracy, by contrast, is not a proper scoring rule for probabilities. Under acc
 A scoring rule $S(\hat{p}, y)$ is \emph{proper} if $\mathbb{E}_{y \sim p^*}[S(p^*, y)] \leq \mathbb{E}_{y \sim p^*}[S(\hat{p}, y)]$ for all $\hat{p}$, with equality only when $\hat{p} = p^*$ in the strictly proper case. Log loss and Brier score are proper. Accuracy-based rewards are not. Proper rules are the right losses to use when calibrated probabilities matter for downstream decisions.
 \end{mathlens}
 
-Why does this matter for AI practice? When a model output drives a threshold decision, the calibration of that output determines whether the threshold can be set reliably from a stated probability. A model that is $0.82$ overconfident at high scores will, under a threshold-as-policy interpretation, flag many cases that a properly calibrated model would not flag. The team may then tighten the threshold empirically, but without understanding that the underlying model probabilities are systematically distorted, they cannot trust that the threshold will transfer to a new semester, a new patient cohort, or a new deployment context.
+Why does this matter for AI practice? When a model output drives a threshold decision, the calibration of that output determines whether the threshold can be set reliably from a stated probability. A model that outputs $0.82$ for cases whose empirical event rate is much lower will, under a threshold-as-policy interpretation, flag many cases that a properly calibrated model would not flag. The team may then tighten the threshold empirically, but without understanding that the underlying model probabilities are systematically distorted, they cannot trust that the threshold will transfer to a new semester, a new patient cohort, or a new deployment context.
 
 \begin{practicalnote}
 When selecting a training loss, ask whether the loss rewards honest probability forecasts or merely correct binary predictions. For any application where the probability score will drive a downstream decision, prefer log loss or Brier score over accuracy as the training signal.
@@ -293,7 +294,7 @@ This gap is one of the deepest ideas in the book. Its consequences reach every c
 \end{itemize}
 
 \begin{example}[Why Low Training Loss Is Not Yet Evidence]
-Suppose a model memorizes every training example perfectly: for each student in the training set it has learned an exact rule that reproduces the label. Its training loss is zero. But when the model meets a new student---one it has never seen---it has no generalizable rule to fall back on. Its population risk may be high. The perfect training loss was a mirage: it said something about the sample but nothing about the distribution.
+Suppose a model memorizes every training example perfectly: for each student in the training set it has learned an exact rule that reproduces the label. Its training error is zero, and under some losses its training loss may be near zero. But when the model meets a new student---one it has never seen---it has no generalizable rule to fall back on. Its population risk may be high. The perfect training result was a mirage: it said something about the sample but nothing about the distribution.
 \end{example}
 
 The correct mental discipline is to treat training loss as a signal about optimization and population risk as the actual goal. Every time someone says ``the model improved,'' they should mean population risk improved, as estimated by held-out performance. Saying ``training loss went down'' without that translation is not yet evidence of learning in the useful sense.
@@ -482,6 +483,36 @@ how much did an earlier quantity contribute to the final error, and therefore ho
 
 That is why backpropagation is not just calculus drill. It is structured credit assignment through a composed function.
 
+\section*{Generative vs.\ Discriminative: Two Ways to Use Probability}
+
+All the models discussed so far learn to predict a label from an input: $P(Y \mid X)$. This is the \emph{discriminative} approach---the model discriminates between classes based on the observed features. Logistic regression, neural networks, and decision trees are all discriminative models.
+
+But there is a fundamentally different approach. A \emph{generative} model learns how the data is produced: it models $P(X \mid Y)$ (what does a typical input look like, given the class?) and $P(Y)$ (how common is each class?). To classify a new input, Bayes' theorem combines these:
+\[
+P(Y \mid X) = \frac{P(X \mid Y) \, P(Y)}{P(X)}
+\]
+
+The numerator is easy: multiply the class-conditional likelihood by the prior. The denominator $P(X)$ is the same for all classes, so for classification it can be ignored---we just pick the class that maximizes $P(X \mid Y) \, P(Y)$.
+
+\textbf{Why does this distinction matter?} It changes what the model learns and what it can do:
+
+\begin{itemize}[leftmargin=*]
+\item A discriminative model focuses all its capacity on the decision boundary. It is often more accurate for classification, but it does not model the data distribution directly, so it has no built-in density for outlier detection or sampling new data.
+\item A generative model learns the structure of the data itself. It can detect inputs that are unlike anything it has seen (outlier detection), handle missing features by marginalizing over them, and generate new examples. But it requires stronger assumptions about the data distribution.
+\end{itemize}
+
+\begin{example}[Generative Thinking for Spam]
+A discriminative spam filter learns: given these word frequencies, is this message spam? A generative spam filter learns: what do spam messages look like, and what do legitimate messages look like? The generative model can flag an email written in a language it has never seen---it is unlikely under \emph{both} models, suggesting it is out-of-distribution. A plain closed-set discriminative classifier has no built-in mechanism for this; it needs an added rejection rule, uncertainty check, or out-of-distribution detector.
+\end{example}
+
+\textbf{Priors, posteriors, and MAP.} In Bayesian vocabulary, $P(Y)$ is the \emph{prior}---your belief about class probabilities before seeing the data. $P(Y \mid X)$ is the \emph{posterior}---your updated belief after seeing the input. The same logic applies to model parameters: a \emph{prior} on parameters $P(\boldsymbol{\theta})$ expresses which parameter values you believe are plausible before training. \emph{Maximum a posteriori} (MAP) estimation finds the parameters that maximize $P(\boldsymbol{\theta} \mid \text{data}) \propto P(\text{data} \mid \boldsymbol{\theta}) \, P(\boldsymbol{\theta})$. This gives one principled interpretation of many regularizers: in penalized likelihood, an $L_2$ penalty corresponds to a Gaussian prior and an $L_1$ penalty corresponds to a Laplace prior. What looked like an ad hoc penalty can be read as a prior belief when the modeling assumptions match.
+
+These ideas---generative models, priors, posteriors, MAP---return in full force in Chapter~\ref{ch:probabilistic-models} (probabilistic models), Chapter~\ref{ch:structure-beyond-linearity} (Naive Bayes), and Chapter~\ref{ch:generative-representations} (generative representations). This bridge section provides just enough vocabulary to make those chapters readable.
+
+\begin{thinkingtool}
+\textbf{Discriminative or generative?} When designing a system, ask: do I only need to classify, or do I also need to detect the unfamiliar, handle missing information, or generate new examples? The answer determines whether a discriminative model suffices or whether a generative perspective is needed.
+\end{thinkingtool}
+
 \section*{Chapter Artifact: Learning-Signal Card}
 
 \begin{quote}
@@ -530,6 +561,8 @@ For a spam-filtering task, the two bridge artifacts work together. The \emph{rep
 \item A predictor can be viewed as a function, while empirical risk is a rule that assigns one number to the whole predictor.
 \item Gradients and the chain rule turn a loss into a usable update signal.
 \item The main deliverable of the chapter is a learning-signal card written before claiming that a training objective and a deployment goal are aligned.
+\item Generative models learn $P(X \mid Y)$ and can detect outliers and generate data; discriminative models learn $P(Y \mid X)$ and focus on the decision boundary.
+\item MAP estimation connects regularization to Bayesian prior beliefs about parameter values.
 \end{chaptersummary}
 
 \begin{table}[h]
@@ -545,6 +578,7 @@ Loss functions and scoring rules & Chapters~\ref{ch:prediction-loss-decision},~\
 Empirical vs.\ population risk & Chapters~\ref{ch:evaluation-discipline},~\ref{ch:experiments-claims} (evaluation, experiments) \\
 Gradient descent & Chapter~\ref{ch:optimization-neural-networks} (optimization, backpropagation) \\
 Cost-sensitive thresholds & Chapters~\ref{ch:prediction-loss-decision},~\ref{ch:vision} (decision rules, detection) \\
+Generative vs.\ discriminative, priors, MAP & Chapters~\ref{ch:structure-beyond-linearity},~\ref{ch:probabilistic-models},~\ref{ch:generative-representations} (Naive Bayes, probabilistic models, generative representations) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -554,6 +588,7 @@ Cost-sensitive thresholds & Chapters~\ref{ch:prediction-loss-decision},~\ref{ch:
 \item What is the practical difference between a pointwise loss and empirical risk?
 \item In plain language, what is the functional-analysis viewpoint on a loss function that this book actually needs?
 \item Why is the chain rule better understood as credit assignment than as symbol pushing?
+\item What can a generative model do that a discriminative model cannot, and why does this come at a cost?
 \end{studyquestions}
 
 \begin{exercises}

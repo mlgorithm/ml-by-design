@@ -1,4 +1,4 @@
-# Chapter 10 Companion
+# Chapter 16 Companion: Experiments, Error Analysis, and Scientific Claims (`ch10`)
 
 This chapter supports the shift from model building to experimental reasoning.
 
@@ -42,7 +42,7 @@ Prerequisites:
 What it shows:
 
 - a clean-accuracy and shifted-accuracy evaluation on digit images
-- a baseline model without augmentation and an ablated model with shift augmentation
+- an augmented model compared against a no-augmentation baseline
 - repeated runs across several seeds with mean and standard deviation reporting
 
 Run it with:

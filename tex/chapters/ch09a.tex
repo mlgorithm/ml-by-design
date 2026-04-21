@@ -1,0 +1,339 @@
+\chapter{Ranking, Recommendation, and Exposure}
+\label{ch:ranking-recommendation}
+
+The previous chapters built models that classify, regress, detect, and forecast. In each case, the model produces one prediction per input. But many real-world systems do not predict a single answer---they produce a \emph{ranked list}. A search engine ranks documents. A streaming service ranks movies. A course-support system ranks resources for a struggling student. A campus job board ranks opportunities for graduating seniors.
+
+Ranking introduces problems that classification and regression do not face. The items a system surfaces shape what users see, click, and ultimately choose. This means the model's outputs influence the data it will be trained on in the future---a feedback loop that can amplify biases, suppress diversity, and create blind spots. The design question shifts from ``is the prediction correct?'' to ``is the ranked list useful, fair, and safe?''
+
+This chapter treats recommendation as a ranking problem, introduces collaborative filtering and matrix factorization, addresses the challenges of implicit feedback and missing data, and examines how exposure bias corrupts evaluation and perpetuates inequality. The chapter artifact---the recommendation audit card---documents what the system exposes, suppresses, and amplifies.
+
+\begin{problemsolvinglens}
+A recommender system is not a neutral mirror of user preferences. It is an active participant in shaping what users experience. Every design decision---what to rank, what signals to use, how to handle missing data---is a decision about what gets seen and what gets hidden.
+\end{problemsolvinglens}
+
+\begin{thinkingtool}
+\textbf{Exposure as allocation.} When evaluating a recommendation system, ask: who or what is being exposed, and who or what is being suppressed? Ranking is an allocation of user attention, and that allocation has consequences for content creators, students, job seekers, and anyone whose opportunities depend on being visible.
+\end{thinkingtool}
+
+\begin{learninggoals}
+\item Frame recommendation as a ranking problem and connect it to classification and retrieval
+\item Explain collaborative filtering and its cold-start limitations
+\item Describe matrix factorization as a latent-factor model for recommendation
+\item Distinguish explicit from implicit feedback and explain why implicit feedback is harder
+\item Identify exposure bias and explain how it corrupts both training data and evaluation
+\item Evaluate ranking systems using metrics that account for position (NDCG, MAP, MRR)
+\item Explain why offline evaluation of recommender systems is unreliable without counterfactual correction
+\item Construct a recommendation audit card documenting what the system exposes, suppresses, and amplifies
+\end{learninggoals}
+
+\section{Recommendation as Ranking}
+
+A recommendation system predicts which items a user will find relevant, then presents them in a ranked order. This framing connects to several ideas already encountered in the book.
+
+\textbf{Connection to classification.} At the item level, recommendation can sometimes be framed as predicting a relevance or utility score for a user-item pair. That score may come from a pointwise classifier or regressor, a pairwise preference model, or a listwise ranker; the ranked list is produced by sorting or otherwise selecting from candidate scores.
+
+\textbf{Connection to retrieval.} Information retrieval---search engines, document retrieval---also produces ranked lists. The key difference is that search is query-driven (the user states what they want) while recommendation is profile-driven (the system infers what the user might want from past behavior). The evaluation metrics overlap: precision, recall, and normalized discounted cumulative gain (NDCG) appear in both settings.
+
+\textbf{Connection to representation learning.} The most successful recommendation systems learn latent representations of users and items (Chapter~\ref{ch:representation-foundation-models}). A user is represented as a vector that captures their preferences; an item is represented as a vector that captures its attributes. Recommendation becomes a learned scoring problem in the latent space: recommend items whose vectors are most compatible with the user's vector under a score such as a dot product or cosine similarity.
+
+\begin{example}[Course Resource Recommendation]
+A university's course-support system has a library of 500 resources: lecture recordings, worked examples, practice problems, office-hour transcripts, and tutoring sessions. When a student is flagged by the early-warning model as CONCERNING, the system should recommend the 5 most helpful resources. This is a ranking problem: score all 500 resources by predicted helpfulness for this student, and present the top 5. The scoring function must account for the student's specific weaknesses (revealed by their submission patterns), the resource's content, and what similar students found helpful in the past.
+\end{example}
+
+\section{Collaborative Filtering}
+\label{sec:collab-filter}
+
+\subsection{The Core Idea}
+
+Collaborative filtering is the foundational approach to recommendation. The idea is simple: recommend items that similar users liked.
+
+\textbf{User-based collaborative filtering.} To recommend items for user $u$:
+\begin{enumerate}[leftmargin=*]
+\item Find users who are similar to $u$ (based on their past ratings or interactions).
+\item Recommend items that those similar users liked but $u$ has not yet seen.
+\end{enumerate}
+
+\textbf{Item-based collaborative filtering.} To recommend items for user $u$:
+\begin{enumerate}[leftmargin=*]
+\item For each item $u$ has liked, find similar items (based on which users liked them).
+\item Recommend the most similar items that $u$ has not yet seen.
+\end{enumerate}
+
+Both approaches require defining ``similarity.'' Common choices are cosine similarity (treating each user's ratings as a vector) or Pearson correlation (which adjusts for different rating scales across users).
+
+\subsection{The Cold-Start Problem}
+
+Collaborative filtering fails when there is insufficient interaction data:
+
+\textbf{New users.} A student who just enrolled has no interaction history. The system cannot find similar users because there is nothing to compare.
+
+\textbf{New items.} A newly uploaded resource has no ratings. The system cannot recommend it because no users have interacted with it.
+
+\textbf{Sparse interactions.} Even for established users, most user-item pairs have no interaction. A university with 1,000 students and 500 resources has 500,000 possible interactions, but each student may have accessed only 20 resources. The interaction matrix is 96\% empty.
+
+\begin{practicalnote}
+The cold-start problem is not a technical nuisance---it is a design problem. New items that are never recommended will never collect interactions, which means they will continue to not be recommended. This creates a rich-get-richer dynamic where popular items accumulate more data and become even more popular, while new or niche items are permanently invisible. Addressing cold start requires deliberate exploration: sometimes recommending items the system is uncertain about, not just items it is confident the user will like.
+\end{practicalnote}
+
+\section{Matrix Factorization}
+\label{sec:matrix-factorization}
+
+\subsection{The Latent Factor Model}
+
+Matrix factorization addresses the sparsity problem by learning latent factors for users and items. The interaction matrix $\mathbf{R}$ (users $\times$ items) is approximated as the product of two low-rank matrices:
+\[
+\mathbf{R} \approx \mathbf{U} \mathbf{V}^\top
+\]
+
+where $\mathbf{U} \in \mathbb{R}^{m \times k}$ contains $k$-dimensional latent vectors for each of $m$ users, and $\mathbf{V} \in \mathbb{R}^{n \times k}$ contains $k$-dimensional latent vectors for each of $n$ items. The predicted rating for user $u$ on item $i$ is:
+\[
+\hat{r}_{ui} = \mathbf{u}_u^\top \mathbf{v}_i
+\]
+
+The latent factors are learned by minimizing the reconstruction error on observed entries:
+\[
+\min_{\mathbf{U}, \mathbf{V}} \sum_{(u,i) \in \text{observed}} (r_{ui} - \mathbf{u}_u^\top \mathbf{v}_i)^2 + \lambda(\|\mathbf{U}\|^2 + \|\mathbf{V}\|^2)
+\]
+
+The regularization term $\lambda(\|\mathbf{U}\|^2 + \|\mathbf{V}\|^2)$ prevents overfitting---without it, the model can memorize the observed ratings without learning generalizable structure.
+
+\subsection{What the Latent Factors Mean}
+
+The latent factors capture implicit structure. In a movie recommendation system, one factor might capture ``action vs.\ drama preference,'' another might capture ``preference for recent vs.\ classic films.'' In a course-resource system, one factor might capture ``prefers worked examples vs.\ conceptual explanations,'' another might capture ``prefers short vs.\ long content.'' The factors are not predefined---they are discovered from the interaction data.
+
+\begin{example}[Matrix Factorization for Course Resources]
+The course-support system has a sparse interaction matrix: 800 students $\times$ 500 resources, with only 16,000 observed interactions (4\% fill rate). Matrix factorization with $k=20$ latent factors learns user vectors that capture resource-format and study-pattern preferences and item vectors that capture resource characteristics. After training, the system predicts that Student~A (whose latent vector is similar to students who prefer worked examples) would benefit from Resource~247 (a worked example on regression), even though Student~A has never accessed it. The predicted relevance score is 4.2 out of 5, placing it in the student's top-5 recommendations.
+\end{example}
+
+\begin{practicalnote}
+Matrix factorization is conceptually related to the dimensionality reduction discussed in Chapter~\ref{ch:structure-beyond-linearity}. PCA also factorizes a matrix into low-rank components. The key difference is that matrix factorization for recommendation operates on a \emph{sparse} matrix (most entries are missing) and only fits the observed entries, while PCA operates on a complete matrix. The optimization algorithms differ accordingly: alternating least squares (ALS) or stochastic gradient descent (SGD) for sparse matrix factorization, versus eigendecomposition for PCA.
+\end{practicalnote}
+
+\subsection{Adding Side Information}
+
+Pure matrix factorization uses only the interaction data. But additional information is often available: user demographics, item descriptions, temporal patterns. \emph{Hybrid models} combine collaborative filtering with content-based features:
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Content-based features.} Use item attributes (resource type, topic, difficulty level) to compute item similarity, addressing the cold-start problem for new items.
+\item \emph{Context features.} Use temporal and contextual signals (time of day, device, position in the semester) to adjust recommendations.
+\item \emph{Deep learning models.} Neural collaborative filtering replaces the dot product $\mathbf{u}_u^\top \mathbf{v}_i$ with a neural network that takes user and item embeddings as input. This can capture nonlinear interactions but requires more data and is harder to interpret.
+\end{itemize}
+
+\section{Implicit Feedback: The Missing-Data Problem}
+\label{sec:implicit-feedback}
+
+\subsection{Explicit vs.\ Implicit Signals}
+
+Most real-world recommendation systems do not have explicit ratings (1--5 stars). Instead, they observe \emph{implicit feedback}: clicks, views, dwell time, downloads, and purchases. Implicit feedback is abundant but ambiguous.
+
+\textbf{The asymmetry problem.} A click signals some interest, but a non-click is ambiguous. A student who did not access a resource may have been uninterested---or may never have seen it. A user who did not click a movie may dislike it---or may not have scrolled down far enough. Implicit feedback provides positive signals (``the user interacted with this'') but no reliable negative signals (``the user saw this and chose not to interact'').
+
+\textbf{The noise problem.} Implicit signals are noisy. A student may click a resource by accident. A user may watch a movie for 30 seconds and abandon it. Dwell time on a webpage could indicate engagement---or confusion. Converting implicit signals into training labels requires careful design.
+
+\subsection{Treating Implicit Feedback as Training Data}
+
+Common strategies for learning from implicit feedback:
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Binary encoding.} Treat all interactions as positive (1) and all non-interactions as negative (0). This is simple but treats the ambiguous non-interactions as definitive negatives.
+\item \emph{Confidence weighting.} Assign higher confidence to observed interactions and lower confidence to non-interactions. The model treats observed interactions as stronger evidence of preference and unobserved interactions as low-confidence zero-preference entries, not as certain dislikes. This is the approach used in the influential ``implicit ALS'' framework.
+\item \emph{Negative sampling.} Instead of treating all non-interactions as negatives, randomly sample a subset of non-interactions as negatives. This reduces the computational cost and avoids overwhelming the model with uninformative negatives.
+\item \emph{Exposure modeling.} Explicitly model whether the user \emph{saw} the item. If the item was never displayed to the user, the non-interaction is not a negative signal---it is missing data. This requires logging what was recommended, which connects to the exposure bias discussion below.
+\end{itemize}
+
+\begin{warningbox}
+Treating all non-interactions as negatives is one of the most common mistakes in recommendation system design. If the system has only shown a user 50 of 500 available items, the 450 unseen items are not negative examples---they are unknown. Training on them as negatives teaches the model to suppress items the user has never had a chance to evaluate. This systematically biases the model toward re-recommending items similar to what has already been shown.
+\end{warningbox}
+
+\begin{example}[Implicit Feedback in Course Support]
+The course-support system logs which resources each student accesses, how long they spend on each resource, and whether they return to it. A student who spends 45 minutes on a worked example and returns to it twice is a strong positive signal. A student who clicks a resource and leaves after 10 seconds is a weak positive (or possibly a negative). A resource the student was never shown is missing data, not a negative. The team uses confidence-weighted matrix factorization: observed interactions are weighted by dwell time (longer = higher confidence), and non-interactions for items that were \emph{displayed but not clicked} are treated as weak negatives. Non-interactions for items that were never displayed are excluded from training entirely.
+\end{example}
+
+\section{Evaluating Ranking Systems}
+\label{sec:ranking-eval}
+
+\subsection{Position-Aware Metrics}
+
+Classification metrics (accuracy, precision, recall) do not capture what matters in ranking: the \emph{order} of the results. A recommendation list that places the best item at position 10 is worse than one that places it at position 1, even if both lists contain the same items.
+
+\textbf{Mean Reciprocal Rank (MRR).} The reciprocal rank of a single query is $1/\text{rank}$ of the first relevant item. MRR averages this across queries. MRR rewards systems that place the first relevant item high in the list but ignores all other relevant items.
+
+\textbf{Mean Average Precision (MAP).} Average Precision for a single query computes precision at each position where a relevant item appears, then averages those values. MAP averages across queries. MAP rewards systems that place \emph{all} relevant items high, not just the first one.
+
+\textbf{Normalized Discounted Cumulative Gain (NDCG).} NDCG assigns graded relevance scores to items (not just binary relevant/irrelevant) and discounts items lower in the list by $1/\log_2(\text{rank} + 1)$. The score is normalized against the ideal ranking. NDCG is the most widely used metric for ranking evaluation because it handles graded relevance and position discounting.
+
+\begin{practicalnote}
+NDCG@$k$ evaluates only the top $k$ positions. Choosing $k$ is a design decision: for a mobile app showing 5 recommendations, NDCG@5 is appropriate; for a search page showing 20 results, NDCG@20 may be better. Always report the $k$ value and justify it based on the user interface.
+\end{practicalnote}
+
+\subsection{The Offline Evaluation Problem}
+
+In logged implicit-feedback data, naive offline evaluation is unreliable when the test observations are generated by a previous exposure policy. The system may have observations only for items users saw and interacted with, not for equally relevant items the previous system never exposed. This is the \emph{missing-not-at-random} problem: the test data is biased by the policy that generated it.
+
+\textbf{Counterfactual estimation.} The most principled approach uses inverse propensity scoring (IPS): weight each test observation by the inverse of the probability that the previous system would have exposed that item in that position or slate. Items the previous system was unlikely to show get higher weight, correcting for the selection bias. This requires logging item-position exposure propensities, which many production systems do not do.
+
+\textbf{Replay methods.} When historical logs include randomized recommendations (e.g., a small fraction of random items mixed into the ranked list), replay methods can estimate how a new policy would have performed by replaying the historical data and using the randomized portion as unbiased logged observations.
+
+\begin{warningbox}
+Offline metrics on logged implicit-feedback data can favor policies similar to the logger and understate policies that recommend items outside the logged support. Randomized exposure, explicit relevance judgments, or counterfactual correction are needed before drawing strong conclusions. Complement offline evaluation with online A/B tests before concluding that a new system is worse.
+\end{warningbox}
+
+\section{Exposure Bias and Feedback Loops}
+\label{sec:exposure-bias}
+
+\subsection{How Recommender Systems Shape Their Own Data}
+
+Unlike a classifier that passively receives test inputs, a recommender system actively determines what users see. This creates a feedback loop:
+
+\begin{enumerate}[leftmargin=*]
+\item The system recommends certain items to users.
+\item Users interact with the recommended items (because those are what they see).
+\item The interactions become the training data for the next version of the system.
+\item The next version learns to recommend items similar to what was previously recommended.
+\end{enumerate}
+
+Over time, the system converges on a narrow slice of the item space. Popular items get more exposure, collect more data, and become even more popular. New, niche, or minority-interest items receive less exposure, collect less data, and become invisible.
+
+\subsection{Consequences of Exposure Bias}
+
+\textbf{Popularity amplification.} A few items dominate recommendations regardless of individual user preferences. The ``long tail'' of less popular but potentially relevant items is suppressed.
+
+\textbf{Filter bubbles.} Users are shown increasingly narrow content that reinforces their past behavior. A student who once accessed a worked example on regression is shown more regression examples, even if they have moved on to a different topic.
+
+\textbf{Fairness to providers.} In two-sided platforms (job boards, course marketplaces, content platforms), items are created by providers---instructors, content creators, job posters. Exposure bias can systematically disadvantage providers whose items were not recommended early, creating unfair competitive dynamics.
+
+\textbf{Evaluation corruption.} The feedback loop corrupts the evaluation data. The system looks good in offline evaluation because it is tested on data it generated. But it may be performing poorly in an absolute sense---users are satisfied only because they were never shown better alternatives.
+
+\begin{example}[Exposure Bias in Campus Job Recommendations]
+A university job board recommends positions to graduating students based on past click data. Early in the system's life, software engineering jobs received the most clicks (because they were listed first alphabetically). The system learned that software engineering is ``popular'' and began recommending it more. Over time, research assistant positions, nonprofit roles, and teaching opportunities received less exposure, fewer clicks, and even less recommendation. A student interested in teaching would need to actively search rather than discover opportunities through recommendations. The feedback loop made the system a funnel toward software engineering, regardless of individual interests.
+\end{example}
+
+\subsection{Mitigating Exposure Bias}
+
+\begin{itemize}[leftmargin=*]
+\item \emph{Exploration.} Deliberately recommend some items the system is uncertain about, not just items it is confident the user will like. This is analogous to the exploration-exploitation trade-off in reinforcement learning (Chapter~\ref{ch:reinforcementlearning}).
+\item \emph{Diversity constraints.} Impose constraints on the recommendation list: require that the top-$k$ items span multiple categories, topics, or providers. This prevents the list from converging on a single niche.
+\item \emph{Exposure fairness.} Define a target exposure policy across eligible providers or content categories, then monitor deviations from that target while accounting for relevance, inventory, and user needs. This connects to the fairness discussion in Chapter~\ref{ch:reliability}.
+\item \emph{Logging and counterfactual evaluation.} Log what was recommended and with what probability. Use inverse propensity scoring to evaluate alternative policies on historical data. This allows detecting exposure bias before it becomes entrenched.
+\end{itemize}
+
+\begin{decisionbox}
+\textbf{Exposure bias checklist:}
+\begin{itemize}
+\item Does the system log what it recommends and with what probability?
+\item Is there an exploration mechanism (randomization, $\epsilon$-greedy, Thompson sampling)?
+\item Are diversity or fairness constraints enforced on the recommendation list?
+\item Has the system been evaluated with counterfactual methods, not just offline replay?
+\item Is the feedback loop monitored: is the item distribution in training data narrowing over time?
+\end{itemize}
+\end{decisionbox}
+
+\section{Chapter Artifact: The Recommendation Audit Card}
+\label{sec:rec-audit}
+
+The chapter artifact is the \emph{recommendation audit card}: a structured document that records what the system recommends, what signals it uses, what it exposes and suppresses, and what feedback loops exist. It connects to the data design card (Chapter~\ref{ch:dataset-design}), the uncertainty audit card (Chapter~\ref{ch:probabilistic-models}), and the deployment considerations of Part~IV.
+
+\subsection{Recommendation Audit Card Structure}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}L{2.8cm}L{7.2cm}@{}}
+\toprule
+Card field & What must be documented \\
+\midrule
+Recommendation task & What is being ranked, for whom, and in what context \\
+Signal sources & What user signals drive ranking (explicit ratings, clicks, dwell time, purchases, etc.) \\
+Model family & Collaborative filtering, matrix factorization, content-based, hybrid, or neural \\
+Cold-start strategy & How new users and new items are handled (defaults, content features, exploration) \\
+Implicit feedback treatment & How non-interactions are treated (binary, confidence-weighted, exposure-modeled) \\
+Evaluation protocol & What metrics are used (NDCG@$k$, MAP, MRR), offline vs.\ online evaluation, counterfactual correction \\
+Exposure analysis & What items or categories are overrepresented in recommendations; what is suppressed \\
+Diversity and fairness & Whether diversity or fairness constraints are enforced; how provider-side fairness is measured \\
+Feedback loop risk & Whether the system generates its own training data; what monitoring is in place \\
+Exploration mechanism & Whether and how the system explores uncertain or underrepresented items \\
+\bottomrule
+\end{tabular}
+\caption{A recommendation audit card documents what the system exposes, suppresses, and amplifies.}
+\label{tab:rec-audit-card}
+\end{table}
+
+\subsection{Filled Example: Course Resource Recommender}
+
+\begin{example}[Recommendation Audit Card for Course Resource System]
+
+\textbf{Recommendation task.} Rank 500 learning resources for students flagged as CONCERNING or URGENT by the early-warning model. Top-5 recommendations are displayed in the student dashboard.
+
+\textbf{Signal sources.} Implicit feedback: resource access logs (binary click), dwell time (seconds), and return visits (count). No explicit ratings are collected.
+
+\textbf{Model family.} Hybrid: confidence-weighted matrix factorization ($k=20$ latent factors) combined with content-based features (resource type, topic tag, difficulty level). Content features address cold start for newly uploaded resources.
+
+\textbf{Cold-start strategy.} New students receive recommendations based on content features and the course's most-accessed resources (popularity fallback). New resources are shown to a random 5\% of users for the first two weeks to collect initial interaction data (exploration).
+
+\textbf{Implicit feedback treatment.} Confidence-weighted: access events weighted by $1 + \alpha \cdot \log(1 + t/t_0)$, where $t$ is dwell time in seconds, $t_0=60$ seconds is the reference duration, and $\alpha = 0.5$. Items displayed but not clicked are treated as weak negatives (confidence 0.1). Items never displayed are excluded from training.
+
+\textbf{Evaluation protocol.} NDCG@5 and MAP@5 on a held-out set of student-resource interactions from the most recent semester. Counterfactual correction via IPS using logged item-position exposure propensities for the displayed slate. Online A/B test planned for fall semester.
+
+\textbf{Exposure analysis.} Worked examples and lecture recordings account for 68\% of all recommendations despite being only 40\% of the resource library. Office-hour transcripts and tutoring sessions are underrepresented. Resources uploaded in the current semester receive 3$\times$ less exposure than older resources due to less interaction data.
+
+\textbf{Diversity and fairness.} Top-5 list is constrained to include at least 2 distinct resource types (e.g., cannot show 5 worked examples). No instructor-side fairness constraint is currently enforced; this is a known gap.
+
+\textbf{Feedback loop risk.} High. The system generates the data it trains on. Worked examples dominate because they were recommended early, collected more clicks, and are now recommended even more. Monitoring: track normalized entropy of the resource-type distribution in training data quarterly, with 1 meaning perfectly balanced exposure across resource types and 0 meaning all exposure goes to one type. Alert if normalized entropy drops below 0.75, indicating dangerous narrowing.
+
+\textbf{Exploration mechanism.} $\epsilon$-greedy with $\epsilon = 0.05$: 5\% of recommendation slots are filled with a random resource the student has not yet seen. New resources receive a 2-week boost (shown to 5\% of users regardless of score).
+
+\end{example}
+
+\section{Common Mistakes in Recommendation Systems}
+
+Several mistakes recur in building and deploying recommender systems. The first is treating all non-interactions as negative signals, which biases the model toward re-recommending what it has already shown. The second is evaluating offline without counterfactual correction, which makes the current system look artificially good. A third is ignoring the cold-start problem: if new items are never recommended, they can never collect the data needed to be recommended, creating a permanent invisibility trap. A fourth is neglecting exposure fairness: a system that maximizes click-through rate may systematically suppress content from minority providers, niche topics, or newly created resources. Finally, deploying a recommender system without monitoring the feedback loop---checking whether the item distribution in training data is narrowing over time---risks creating a system that converges on a narrow, self-reinforcing slice of the item space.
+
+\section{Looking Ahead}
+
+This chapter treated recommendation as a ranking problem with unique challenges: implicit feedback, missing data, exposure bias, and feedback loops. The recommendation audit card documents what the system exposes and suppresses. These challenges preview the broader themes of Part~IV: experiments that produce honest claims (Chapter~\ref{ch:experiments-claims}), reliability under distribution shift (Chapter~\ref{ch:reliability}), and the transition from models to production systems where the model's outputs shape the world it operates in (Chapter~\ref{ch:models-systems}).
+
+\section*{Chapter Summary}
+
+Recommendation is a ranking problem: the system produces an ordered list, and the order determines what users see. Collaborative filtering recommends items liked by similar users but fails at cold start. Matrix factorization learns latent factors for users and items, addressing sparsity but requiring regularization. Implicit feedback (clicks, dwell time) is abundant but ambiguous: non-interactions are missing data, not negative signals. Position-aware metrics (NDCG, MAP, MRR) evaluate ranking quality. Offline evaluation is biased by the previous system's recommendations and requires counterfactual correction. Exposure bias creates feedback loops: the system shapes its own training data, amplifying popular items and suppressing the long tail. Mitigation requires deliberate exploration, diversity constraints, and feedback-loop monitoring. The recommendation audit card documents what the system exposes, suppresses, and amplifies.
+
+\begin{studyquestions}
+\item How does recommendation differ from classification, and why does the difference matter?
+\item What is the cold-start problem, and why is it a design problem rather than just a technical one?
+\item What do the latent factors in matrix factorization represent?
+\item Why are non-interactions in implicit feedback ambiguous, and what are the consequences of treating them as negatives?
+\item Why does NDCG discount items lower in the ranked list?
+\item Why is offline evaluation of recommender systems fundamentally biased?
+\item How does a recommender system create a feedback loop, and what are the consequences?
+\item What is exposure bias, and how does it differ from popularity bias?
+\item Why is exploration important in recommendation, and how does it connect to reinforcement learning?
+\item What should a recommendation audit card document about feedback loops?
+\end{studyquestions}
+
+\begin{exercises}
+\item Given a sparse user-item interaction matrix (e.g., MovieLens-100K), implement matrix factorization with SGD. Vary the number of latent factors $k \in \{5, 10, 20, 50\}$ and plot RMSE on a held-out test set. At what $k$ does overfitting begin?
+\item For the same dataset, compare user-based collaborative filtering (cosine similarity) with matrix factorization on NDCG@10. Which performs better, and why?
+\item Design an implicit feedback scheme for a course resource recommender. Specify: what constitutes a positive signal, how non-interactions are handled, and what confidence weights are used. Justify each decision.
+\item Compute NDCG@5 by hand for two ranked lists that contain the same 5 items in different orders. Show how position affects the score.
+\item Construct a recommendation audit card (Table~\ref{tab:rec-audit-card}) for a recommendation system you use daily (e.g., a streaming service, a social media feed, a shopping site). Identify at least two feedback loop risks.
+\item Design an exploration strategy for a job board recommender that must balance relevance (showing jobs the student is likely to want) with fairness (ensuring new job postings get enough exposure to collect initial click data). Specify the trade-off parameter and how you would tune it.
+\end{exercises}
+
+\begin{challengeexercises}
+\item A course resource recommender shows worked examples 3$\times$ more than other resource types. A team member argues this is because students genuinely prefer worked examples. A critic argues this is because the system recommended worked examples early and the feedback loop amplified them. Design an experiment to distinguish between these explanations.
+\item Explain why inverse propensity scoring corrects for selection bias in offline evaluation. Under what conditions does IPS have high variance, and what can be done about it?
+\item A university deploys a job recommender and finds that after 6 months, 90\% of student clicks go to 10\% of listed jobs. Diagnose whether this is a preference concentration problem (students genuinely prefer a few job types) or an exposure bias problem (the system only showed a few job types). Propose three specific measurements.
+\item Design a recommender system for a two-sided marketplace (e.g., tutors and students) that optimizes for both user satisfaction and provider fairness. Define what ``fair exposure'' means in this context and propose a concrete optimization objective that balances the two goals.
+\end{challengeexercises}
+
+\begin{chaptersummary}
+\item Recommendation is a ranking problem where the order of results determines what users see and interact with
+\item Collaborative filtering recommends items liked by similar users but suffers from cold start and sparsity
+\item Matrix factorization learns latent user and item representations that generalize across the sparse interaction matrix
+\item Implicit feedback is abundant but ambiguous; non-interactions are missing data, not negative signals
+\item Position-aware metrics (NDCG, MAP, MRR) capture ranking quality better than classification metrics
+\item Offline evaluation is biased by the previous recommendation policy; counterfactual correction is needed
+\item Exposure bias creates feedback loops that amplify popular items and suppress the long tail
+\item Exploration, diversity constraints, and feedback-loop monitoring are essential safeguards
+\item The recommendation audit card documents what the system exposes, suppresses, and amplifies
+\end{chaptersummary}
