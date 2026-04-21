@@ -1,4 +1,4 @@
-# Experiments, Error Analysis, and Scientific Claims Companion
+# Chapter 16 Companion: Experiments, Error Analysis, and Scientific Claims (`ch10`)
 
 This chapter supports the shift from model building to experimental reasoning.
 

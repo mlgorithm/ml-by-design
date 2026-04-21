@@ -1,4 +1,4 @@
-# Structure Beyond Linearity Companion
+# Chapter 5 Companion: Structure Beyond Linearity (`ch04`)
 
 This chapter expands the book beyond single weighted-sum models.
 

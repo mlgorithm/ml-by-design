@@ -1,4 +1,4 @@
-# Chapter 1 Companion: Problem Framing in Practice
+# Chapter 1 Companion: Framing Learning Problems (`ch01`)
 
 This chapter introduces the seven-question framework for turning vague requests into defensible learning problems. The companion code demonstrates how framing decisions translate into concrete implementation choices.
 

@@ -1,4 +1,4 @@
-# Designing the Dataset Companion
+# Chapter 6 Companion: Designing the Dataset (`ch04b`)
 
 This chapter supports designing and preparing datasets for machine learning with realistic quality challenges.
 

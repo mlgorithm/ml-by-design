@@ -61,6 +61,8 @@ Avoid making the book depend on:
 
 ## Directory convention
 
+Use the source chapter identifier from `tex/book.tex` for each chapter directory. Inserted chapters keep their letter suffixes, such as `ch05b`, `ch06a`, and `ch09a`.
+
 Use the following shape for each chapter:
 
 ```text

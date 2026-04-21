@@ -1,4 +1,4 @@
-# Audio, Time, and Prediction-Time Realism Companion
+# Chapter 14 Companion: Audio, Time, and Prediction-Time Realism (`ch09`)
 
 This chapter supports the move from token sequences to continuous signals and temporal processes.
 

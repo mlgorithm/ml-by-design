@@ -1,4 +1,4 @@
-# Language: Context and Grounding Companion
+# Chapter 13 Companion: Language: Context and Grounding (`ch08`)
 
 This chapter supports the move from visual structure to linguistic context and generation.
 

@@ -1,6 +1,6 @@
-# Chapter 3 (`ch02b`): Generalization and Evaluation Discipline
+# Chapter 3 Companion: Generalization, Leakage, and Evaluation Discipline (`ch02b`)
 
-This directory contains practical materials for Chapter 3 of "Machine Learning by Design," stored under the historical `ch02b` directory name. It covers generalization, overfitting, model selection, and evaluation discipline.
+This directory contains practical materials for Chapter 3 of "Machine Learning by Design," stored under the historical `ch02b` source directory name. It covers generalization, leakage, overfitting, model selection, and evaluation discipline.
 
 ## Contents
 

@@ -1,4 +1,4 @@
-# Optimization and Neural Networks Companion
+# Chapter 7 Companion: Optimization and Neural Networks (`ch05`)
 
 This chapter supports the transition from fixed features to learned internal representations.
 

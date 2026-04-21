@@ -1,4 +1,4 @@
-# Learning from Interaction: Reinforcement Learning Companion
+# Chapter 11 Companion: Learning from Interaction: Reinforcement Learning (`ch06b`)
 
 This chapter supports learning from interaction through reinforcement learning.
 

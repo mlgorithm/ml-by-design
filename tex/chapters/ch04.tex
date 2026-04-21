@@ -695,62 +695,28 @@ An SVM is not a replacement for representation learning. If the problem needs ma
 \section{Naive Bayes: Probability as Structure (Preview)}
 \label{sec:naive-bayes-ch4}
 
-Trees exploit region-specific logic. Ensembles reduce variance by averaging. SVMs find wide-margin boundaries. All are \emph{discriminative}: they learn to separate classes in the feature space. Naive Bayes takes a fundamentally different approach---it is a \emph{generative} model that asks: what does a typical input look like, given the class?
+Trees exploit region-specific logic. Ensembles reduce variance by averaging. SVMs find wide-margin boundaries. Naive Bayes adds one more structural diagnosis: sometimes the useful baseline is not a more flexible boundary, but a simple model of what examples from each class tend to look like.
 
-This section previews the generative perspective as another structural lens. It connects to the probability vocabulary from Bridge~II and introduces enough of the method to use it as a baseline in the structural diagnosis. The full probabilistic treatment---including calibration, formal Bayesian reasoning, and the connection to latent-variable models---appears in Chapter~\ref{ch:probabilistic-models}.
+This chapter only needs the design move. A discriminative classifier asks, ``given this input, which class should it receive?'' A generative classifier asks, ``for each class, how surprising would this input be?'' Naive Bayes is the simplest version of that idea: estimate class frequencies, estimate simple feature patterns within each class, and choose the class that makes the observed features most plausible. The full probabilistic treatment---including the formal model, calibration, and the connection to latent-variable methods---appears in Chapter~\ref{ch:probabilistic-models}.
 
-\subsection{The Generative Perspective}
-
-A discriminative classifier models $P(Y \mid X)$ directly: given the features, what is the most likely class? Naive Bayes instead models $P(X \mid Y)$: given the class, what features are likely? Classification then uses Bayes' theorem:
-\[
-P(Y = k \mid \mathbf{x}) \propto P(\mathbf{x} \mid Y = k) \, P(Y = k)
-\]
-
-The prior $P(Y = k)$ is estimated from class frequencies. The class-conditional distribution $P(\mathbf{x} \mid Y = k)$ is the heart of the model. Naive Bayes makes this tractable with a single strong assumption: \emph{conditional independence}---all features are independent given the class:
-\[
-P(\mathbf{x} \mid Y = k) = \prod_{j=1}^{d} P(x_j \mid Y = k)
-\]
-
-This reduces the problem from estimating a $d$-dimensional joint distribution (exponentially many parameters) to estimating $d$ one-dimensional distributions (linearly many parameters). For continuous features, each $P(x_j \mid Y = k)$ is typically modeled as a Gaussian with mean $\mu_{jk}$ and variance $\sigma^2_{jk}$. For text data, a multinomial over word counts is standard.
-
-\subsection{Why ``Naive'' and Why It Still Works}
-
-The conditional independence assumption is almost always wrong. Student messages that mention ``deadline'' are more likely to also mention ``extension.'' Pedestrian images where the sky is dark are more likely to also have visible headlights. Features are correlated.
-
-Yet Naive Bayes often classifies well. The reason is that classification only requires getting the \emph{ranking} of class probabilities right---the class with the highest probability wins. Even when the absolute probabilities are distorted by the independence assumption, the winning class is often still correct. This makes Naive Bayes a reliable, fast baseline.
+The name is a warning label. Naive Bayes assumes that features are conditionally independent given the class. That is usually false: student messages that mention ``deadline'' are more likely to also mention ``extension,'' and dark pedestrian images are more likely to contain headlights. The assumption is still useful because it makes the baseline cheap, transparent, and surprisingly competitive when the main signal is class-conditional feature frequency rather than complex feature interaction.
 
 \begin{warningbox}
-The probabilities produced by Naive Bayes are typically poorly calibrated---pushed toward 0 or 1 because the independence assumption ignores correlations that would spread probability mass. Do not use Naive Bayes probabilities as calibrated confidence scores without post-hoc calibration (e.g., Platt scaling or isotonic regression).
+Treat Naive Bayes as a structural baseline, not as an automatically trustworthy confidence machine. Its probability outputs are often poorly calibrated because the independence assumption double-counts correlated evidence. Low likelihood under all classes can suggest unfamiliar input, but it is a hypothesis to validate, not proof that the example is truly out of distribution.
 \end{warningbox}
 
 \begin{example}[Naive Bayes for Student Support Triage]
-The course-support team builds a Naive Bayes classifier as a first baseline for triaging student messages into ROUTINE, CONCERNING, and URGENT. Using a bag-of-words representation, the model learns which words are most likely under each class. The word ``quiz'' has high probability under ROUTINE; ``deadline'' is elevated under CONCERNING; ``emergency'' peaks under URGENT. The model trains in under a second, requires no GPU, and achieves 78\% accuracy. Each prediction is fully interpretable: the team can inspect which words pushed the model toward URGENT and verify whether they make sense. Any more complex model must meaningfully exceed 78\% to justify its additional complexity and opacity.
+The course-support team builds a Naive Bayes classifier as a first probabilistic baseline for triaging student messages into ROUTINE, CONCERNING, and URGENT. With a bag-of-words representation, the model learns class-specific word patterns: ``quiz'' for ROUTINE, ``deadline'' for CONCERNING, and ``emergency'' for URGENT. The main lesson is diagnostic: if this cheap baseline is competitive, class-conditional word patterns already carry strong signal; if it fails badly, the team should look for interactions, context, or representation structure that the bag-of-words baseline cannot express.
 \end{example}
 
-\subsection{When Naive Bayes Is the Right Structural Choice}
-
-Naive Bayes fits a specific niche in the structural diagnosis:
-
-\begin{itemize}[leftmargin=*]
-\item \emph{Fast, interpretable baseline.} Naive Bayes is the cheapest meaningful classifier. If a neural network barely beats it, the task may be simpler than assumed---or the complex model is misconfigured.
-\item \emph{Small labeled data.} Because each feature is estimated independently, Naive Bayes has very few parameters relative to the feature dimension. It overfits less than models that estimate feature interactions, making it effective when labeled data is scarce.
-\item \emph{Text classification.} Multinomial Naive Bayes remains a strong baseline for document classification, spam filtering, and sentiment analysis. The bag-of-words assumption is a reasonable approximation in these settings.
-\item \emph{Outlier detection.} As a generative model, Naive Bayes can compute $P(\mathbf{x})$. An input with low probability under all classes may be an outlier or a new category. Discriminative models have no built-in mechanism for this.
-\end{itemize}
-
 \begin{decisionbox}
-\textbf{Adding Naive Bayes to the structural diagnosis:}
-\begin{itemize}
-\item If the task is classification with many features and limited data, try Naive Bayes first as a baseline.
-\item If interpretability matters (stakeholders need to see \emph{why} the model predicted a class), Naive Bayes is more transparent than trees for text data and comparable for tabular data.
-\item If you need outlier detection or want to flag out-of-distribution inputs, a generative model like Naive Bayes provides this capability where discriminative models do not.
-\item If feature interactions dominate the task (e.g., ``feature A matters only when feature B is high''), Naive Bayes will underperform because it cannot capture interactions. Use trees or ensembles instead.
+\textbf{Adding Naive Bayes to the structural diagnosis.}
+\begin{itemize}[leftmargin=*]
+\item Try it when the task has many sparse features, limited labeled data, or a need for a transparent probabilistic baseline.
+\item Compare it with logistic regression and a small tree. Each baseline fails for a different reason, and the failure pattern tells you what structure is missing.
+\item Escalate to Chapter~\ref{ch:probabilistic-models} when you need calibrated probabilities, likelihood-based unfamiliar-input checks, or a broader generative-model vocabulary.
 \end{itemize}
 \end{decisionbox}
-
-\begin{practicalnote}
-In the structural diagnosis workflow, Naive Bayes fills the ``probabilistic baseline'' slot. Run it alongside a logistic regression baseline (discriminative) and a decision tree baseline (region-based). If Naive Bayes wins, the task structure is better captured by class-conditional feature distributions than by decision boundaries or region splits. If it loses, the task likely requires feature interactions or more complex geometry.
-\end{practicalnote}
 
 \section{Local Similarity: When Geometry Is the Model}
 
