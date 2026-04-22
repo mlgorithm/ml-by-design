@@ -3,7 +3,7 @@
 
 The previous chapter treated representations as tools for \emph{understanding}---spaces in which downstream tasks become easier. But a representation can also be used to \emph{generate}: to produce new data points that look like the training data but were never observed. A course-support system that generates realistic synthetic student messages can augment scarce labeled data. A pedestrian detector that generates novel nighttime scenes can fill gaps in its training distribution. And the same latent spaces that enable generation also enable interpolation, anomaly detection, and controllable editing.
 
-This chapter introduces three families of generative models---variational autoencoders, generative adversarial networks, and diffusion models---each of which learns a latent representation from which new data can be sampled. The probabilistic foundations from Chapter~\ref{ch:probabilistic-models} motivate VAEs and latent-variable sampling, while GANs introduce adversarial training. The practical evaluation challenge---how do you know if generated data is any good?---runs through all three.
+This chapter introduces three families of generative models---variational autoencoders, generative adversarial networks, and diffusion models---each of which learns a latent representation from which new data can be sampled \citep{kingma2014vae,goodfellow2014gan,ho2020ddpm}. The probabilistic foundations from Chapter~\ref{ch:probabilistic-models} motivate VAEs and latent-variable sampling, while GANs introduce adversarial training. The practical evaluation challenge---how do you know if generated data is any good?---runs through all three.
 
 \begin{problemsolvinglens}
 Generation is not an end in itself. Every generative model encodes assumptions about what variation matters and what should be preserved. The design question is not ``can the model generate?'' but ``does what it generates serve the downstream task, and how would we know?''
@@ -63,7 +63,7 @@ The total loss is:
 \mathcal{L}_{\text{VAE}} = \underbrace{\mathbb{E}_{q(\mathbf{z} \mid \mathbf{x})}\bigl[-\log p(\mathbf{x} \mid \mathbf{z})\bigr]}_{\text{reconstruction}} + \underbrace{D_{\text{KL}}\bigl(q(\mathbf{z} \mid \mathbf{x}) \;\|\; p(\mathbf{z})\bigr)}_{\text{regularization}}
 \]
 
-This is the negative \emph{evidence lower bound} (ELBO). Minimizing it simultaneously improves reconstruction and keeps the latent space well-organized.
+This is the negative \emph{evidence lower bound} (ELBO) used in variational autoencoders \citep{kingma2014vae,rezende2014sgvb}. Minimizing it simultaneously improves reconstruction and keeps the latent space well-organized.
 
 \begin{practicalnote}
 The balance between reconstruction and regularization is controlled by a weighting factor $\beta$ (the ``$\beta$-VAE'' variant). With $\beta = 1$, the objective is the standard ELBO; the two terms are not necessarily equal in scale or contribution. Increasing $\beta$ increases the relative KL pressure and can produce a more structured, disentangled latent space but blurrier reconstructions. Decreasing $\beta$ reduces that pressure and can produce sharper reconstructions but a less organized latent space. In practice, tuning $\beta$ is often necessary to get useful results for the downstream task.
@@ -109,6 +109,7 @@ The two networks are trained simultaneously with opposing objectives. The discri
 \[
 \min_G \max_D \; \mathbb{E}_{\mathbf{x} \sim p_{\text{data}}}[\log D(\mathbf{x})] + \mathbb{E}_{\mathbf{z} \sim p(\mathbf{z})}[\log(1 - D(G(\mathbf{z})))]
 \]
+This is the original minimax GAN objective from \citet{goodfellow2014gan}; many practical GAN variants modify the loss or regularization to improve stability.
 
 At equilibrium (in theory), the generator produces data indistinguishable from real data, and the discriminator outputs 0.5 for everything.
 
@@ -154,7 +155,7 @@ A pedestrian detection team wants to augment its training data with nighttime sc
 
 \subsection{The Denoising Idea}
 
-Diffusion models are the newest family and currently produce the highest-quality images. The core idea is surprisingly simple: learn to reverse a gradual noising process.
+Diffusion models are a major current family in image and media generation, building on denoising diffusion and score-based generative modeling \citep{ho2020ddpm,song2021score}. Their core idea is surprisingly simple: learn to reverse a gradual noising process.
 
 \textbf{Forward process (noising).} Start with a real data point $\mathbf{x}_0$. Over $T$ steps, add small amounts of Gaussian noise, producing a sequence $\mathbf{x}_1, \mathbf{x}_2, \ldots, \mathbf{x}_T$. At $T$ large enough, $\mathbf{x}_T$ is indistinguishable from pure Gaussian noise.
 
@@ -170,20 +171,20 @@ The training objective is simple: minimize the mean squared error between the pr
 Diffusion models have several advantages over VAEs and GANs:
 
 \begin{itemize}[leftmargin=*]
-\item \emph{Training stability.} The training objective is a simple regression loss (predict the noise), with no adversarial dynamics or KL divergence balancing. Training is as stable as standard supervised learning.
+\item \emph{Training stability.} The training objective is a regression loss (predict the noise), with no adversarial dynamics. This often makes optimization easier to monitor than GAN training, though architecture, noise schedule, data scale, and compute still matter.
 \item \emph{Sample quality.} By decomposing generation into many small denoising steps, diffusion models can produce extremely detailed, high-quality outputs. Each step makes a small correction, avoiding the single-shot generation challenge of GANs and VAEs.
-\item \emph{Mode coverage.} Unlike GANs, which can suffer mode collapse, diffusion models tend to cover the full data distribution because the training objective treats all data points equally.
+\item \emph{Mode coverage.} Diffusion models are often less prone to the classic GAN failure mode where a generator collapses to a few sample types, but coverage is still an empirical question. Rare cases, underrepresented slices, and conditioning failures must be checked directly.
 \end{itemize}
 
 The main disadvantage is computational cost. Generation requires running the denoising network for hundreds or thousands of steps (one forward pass per step), making generation much slower than a single-pass GAN or VAE decoder.
 
 \begin{practicalnote}
-Accelerated sampling methods (DDIM, DPM-Solver) reduce the number of denoising steps needed, trading some quality for speed. In practice, 20--50 sampling steps often suffice for acceptable quality, compared with the original 1000-step diffusion schedule. During training, implementations usually sample timesteps from that schedule rather than unrolling every denoising step for every example. For applications where generation speed matters (real-time augmentation during training), this trade-off is important.
+Accelerated sampling methods such as DDIM and DPM-Solver reduce the number of denoising steps needed, trading some quality for speed \citep{song2020ddim,lu2022dpmsolver}. In practice, tens of sampling steps may suffice for many uses, compared with the original 1000-step diffusion schedule. During training, implementations usually sample timesteps from that schedule rather than unrolling every denoising step for every example. For applications where generation speed matters, such as real-time augmentation during training, this trade-off is important.
 \end{practicalnote}
 
 \subsection{Guidance: Controlling What Gets Generated}
 
-Diffusion models can be \emph{guided} toward specific outputs using a conditioning signal. \emph{Classifier-free guidance} trains the model both with and without the condition, then amplifies the difference at generation time. A guidance scale $w > 1$ pushes the output more strongly toward the condition:
+Diffusion models can be \emph{guided} toward specific outputs using a conditioning signal. \emph{Classifier-free guidance} trains the model both with and without the condition, then amplifies the difference at generation time \citep{ho2022classifierfree}. A guidance scale $w > 1$ pushes the output more strongly toward the condition:
 \[
 \hat{\boldsymbol{\epsilon}} = \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, \varnothing) + w \cdot \bigl(\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, \mathbf{c}) - \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, \varnothing)\bigr)
 \]
@@ -196,9 +197,9 @@ A team building a pedestrian detector needs training images of ``pedestrian cros
 
 \subsection{Brief Note: Normalizing Flows and Flow Matching}
 
-Two other generative approaches deserve mention. \emph{Normalizing flows} define an explicit, invertible mapping between a simple distribution (Gaussian) and the data distribution. Because the mapping is invertible, exact likelihood computation is possible---unlike VAEs (which use a lower bound) or GANs (which have no likelihood). The constraint is that all transformations must be invertible and have tractable Jacobians, which limits architectural flexibility.
+Two other generative approaches deserve mention. \emph{Normalizing flows} define an explicit, invertible mapping between a simple distribution (Gaussian) and the data distribution \citep{dinh2017realnvp}. Because the mapping is invertible, exact likelihood computation is possible---unlike VAEs (which use a lower bound) or GANs (which have no likelihood). The constraint is that all transformations must be invertible and have tractable Jacobians, which limits architectural flexibility.
 
-\emph{Flow matching} relaxes this constraint by defining a continuous-time flow from noise to data, trained with a regression objective similar to diffusion models. Sampling still typically requires numerically integrating that learned flow over multiple solver steps, but in practice it can use fewer or cheaper steps than standard diffusion sampling while maintaining high sample quality. Flow matching is an active area of research and underlies several recent large-scale generative systems.
+\emph{Flow matching} relaxes this constraint by defining a continuous-time flow from noise to data, trained with a regression objective related to diffusion and continuous-normalizing-flow views \citep{lipman2023flowmatching}. Sampling still typically requires numerically integrating that learned flow over multiple solver steps, but in practice it can use fewer or cheaper steps than standard diffusion sampling while maintaining high sample quality. Flow matching is an active area of research and should be treated as a fast-moving family rather than as a settled recipe.
 
 Both methods share the theme of this chapter: learning a mapping between a simple latent distribution and a complex data distribution, with the latent space providing structure for generation and interpolation.
 
@@ -209,11 +210,11 @@ Evaluating generative models is fundamentally harder than evaluating classifiers
 
 \subsection{Automated Metrics}
 
-\textbf{Fr\'{e}chet Inception Distance (FID).} The most widely used metric for image generation. FID measures the distance between the distribution of real images and the distribution of generated images in the feature space of a pre-trained Inception network. Lower FID means the generated distribution is closer to the real distribution. FID captures both quality (unrealistic images have unusual features) and diversity (a mode-collapsed generator will have a narrower feature distribution).
+\textbf{Fr\'{e}chet Inception Distance (FID).} A widely used metric for image generation \citep{heusel2017fid}. FID measures the distance between the distribution of real images and the distribution of generated images in the feature space of a pre-trained Inception network. Lower FID means the generated distribution is closer to the real distribution in that feature space. FID captures both quality (unrealistic images have unusual features) and diversity (a mode-collapsed generator will have a narrower feature distribution), but only through the chosen representation.
 
-\textbf{Inception Score (IS).} Measures two properties: each generated image should be confidently classified by an Inception network (quality), and the marginal distribution of predicted labels across generated images should have high entropy (diversity). Higher IS is better. IS has known limitations: it does not compare to the real data distribution, its label-diversity assumption may not match a single-domain dataset, and it can be gamed by producing one very realistic image per predicted class.
+\textbf{Inception Score (IS).} Measures two properties: each generated image should be confidently classified by an Inception network (quality), and the marginal distribution of predicted labels across generated images should have high entropy (diversity) \citep{salimans2016improved}. Higher IS is better under that proxy. IS has known limitations: it does not compare to the real data distribution, its label-diversity assumption may not match a single-domain dataset, and it can be gamed by producing one very realistic image per predicted class.
 
-\textbf{Precision and Recall for generation.} Adapted from classification, \emph{precision} measures the fraction of generated samples that fall within the real data distribution (quality), and \emph{recall} measures the fraction of the real data distribution covered by the generated samples (diversity). A mode-collapsed GAN has high precision but low recall.
+\textbf{Precision and Recall for generation.} Adapted from classification, \emph{precision} estimates how much generated mass lies near the real data distribution (quality), and \emph{recall} estimates how much of the real data distribution is covered by generated samples (diversity) \citep{kynkaanniemi2019pr}. A mode-collapsed GAN can have high precision but low recall.
 
 \begin{warningbox}
 All automated metrics for generative models are proxies. FID depends on the choice of feature extractor (Inception was trained on ImageNet, not on your domain). IS does not compare to the real distribution. Precision-recall requires approximate support estimation in feature space, so its result depends on the representation and neighborhood method used. No single number captures whether generated data is ``good enough'' for a given downstream task. Always complement automated metrics with visual inspection and, when possible, downstream task performance.
@@ -302,12 +303,12 @@ Each generative model family has distinct strengths. The choice depends on the t
 \toprule
 & VAE & GAN & Diffusion \\
 \midrule
-Sample quality & Moderate (blurry) & High (sharp) & Very high \\
-Diversity & High & Risk of mode collapse & High \\
+Sample quality & Moderate; often blurry for images & High when training succeeds & Very high in many image domains \\
+Diversity & Usually broad but decoder-dependent & Risk of mode collapse & Often strong, still needs coverage checks \\
 Training stability & Stable & Unstable; needs tuning & Stable \\
-Generation speed & Fast (single pass) & Fast (single pass) & Slow (many steps) \\
-Likelihood & Lower bound (ELBO) & No likelihood & Approximate \\
-Best for & Latent interpolation, anomaly detection, augmentation & Sharp image generation, style transfer & Highest-quality generation, text-to-image \\
+Generation speed & Fast (single pass) & Fast (single pass) & Slower; many solver steps unless accelerated \\
+Likelihood & Lower bound (ELBO) & No likelihood & Usually approximate or estimator-dependent \\
+Best for & Latent interpolation, anomaly detection, augmentation & Sharp image generation, style transfer & High-fidelity image or media generation when compute permits \\
 \bottomrule
 \end{tabular}
 \caption{Trade-offs across the three main generative model families.}
@@ -319,7 +320,7 @@ Best for & Latent interpolation, anomaly detection, augmentation & Sharp image g
 \begin{itemize}
 \item If you need a structured latent space for interpolation, anomaly detection, or understanding data structure, start with a VAE.
 \item If you need sharp, realistic samples and can invest in training stability, consider a GAN.
-\item If sample quality is paramount and generation speed is not a bottleneck, use a diffusion model.
+\item If sample quality is paramount and generation speed is not a bottleneck, consider a diffusion model and measure whether its diversity and conditioning behavior match the task.
 \item If you need exact likelihoods (e.g., for density estimation or anomaly scoring), consider normalizing flows.
 \item In all cases, evaluate on the downstream task, not just on sample quality metrics.
 \end{itemize}

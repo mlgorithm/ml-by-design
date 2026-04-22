@@ -268,18 +268,19 @@ The right headline for convolution is simple. It is also the first concrete arch
 
 It helps to name two related terms before the notation. A representation is \emph{equivariant} when an input change produces a corresponding, structured change in the representation, such as a feature map shifting along with a shifted image. A decision rule is closer to \emph{invariant} when the answer stays effectively the same under small label-preserving changes. Vision systems often want equivariant intermediate features and more invariant final outputs.
 
-Suppose an image is represented by a grid $X$, and a small filter $K$ is represented by a $3 \times 3$ matrix. Using the standard deep-learning convention (technically cross-correlation), a convolutional response at location $(i,j)$ can be written as
+Suppose an image is represented by a grid $X$, and a small filter $K$ is represented by a $3 \times 3$ matrix. Using the standard deep-learning convention, a local filtering response at location $(i,j)$ can be written as
 \[
 S_{i,j} = \sum_{u=0}^{2}\sum_{v=0}^{2} K_{u,v} X_{i+u,j+v}.
 \]
 The filter slides across the image and produces a new grid of responses. One filter may respond to horizontal edges, another to vertical edges, another to corners, and later filters may respond to more complex motifs built from earlier ones.
+This operation is technically cross-correlation rather than flipped-kernel convolution, but deep-learning libraries commonly call it convolution. The theorem below uses the unflipped filtering operator defined by this displayed sum.
 
 \begin{prereqbridge}
 The formula above is just a weighted sum applied repeatedly at many image locations. Instead of learning one set of weights for the whole image at once, the model reuses the same small weights everywhere. That reuse is called parameter sharing.
 \end{prereqbridge}
 
-\begin{theorem}[Discrete convolution is shift equivariant away from boundaries]
-Let \(f_K(X)=K*X\) denote discrete convolution with a fixed kernel \(K\), unit stride, and padding chosen so both sides are defined on the same interior locations. If \(T_\delta\) shifts an image by \(\delta=(\delta_1,\delta_2)\), then
+\begin{theorem}[Local filtering is shift equivariant away from boundaries]
+Let \(f_K\) denote the fixed-kernel filtering operator defined above, with unit stride and padding chosen so both sides are defined on the same interior locations. If \(T_\delta\) shifts an image by \(\delta=(\delta_1,\delta_2)\), then
 \[
 f_K(T_\delta X)=T_\delta f_K(X)
 \]
@@ -295,8 +296,6 @@ Write the shifted image as \((T_\delta X)_{i,j}=X_{i-\delta_1,j-\delta_2}\). The
 \]
 That final expression is exactly \([f_K(X)]_{i-\delta_1,j-\delta_2}\), which is \([T_\delta f_K(X)]_{i,j}\). So the feature map shifts with the input, except where boundary handling changes the available neighborhood.
 \end{proof}
-
-Deep-learning libraries often implement the unflipped-kernel form of this operation and still call it convolution. That terminology is standard in practice, but the distinction is worth noting for mathematically careful readers.
 
 \begin{practicalnote}
 The equivariance guarantee holds at locations unaffected by the image boundary. In practice, implementations use \emph{padding} (typically zero-padding) to handle edges. \emph{Valid} convolution avoids padding entirely but shrinks the output; \emph{same} convolution with unit stride pads the input so the output matches the input size. For tasks involving small objects near image edges---common in detection---the choice of padding strategy can affect performance.

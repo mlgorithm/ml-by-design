@@ -237,14 +237,14 @@ For large state spaces (e.g., raw images), $Q$ cannot be stored in a table. Inst
 Instead of learning $Q$, we can directly learn a policy $\pi_\theta(a | s)$ by optimizing it to maximize expected return.
 
 \begin{mathlens}
-\textbf{Policy Gradient.} Let $\rho_{\pi_\theta}$ denote the discounted state-visitation distribution induced by policy $\pi_\theta$. The expected cumulative return under that policy is:
+\textbf{Policy Gradient.} The expected cumulative return under policy $\pi_\theta$ is defined over the trajectory distribution \(p_{\pi_\theta}\) induced by that policy and the environment dynamics:
 \[
-J(\theta) = \mathbb{E}_{s \sim \rho_{\pi_\theta}, a \sim \pi_\theta(\cdot|s)} \left[\sum_t \gamma^t r_t\right].
+J(\theta) = \mathbb{E}_{\tau \sim p_{\pi_\theta}}\left[\sum_{t=0}^{\infty} \gamma^t r_t\right].
 \]
 
-The policy gradient theorem \citep{sutton2000policy} shows that:
+Let $\rho_{\pi_\theta}$ denote the discounted state-visitation distribution induced by policy $\pi_\theta$. The policy gradient theorem \citep{sutton2000policy} shows that one common state-action form of the gradient is:
 \[
-\nabla_\theta J(\theta) = \mathbb{E}\left[\nabla_\theta \log \pi_\theta(a | s) \cdot Q^\pi(s, a)\right].
+\nabla_\theta J(\theta) = \mathbb{E}_{s \sim \rho_{\pi_\theta},\, a \sim \pi_\theta(\cdot|s)}\left[\nabla_\theta \log \pi_\theta(a | s) \cdot Q^{\pi_\theta}(s, a)\right].
 \]
 
 In words: increase the log-probability of actions that led to high returns; decrease the log-probability of actions that led to low returns. Note that this gradient does not inherently encourage exploration---it simply reinforces what worked and penalizes what did not. Exploration must be added separately (e.g., by entropy regularization or by maintaining a stochastic policy). Without explicit encouragement to explore, policy gradient methods can converge prematurely to a narrow set of actions.
@@ -436,7 +436,7 @@ Annotators typically prefer A (helpful, open-minded) over B (rigid, unhelpful). 
 
 \emph{Train reward model:} Learn $r_\theta(\text{prompt}, \text{response})$ to predict which response annotators prefer. This is a binary classification task.
 
-\emph{Finetune with RL:} Use PPO to optimize the language model's policy $\pi_\phi(\text{response} | \text{prompt})$ to maximize $\mathbb{E}_{r \sim \pi_\phi(\cdot | \text{prompt})} [r_\theta(\text{prompt}, r)]$.
+\emph{Finetune with RL:} Use PPO to optimize the language model's policy $\pi_\phi(\text{response} | \text{prompt})$ to maximize $\mathbb{E}_{a \sim \pi_\phi(\cdot | \text{prompt})} [r_\theta(\text{prompt}, a)]$, where \(a\) is the sampled response/action.
 
 The result: the model learns to generate responses that annotators found preferred. The course-support assistant becomes more helpful, more empathetic, and more aligned with the department's goals.
 \end{example}
