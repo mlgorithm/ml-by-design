@@ -16,15 +16,19 @@ A recommender system is not a neutral mirror of user preferences. It is an activ
 \end{thinkingtool}
 
 \begin{learninggoals}
-\item Frame recommendation as a ranking problem and connect it to classification and retrieval
-\item Explain collaborative filtering and its cold-start limitations
-\item Describe matrix factorization as a latent-factor model for recommendation
-\item Distinguish explicit from implicit feedback and explain why implicit feedback is harder
-\item Identify exposure bias and explain how it corrupts both training data and evaluation
-\item Evaluate ranking systems using metrics that account for position (NDCG, MAP, MRR)
-\item Explain why offline evaluation of recommender systems is unreliable without counterfactual correction
-\item Construct a recommendation audit card documenting what the system exposes, suppresses, and amplifies
+\item Frame recommendation as a ranking problem and connect it to classification and retrieval.
+\item Explain collaborative filtering and its cold-start limitations.
+\item Describe matrix factorization as a latent-factor model for recommendation.
+\item Distinguish explicit from implicit feedback and explain why implicit feedback is harder to interpret.
+\item Identify exposure bias and explain how it corrupts both training data and evaluation.
+\item Interpret NDCG, MAP, and MRR as position-aware evidence for ranked lists.
+\item Explain why offline evaluation of recommender systems is unreliable without counterfactual correction.
+\item Construct a recommendation audit card documenting what the system exposes, suppresses, and amplifies.
 \end{learninggoals}
+
+\begin{practicalnote}
+\textbf{Depth guide.} The core target is to understand ranking as exposure allocation and to recognize the feedback-loop risks that ordinary classifiers do not create. Full-scale recommender optimization, production counterfactual logging, and marketplace fairness are natural project extensions.
+\end{practicalnote}
 
 \section{Recommendation as Ranking}
 
@@ -311,29 +315,17 @@ Recommendation is a ranking problem: the system produces an ordered list, and th
 \end{studyquestions}
 
 \begin{exercises}
-\item Given a sparse user-item interaction matrix (e.g., MovieLens-100K), implement matrix factorization with SGD. Vary the number of latent factors $k \in \{5, 10, 20, 50\}$ and plot RMSE on a held-out test set. At what $k$ does overfitting begin?
-\item For the same dataset, compare user-based collaborative filtering (cosine similarity) with matrix factorization on NDCG@10. Which performs better, and why?
-\item Design an implicit feedback scheme for a course resource recommender. Specify: what constitutes a positive signal, how non-interactions are handled, and what confidence weights are used. Justify each decision.
-\item Compute NDCG@5 by hand for two ranked lists that contain the same 5 items in different orders. Show how position affects the score.
-\item Construct a recommendation audit card (Table~\ref{tab:rec-audit-card}) for a recommendation system you use daily (e.g., a streaming service, a social media feed, a shopping site). Identify at least two feedback loop risks.
-\item Design an exploration strategy for a job board recommender that must balance relevance (showing jobs the student is likely to want) with fairness (ensuring new job postings get enough exposure to collect initial click data). Specify the trade-off parameter and how you would tune it.
+\item \exercisetag{Implementation}{Advanced}Given a sparse user-item interaction matrix (e.g., MovieLens-100K), implement matrix factorization with SGD. Vary the number of latent factors $k \in \{5, 10, 20, 50\}$ and plot RMSE on a held-out test set. At what $k$ does overfitting begin?
+\item \exercisetag{Implementation}{Intermediate}For the same dataset, compare user-based collaborative filtering (cosine similarity) with matrix factorization on NDCG@10. Which performs better, and why?
+\item \exercisetag{Design}{Intermediate}Design an implicit feedback scheme for a course resource recommender. Specify: what constitutes a positive signal, how non-interactions are handled, and what confidence weights are used. Justify each decision.
+\item \exercisetag{Calculation}{Core}Compute NDCG@5 by hand for two ranked lists that contain the same 5 items in different orders. Show how position affects the score.
+\item \exercisetag{Design}{Advanced}Construct a recommendation audit card (Table~\ref{tab:rec-audit-card}) for a recommendation system you use daily (e.g., a streaming service, a social media feed, a shopping site). Identify at least two feedback loop risks.
+\item \exercisetag{Design}{Intermediate}Design an exploration strategy for a job board recommender that must balance relevance (showing jobs the student is likely to want) with fairness (ensuring new job postings get enough exposure to collect initial click data). Specify the trade-off parameter and how you would tune it.
 \end{exercises}
 
 \begin{challengeexercises}
-\item A course resource recommender shows worked examples 3$\times$ more than other resource types. A team member argues this is because students genuinely prefer worked examples. A critic argues this is because the system recommended worked examples early and the feedback loop amplified them. Design an experiment to distinguish between these explanations.
-\item Explain why inverse propensity scoring corrects for selection bias in offline evaluation. Under what conditions does IPS have high variance, and what can be done about it?
-\item A university deploys a job recommender and finds that after 6 months, 90\% of student clicks go to 10\% of listed jobs. Diagnose whether this is a preference concentration problem (students genuinely prefer a few job types) or an exposure bias problem (the system only showed a few job types). Propose three specific measurements.
-\item Design a recommender system for a two-sided marketplace (e.g., tutors and students) that optimizes for both user satisfaction and provider fairness. Define what ``fair exposure'' means in this context and propose a concrete optimization objective that balances the two goals.
+\item \exercisetag{Diagnosis}{Advanced}A course resource recommender shows worked examples 3$\times$ more than other resource types. A team member argues this is because students genuinely prefer worked examples. A critic argues this is because the system recommended worked examples early and the feedback loop amplified them. Design an experiment to distinguish between these explanations.
+\item \exercisetag{Diagnosis}{Advanced}Explain why inverse propensity scoring corrects for selection bias in offline evaluation. Under what conditions does IPS have high variance, and what can be done about it?
+\item \exercisetag{Diagnosis}{Advanced}A university deploys a job recommender and finds that after 6 months, 90\% of student clicks go to 10\% of listed jobs. Diagnose whether this is a preference concentration problem (students genuinely prefer a few job types) or an exposure bias problem (the system only showed a few job types). Propose three specific measurements.
+\item \exercisetag{Design}{Advanced}Design a recommender system for a two-sided marketplace (e.g., tutors and students) that optimizes for both user satisfaction and provider fairness. Define what ``fair exposure'' means in this context and propose a concrete optimization objective that balances the two goals.
 \end{challengeexercises}
-
-\begin{chaptersummary}
-\item Recommendation is a ranking problem where the order of results determines what users see and interact with
-\item Collaborative filtering recommends items liked by similar users but suffers from cold start and sparsity
-\item Matrix factorization learns latent user and item representations that generalize across the sparse interaction matrix
-\item Implicit feedback is abundant but ambiguous; non-interactions are missing data, not negative signals
-\item Position-aware metrics (NDCG, MAP, MRR) capture ranking quality better than classification metrics
-\item Offline evaluation is biased by the previous recommendation policy; counterfactual correction is needed
-\item Exposure bias creates feedback loops that amplify popular items and suppress the long tail
-\item Exploration, diversity constraints, and feedback-loop monitoring are essential safeguards
-\item The recommendation audit card documents what the system exposes, suppresses, and amplifies
-\end{chaptersummary}

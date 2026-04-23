@@ -3,6 +3,19 @@
 
 Language is difficult for machine learning because meaning is not carried by words in isolation. The same words can mean different things in different contexts, and the same meaning can be expressed in many different forms. This chapter studies language models through that tension. It begins with task shape and tokenization, then moves from lexical baselines to contextual representations and sequence models, and finally turns to retrieval, grounding, prompting, and evaluation. The central claim is that language modeling is not only about generating plausible text; it is about deciding what context is needed, what evidence must be present, and what kind of output behavior the task can actually justify. Here \emph{grounding} means constraining an answer by external evidence that can be retrieved, inspected, and checked. By the end of the chapter, the reader should be able to analyze an NLP system in terms of context, grounding, and behavior design rather than only architecture.
 
+\begin{learninggoals}
+\item Use task shape to decide whether the output is a label, span, ranked list, or generated answer.
+\item Explain why token presence, local order, long-range context, and grounding support different NLP designs.
+\item Compare lexical baselines, n-grams, contextual encoders, retrieval, and generation by what context they preserve.
+\item Treat grounding as an evidence constraint rather than as a model-size upgrade.
+\item Evaluate language systems by behavior, faithfulness, escalation, and evidence quality.
+\item Construct an NLP context-and-grounding card for a course-support workflow.
+\end{learninggoals}
+
+\begin{practicalnote}
+\textbf{Core path.} A first pass through this chapter should master the context audit, lexical baselines, contextual representations, retrieval, and grounding. Prompting patterns, social meaning, and broader deployment behavior are important orientation topics, but they do not require full language-model training from scratch.
+\end{practicalnote}
+
 \section{Opening Dilemma: Same Words, Different Meaning; Same Meaning, Different Words}
 
 Suppose a university wants to build a course-support assistant for a large introductory course. Students send messages such as:
@@ -1010,20 +1023,20 @@ This chapter treated language as a problem of context, sequence, and evidence. I
 \end{studyquestions}
 
 \begin{exercises}
-\item For a support-email classifier, decide whether bag-of-words, n-grams, or contextual modeling is justified first. Explain what structure the task really needs.
-\item Construct two short sentences with identical bag-of-words representations but different meanings. Explain which downstream task would fail under bag-of-words and which might still work.
-\item Give one example of an NLP task for which local order is the main missing structure and one for which external grounding is the main missing structure.
-\item Explain why a language model can assign high probability to a sentence that is factually false.
-\item Design a context audit for a small question-answering system over product manuals, policy documents, or another document collection of your choice.
-\item A retrieval system returns ranked passages with relevance labels $[0,1,0,1]$ in the top four positions, and there are three relevant passages in the collection. Compute precision@2, recall@4, and reciprocal rank.
-\item For a support assistant, propose two message types that should be answered automatically and two that should be escalated to a human. Justify the boundary technically, not only socially.
-\item Give one example in which dialect or register variation creates a technical coverage problem rather than merely a stylistic difference.
-\item Use Table~\ref{tab:nlp-context-grounding-card} to sketch a one-page context-and-grounding card for a language task of your choice. End by naming the smallest workflow that could meet the card's requirements. If you are carrying one case through the book, state which parts come over unchanged from the framing memo, evaluation plan, and reliability discipline, and which parts become language-specific here.
+\item \exercisetag{Concept}{Core}For a support-email classifier, decide whether bag-of-words, n-grams, or contextual modeling is justified first. Explain what structure the task really needs.
+\item \exercisetag{Design}{Core}Construct two short sentences with identical bag-of-words representations but different meanings. Explain which downstream task would fail under bag-of-words and which might still work.
+\item \exercisetag{Concept}{Core}Give one example of an NLP task for which local order is the main missing structure and one for which external grounding is the main missing structure.
+\item \exercisetag{Diagnosis}{Intermediate}Explain why a language model can assign high probability to a sentence that is factually false.
+\item \exercisetag{Design}{Intermediate}Design a context audit for a small question-answering system over product manuals, policy documents, or another document collection of your choice.
+\item \exercisetag{Calculation}{Intermediate}A retrieval system returns ranked passages with relevance labels $[0,1,0,1]$ in the top four positions, and there are three relevant passages in the collection. Compute precision@2, recall@4, and reciprocal rank.
+\item \exercisetag{Design}{Intermediate}For a support assistant, propose two message types that should be answered automatically and two that should be escalated to a human. Justify the boundary technically, not only socially.
+\item \exercisetag{Concept}{Intermediate}Give one example in which dialect or register variation creates a technical coverage problem rather than merely a stylistic difference.
+\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:nlp-context-grounding-card} to sketch a one-page context-and-grounding card for a language task of your choice. End by naming the smallest workflow that could meet the card's requirements. If you are carrying one case through the book, state which parts come over unchanged from the framing memo, evaluation plan, and reliability discipline, and which parts become language-specific here.
 \end{exercises}
 
 \begin{challengeexercises}
-\item Show algebraically or with a concrete vector example that two sentences can have identical unigram count vectors and different bigram count vectors.
-\item A unigram baseline performs poorly on an order-sensitive classification task, while a bigram logistic-regression model performs very well. Explain why this does not mean deep learning is unnecessary in general.
-\item A retrieval-augmented assistant produces better answers than a pure generator. Describe what evidence would support the claim that retrieval, rather than prompt wording alone, caused the gain.
-\item A language model achieves low perplexity on a benchmark corpus but frequently invents unsupported details in long-form answers. Explain why these facts can coexist, and describe an evaluation protocol that would surface the problem clearly.
+\item \exercisetag{Proof}{Advanced}Show algebraically or with a concrete vector example that two sentences can have identical unigram count vectors and different bigram count vectors.
+\item \exercisetag{Concept}{Advanced}A unigram baseline performs poorly on an order-sensitive classification task, while a bigram logistic-regression model performs very well. Explain why this does not mean deep learning is unnecessary in general.
+\item \exercisetag{Concept}{Advanced}A retrieval-augmented assistant produces better answers than a pure generator. Describe what evidence would support the claim that retrieval, rather than prompt wording alone, caused the gain.
+\item \exercisetag{Concept}{Advanced}A language model achieves low perplexity on a benchmark corpus but frequently invents unsupported details in long-form answers. Explain why these facts can coexist, and describe an evaluation protocol that would surface the problem clearly.
 \end{challengeexercises}

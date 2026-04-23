@@ -14,16 +14,20 @@ Point predictions hide what the model does not know. A probabilistic model makes
 \end{thinkingtool}
 
 \begin{learninggoals}
-\item Distinguish generative and discriminative models and explain when each is appropriate
-\item Understand latent variables as unobserved structure that must be inferred
-\item Explain how the Expectation-Maximization algorithm iteratively discovers latent structure
-\item Apply Gaussian mixture models to clustering problems with soft assignments
-\item Understand Bayesian reasoning: priors, posteriors, and the difference between MAP and MLE
-\item Use Gaussian processes to place a prior over functions and obtain input-dependent predictive uncertainty
-\item Distinguish aleatoric uncertainty (inherent randomness) from epistemic uncertainty (model ignorance)
-\item Use Naive Bayes as a transparent, probabilistic baseline classifier
-\item Construct an uncertainty audit card that documents what a model knows it does not know
+\item Explain when a probabilistic model is needed instead of a single point prediction.
+\item Distinguish generative and discriminative views and the task consequences of each.
+\item Treat latent variables as hidden structure inferred from observed data.
+\item Describe the EM algorithm and Gaussian mixtures as a workflow for soft latent assignments.
+\item Use Bayesian vocabulary---prior, likelihood, posterior, MLE, and MAP---to explain uncertainty-aware modeling choices.
+\item Interpret Gaussian processes as an orientation to input-dependent uncertainty rather than as a full derivation target.
+\item Distinguish aleatoric uncertainty from epistemic uncertainty and connect the distinction to data collection and review.
+\item Use Naive Bayes as a transparent probabilistic baseline whose probabilities still need calibration.
+\item Construct an uncertainty audit card that documents what the model knows it does not know.
 \end{learninggoals}
+
+\begin{prereqbridge}
+Review Bridge~II if conditional probability, likelihood, expectation, or variance slows the reading down. The core path in this chapter is design fluency with probabilistic structure and uncertainty; the EM proof and deeper Gaussian-process derivations can be treated as extension work in a first course.
+\end{prereqbridge}
 
 \section{Why Probabilistic Thinking Matters}
 
@@ -404,29 +408,17 @@ Probabilistic models reason about distributions, not just point predictions. Gen
 \end{studyquestions}
 
 \begin{exercises}
-\item Fit a Gaussian mixture model with $K=2$ to a two-dimensional dataset of your choice. Visualize the data, the fitted Gaussian components (means and covariance ellipses), and the soft assignments. Run EM from three different initializations and compare the results.
-\item Implement one iteration of the EM algorithm by hand for a simple 1D dataset with two Gaussian components. Start with initial guesses for the means and variances, compute the E-step (soft assignments), and then the M-step (updated parameters). Show all intermediate values.
-\item Train a Naive Bayes classifier on a text classification dataset (e.g., 20 Newsgroups or a sentiment dataset). Report accuracy and compare to a logistic regression baseline. Examine the top-10 most informative features for each class.
-\item For the Naive Bayes model from the previous exercise, plot a reliability diagram and compute the Expected Calibration Error. Apply Platt scaling (for the binary setting) or isotonic regression to the Naive Bayes outputs and report the change in ECE. Explain why temperature scaling, which rescales logits in a softmax model, is not the natural post-hoc fix for Naive Bayes.
-\item Using Bayesian linear regression on a dataset with one input feature, plot the posterior predictive distribution: show the mean prediction and the uncertainty band. Observe how the band widens in regions with sparse training data.
-\item Compare the predictions of a single neural network to a deep ensemble of 5 networks on a regression task. Identify inputs where the ensemble members disagree most and explain whether the uncertainty is likely aleatoric or epistemic.
+\item \exercisetag{Implementation}{Advanced}Fit a Gaussian mixture model with $K=2$ to a two-dimensional dataset of your choice. Visualize the data, the fitted Gaussian components (means and covariance ellipses), and the soft assignments. Run EM from three different initializations and compare the results.
+\item \exercisetag{Calculation}{Intermediate}Implement one iteration of the EM algorithm by hand for a simple 1D dataset with two Gaussian components. Start with initial guesses for the means and variances, compute the E-step (soft assignments), and then the M-step (updated parameters). Show all intermediate values.
+\item \exercisetag{Implementation}{Intermediate}Train a Naive Bayes classifier on a text classification dataset (e.g., 20 Newsgroups or a sentiment dataset). Report accuracy and compare to a logistic regression baseline. Examine the top-10 most informative features for each class.
+\item \exercisetag{Implementation}{Intermediate}For the Naive Bayes model from the previous exercise, plot a reliability diagram and compute the Expected Calibration Error. Apply Platt scaling (for the binary setting) or isotonic regression to the Naive Bayes outputs and report the change in ECE. Explain why temperature scaling, which rescales logits in a softmax model, is not the natural post-hoc fix for Naive Bayes.
+\item \exercisetag{Implementation}{Advanced}Using Bayesian linear regression on a dataset with one input feature, plot the posterior predictive distribution: show the mean prediction and the uncertainty band. Observe how the band widens in regions with sparse training data.
+\item \exercisetag{Diagnosis}{Intermediate}Compare the predictions of a single neural network to a deep ensemble of 5 networks on a regression task. Identify inputs where the ensemble members disagree most and explain whether the uncertainty is likely aleatoric or epistemic.
 \end{exercises}
 
 \begin{challengeexercises}
-\item A team deploys a student-support classifier that reports 95\% confidence on a message from a graduate student (the model was trained only on undergraduate messages). The prediction turns out to be wrong. Was the uncertainty aleatoric or epistemic? What changes to the model or the uncertainty estimation would have caught this?
-\item Prove that the EM algorithm never decreases the log-likelihood. (Hint: use Jensen's inequality applied to the log of a weighted sum.)
-\item A GMM with $K=3$ fits a dataset well (high log-likelihood, low BIC), but domain experts insist there should be 5 clusters. Design an experiment to determine whether the discrepancy reflects genuine cluster overlap, insufficient data, or a mismatch between the Gaussian assumption and the true cluster shapes.
-\item Design an uncertainty-aware decision system for the course-support assistant: specify what prediction confidence levels trigger automatic routing, human review, or escalation to a supervisor. Justify each threshold using the aleatoric/epistemic distinction.
+\item \exercisetag{Design}{Advanced}A team deploys a student-support classifier that reports 95\% confidence on a message from a graduate student (the model was trained only on undergraduate messages). The prediction turns out to be wrong. Was the uncertainty aleatoric or epistemic? What changes to the model or the uncertainty estimation would have caught this?
+\item \exercisetag{Proof}{Advanced}Prove that the EM algorithm never decreases the log-likelihood. (Hint: use Jensen's inequality applied to the log of a weighted sum.)
+\item \exercisetag{Diagnosis}{Advanced}A GMM with $K=3$ fits a dataset well (high log-likelihood, low BIC), but domain experts insist there should be 5 clusters. Design an experiment to determine whether the discrepancy reflects genuine cluster overlap, insufficient data, or a mismatch between the Gaussian assumption and the true cluster shapes.
+\item \exercisetag{Design}{Advanced}Design an uncertainty-aware decision system for the course-support assistant: specify what prediction confidence levels trigger automatic routing, human review, or escalation to a supervisor. Justify each threshold using the aleatoric/epistemic distinction.
 \end{challengeexercises}
-
-\begin{chaptersummary}
-\item Probabilistic models output distributions, not point predictions, enabling reasoning about uncertainty
-\item Generative models learn $P(X, Y)$; discriminative models learn $P(Y \mid X)$---the choice depends on the task
-\item Latent variables are unobserved structure inferred from data; GMMs use latent cluster assignments
-\item The EM algorithm alternates between inferring latent variables (E-step) and updating parameters (M-step)
-\item Bayesian reasoning treats parameters as random variables; MAP estimation connects to regularization
-\item The posterior predictive distribution decomposes into aleatoric (irreducible) and epistemic (reducible) uncertainty
-\item Naive Bayes is fast, interpretable, and effective despite its independence assumption; its probabilities need calibration
-\item Deep ensembles and MC dropout approximate Bayesian uncertainty for complex models
-\item An uncertainty audit card documents uncertainty sources, measurement methods, and downstream dependencies
-\end{chaptersummary}

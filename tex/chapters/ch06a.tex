@@ -14,14 +14,18 @@ Generation is not an end in itself. Every generative model encodes assumptions a
 \end{thinkingtool}
 
 \begin{learninggoals}
-\item Explain how variational autoencoders extend the autoencoder idea with a probabilistic latent space
-\item Understand the VAE objective: reconstruction plus regularization of the latent distribution
-\item Describe adversarial training and explain why GANs are hard to train
-\item Identify mode collapse and explain its consequences for downstream use
-\item Describe diffusion models as iterative denoising and explain quality--diversity trade-offs
-\item Evaluate generative models using FID, Inception Score, and human evaluation
-\item Construct a generative model audit card documenting what the model generates, what it misses, and what failure modes to watch for
+\item Explain what makes a learned latent space usable for generation.
+\item Describe the VAE objective as reconstruction plus regularization of the latent distribution.
+\item Compare VAEs, GANs, diffusion models, and flows by their design trade-offs.
+\item Identify mode collapse, weak diversity, and synthetic-data contamination as downstream risks.
+\item Treat FID, Inception Score, and human evaluation as imperfect evidence rather than definitive proof.
+\item Decide when generated data should be judged by downstream task performance.
+\item Construct a generative model audit card documenting what the model generates, what it misses, and what failure modes to watch for.
 \end{learninggoals}
+
+\begin{practicalnote}
+\textbf{Depth guide.} In a first course, the core expectation is to compare generative families, explain their objectives at a design level, and evaluate their downstream risks. Training stable GANs, deriving diffusion objectives in full, or building a production generator belongs in an extended project.
+\end{practicalnote}
 
 \section{From Representation to Generation}
 
@@ -354,28 +358,17 @@ Generative models learn to produce new data from latent representations. Variati
 \end{studyquestions}
 
 \begin{exercises}
-\item Train a VAE on MNIST or Fashion-MNIST. Visualize the latent space (using a 2D latent code) by coloring points by their class label. Do classes form distinct regions? Sample new digits by decoding random latent points and inspect the results.
-\item Using the trained VAE from the previous exercise, interpolate between two digits in latent space (e.g., from a ``3'' to a ``7''). Show the decoded images at 5 equally spaced points along the interpolation path. Is the transition smooth?
-\item Compare the outputs of a VAE and a GAN trained on the same dataset. For each, generate 100 samples and assess: (a) visual quality of individual samples, (b) diversity across the 100 samples. Which model produces better individual samples? Which produces more diverse samples?
-\item Compute the FID between a set of generated images and a set of real images using a pre-trained feature extractor. Then compute FID using a different feature extractor. Do the two FID scores agree on which generator is better? What does this tell you about FID's reliability?
-\item Design a data augmentation experiment using a generative model of your choice. Specify: the downstream task, the generative model, the conditioning scheme, the number of generated samples, and the evaluation protocol. Explicitly state what the real held-out test set is and why the generated data must not contaminate it.
-\item Construct a generative model audit card (Table~\ref{tab:gen-audit-card}) for a generative model you have trained or studied. Include at least two known failure modes and one misuse risk.
+\item \exercisetag{Implementation}{Advanced}Train a VAE on MNIST or Fashion-MNIST. Visualize the latent space (using a 2D latent code) by coloring points by their class label. Do classes form distinct regions? Sample new digits by decoding random latent points and inspect the results.
+\item \exercisetag{Implementation}{Intermediate}Using the trained VAE from the previous exercise, interpolate between two digits in latent space (e.g., from a ``3'' to a ``7''). Show the decoded images at 5 equally spaced points along the interpolation path. Is the transition smooth?
+\item \exercisetag{Diagnosis}{Intermediate}Compare the outputs of a VAE and a GAN trained on the same dataset. For each, generate 100 samples and assess: (a) visual quality of individual samples, (b) diversity across the 100 samples. Which model produces better individual samples? Which produces more diverse samples?
+\item \exercisetag{Implementation}{Intermediate}Compute the FID between a set of generated images and a set of real images using a pre-trained feature extractor. Then compute FID using a different feature extractor. Do the two FID scores agree on which generator is better? What does this tell you about FID's reliability?
+\item \exercisetag{Design}{Intermediate}Design a data augmentation experiment using a generative model of your choice. Specify: the downstream task, the generative model, the conditioning scheme, the number of generated samples, and the evaluation protocol. Explicitly state what the real held-out test set is and why the generated data must not contaminate it.
+\item \exercisetag{Design}{Advanced}Construct a generative model audit card (Table~\ref{tab:gen-audit-card}) for a generative model you have trained or studied. Include at least two known failure modes and one misuse risk.
 \end{exercises}
 
 \begin{challengeexercises}
-\item A team uses a GAN to augment pedestrian detection training data. After augmentation, overall detection accuracy improves by 5\%, but detection of wheelchair users gets worse. Diagnose the problem and propose a fix.
-\item Explain why a diffusion model with 1000 denoising steps produces higher-quality samples than one with 20 steps, but why 20 steps may be sufficient for a given application. Under what conditions would you choose fewer steps?
-\item A VAE trained on student messages has a well-organized latent space where nearby points decode to similar messages. But when you sample from the prior $\mathcal{N}(\mathbf{0}, \mathbf{I})$, many decoded messages are incoherent. Explain what has gone wrong (hint: consider the gap between the aggregate posterior and the prior) and propose a mitigation.
-\item Design an evaluation protocol for a text-conditioned diffusion model used to generate synthetic medical images. What metrics would you use? What human evaluation would you require? What regulatory or ethical considerations apply?
+\item \exercisetag{Diagnosis}{Advanced}A team uses a GAN to augment pedestrian detection training data. After augmentation, overall detection accuracy improves by 5\%, but detection of wheelchair users gets worse. Diagnose the problem and propose a fix.
+\item \exercisetag{Diagnosis}{Advanced}Explain why a diffusion model with 1000 denoising steps produces higher-quality samples than one with 20 steps, but why 20 steps may be sufficient for a given application. Under what conditions would you choose fewer steps?
+\item \exercisetag{Diagnosis}{Advanced}A VAE trained on student messages has a well-organized latent space where nearby points decode to similar messages. But when you sample from the prior $\mathcal{N}(\mathbf{0}, \mathbf{I})$, many decoded messages are incoherent. Explain what has gone wrong (hint: consider the gap between the aggregate posterior and the prior) and propose a mitigation.
+\item \exercisetag{Design}{Advanced}Design an evaluation protocol for a text-conditioned diffusion model used to generate synthetic medical images. What metrics would you use? What human evaluation would you require? What regulatory or ethical considerations apply?
 \end{challengeexercises}
-
-\begin{chaptersummary}
-\item Generative models learn latent representations from which new data can be sampled
-\item VAEs regularize the latent space with a KL penalty, enabling smooth interpolation and anomaly detection
-\item The reparameterization trick makes VAE training possible with standard backpropagation
-\item GANs use adversarial training for sharp samples but suffer from mode collapse and training instability
-\item Diffusion models iteratively denoise from pure noise, achieving high quality at the cost of slow generation
-\item Classifier-free guidance controls the quality--diversity trade-off in conditional diffusion models
-\item FID and IS measure quality and diversity but are imperfect proxies; downstream task performance is the ultimate evaluation
-\item A generative model audit card documents the model's capabilities, limitations, and misuse risks
-\end{chaptersummary}
