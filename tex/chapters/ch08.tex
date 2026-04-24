@@ -356,7 +356,7 @@ Expanding the second factor the same way, and continuing until only $P(w_1)$ rem
 Conceptually, language modeling asks one repeated question: given the text so far, what token should come next?
 
 \begin{mathlens}
-If the model assigns probabilities \(p_t=P(w_t\mid w_1,\ldots,w_{t-1})\) to the observed tokens, then the sequence probability is \(\prod_{t=1}^T p_t\). The average negative log-likelihood is
+Define \(p_1=P(w_1)\), and for \(t\ge 2\), define \(p_t=P(w_t\mid w_1,\ldots,w_{t-1})\). Then the sequence probability is \(\prod_{t=1}^T p_t\). The average negative log-likelihood is
 \[
 \mathrm{NLL}=-\frac{1}{T}\sum_{t=1}^T \log p_t,
 \]
@@ -739,25 +739,25 @@ Three prompting patterns appear consistently across task settings, but they do n
   The examples demonstrate the expected format and reasoning pattern.};
 
 \node[rung, above=0.4cm of fs] (cot) {%
-  \textbf{Chain-of-thought.}
-  Ask the model to produce intermediate reasoning steps before the final answer.
+  \textbf{Structured decomposition.}
+  Ask the model or workflow to separate subtasks before the final answer.
   This can be added to either zero-shot or few-shot prompts when the task
-  requires multi-step inference or when intermediate steps are part of what
-  needs to be checked.};
+  requires multi-step checks, but the exposed sources and assumptions remain
+  the evidence.};
 \end{tikzpicture}%
 }
-\caption{Three common prompting patterns. Zero-shot and few-shot vary the number of demonstrations, while chain-of-thought adds an optional reasoning scaffold that can be paired with either. The simplest structure that produces reliable behavior under realistic input variation is usually preferable.}
+\caption{Three common prompting patterns. Zero-shot and few-shot vary the number of demonstrations, while structured decomposition adds an optional reasoning scaffold that can be paired with either. The simplest structure that produces reliable behavior under realistic input variation is usually preferable.}
 \label{fig:prompting-ladder}
 \end{figure}
 
 \begin{practicalnote}
-Zero-shot, few-shot, and chain-of-thought are not exclusive rungs on a ladder. They are orthogonal choices that can be combined: zero-shot with chain-of-thought reasoning, few-shot with chain-of-thought demonstrations, or few-shot without explicit reasoning steps. The figure orders them by how much prompt engineering effort they require, not by mutual exclusivity. Your choice should depend on what information the model needs to behave reliably on your task.
+Zero-shot, few-shot, and structured decomposition are not exclusive rungs on a ladder. They are orthogonal choices that can be combined: zero-shot with a checklist, few-shot with worked decompositions, or few-shot without explicit intermediate steps. The figure orders them by how much prompt engineering effort they require, not by mutual exclusivity. Your choice should depend on what information the model needs to behave reliably on your task. Visible reasoning is not evidence by itself; grounded sources, assumptions, policy checks, and abstention rules are what make an answer auditable.
 \end{practicalnote}
 
 \begin{example}[Same Task, Three Prompting Strategies]
 Suppose the task is to classify a student message into one of three routing categories: \emph{deadline}, \emph{grading}, or \emph{administrative}.
-\textbf{Zero-shot} prompting describes the categories and asks for a label. \textbf{Few-shot} prompting includes two or three labeled examples before the new message. A \textbf{chain-of-thought variant} can be paired with either one by asking the model to first identify the main concern in the message and only then select the category.
-If the zero-shot result is already reliable under realistic message variation, adding examples or reasoning steps may not improve it. If the model makes consistent errors on edge cases, few-shot examples that cover those cases may help. If the routing logic is genuinely multi-step---for example, distinguishing a visa question from a course question requires identifying a specific entity type first---a chain-of-thought version of either prompt may reduce errors by making the intermediate step explicit. Chain-of-thought is therefore not a third rung above few-shot; it is an extra scaffold that can be paired with different demonstration choices.
+\textbf{Zero-shot} prompting describes the categories and asks for a label. \textbf{Few-shot} prompting includes two or three labeled examples before the new message. A \textbf{structured-decomposition variant} can be paired with either one by asking the workflow to identify the main concern, check whether policy evidence is needed, and only then select the category.
+If the zero-shot result is already reliable under realistic message variation, adding examples or decomposition steps may not improve it. If the model makes consistent errors on edge cases, few-shot examples that cover those cases may help. If the routing logic is genuinely multi-step---for example, distinguishing a visa question from a course question requires identifying a specific entity type first---a decomposition version of either prompt may reduce errors by making the required checks explicit. The scaffold should support auditability, not persuade the reader that fluent intermediate text is proof.
 \end{example}
 
 \begin{thinkingtool}

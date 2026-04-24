@@ -430,6 +430,23 @@ An interpretable model is not the same thing as a correct interpretation. Coeffi
 
 Residuals are not just bookkeeping after the fit. If residuals curve with the fitted values, the representation is probably missing nonlinear structure. If their spread grows with the prediction, the error variance may not be constant. If one slice produces extreme residuals, that slice may need a separate feature, a missingness indicator, or a different interaction term. In a linear baseline, residual plots are often the fastest way to learn what structure the representation left out.
 
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{p{3.0cm}p{3.25cm}p{3.55cm}}
+\toprule
+Residual pattern & Likely missing structure & Next baseline move \\
+\midrule
+Residuals curve with fitted value & nonlinear relationship in the raw feature & add a squared, log, or spline-like feature and validate it \\
+Residual spread grows with prediction & error variance changes by scale & try a transformed target or report scale-aware uncertainty \\
+One operational slice has extreme residuals & missing slice-specific signal or shifted data source & add a slice indicator, missingness flag, or separate slice evaluation \\
+\bottomrule
+\end{tabular}
+\caption{Residual diagnostics are useful only when they lead to a concrete next baseline move rather than a vague sense that the model is weak.}
+\label{tab:residual-diagnostic-next-move}
+\end{table}
+
 \subsection{Linear in the Parameters, Not Necessarily in the World}
 
 Students often hear ``linear model'' and imagine ``straight line in reality.'' That is too narrow. The model is linear in the \emph{parameters and representation}, not necessarily in the raw input.
@@ -875,6 +892,19 @@ The geometry gives a useful picture: the L2 penalty has round contour lines, so 
 \begin{practicalnote}
 Regularization strength $\lambda$ is not a matter of aesthetic preference. It is a model-selection choice and should be chosen by validation performance. This is also why standardization matters more once regularization is active: if one feature is measured on a much larger scale than another, the penalty no longer treats them comparably.
 \end{practicalnote}
+
+\begin{mathlens}
+Suppose validation accuracy for ridge-logistic baselines is
+\[
+\begin{array}{c|ccc}
+\lambda & 0.001 & 0.1 & 10 \\
+\hline
+\text{train accuracy} & 0.96 & 0.91 & 0.78 \\
+\text{validation accuracy} & 0.82 & 0.88 & 0.76
+\end{array}
+\]
+The smallest penalty fits training best but generalizes worse, while the largest penalty underfits both training and validation. The middle value is the defensible baseline choice because the validation evidence, not the prettiest coefficient story, selected it.
+\end{mathlens}
 
 \begin{codeexample}[caption={From scratch: L2 gradient versus an L1 subgradient sketch}]
 # Both penalties are added to the data-loss gradient before each weight update.

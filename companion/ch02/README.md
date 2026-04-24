@@ -42,3 +42,9 @@ Run it with:
 ```bash
 python3 companion/ch02/practical/overfitting_demo_sklearn.py
 ```
+
+## Notebook lab
+
+`practical/metrics_and_tradeoffs_lab.ipynb`
+
+Use this notebook when students need a fuller guided pass through threshold choice, calibration summaries, metric tradeoffs, and the metric-and-action worksheet.

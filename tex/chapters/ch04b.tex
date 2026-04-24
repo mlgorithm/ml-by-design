@@ -27,6 +27,10 @@ Data design is not optional cleanup work done before the real modeling begins. I
 \item Document data design choices in a reusable format
 \end{learninggoals}
 
+\begin{decisionbox}
+\textbf{Data-design order of operations.} Do not start with augmentation, synthetic data, or a larger labeling budget. First define what each label means and who is allowed to assign it. Then measure label quality and disagreement. Next compare the data distribution with the deployment distribution and the operating policy. Only after those checks should the team choose a label-acquisition strategy such as active learning, semi-supervised learning, weak supervision, augmentation, or synthetic data.
+\end{decisionbox}
+
 \section{Data as a Design Decision}
 
 The dataset encodes assumptions about the world. What you include, exclude, label, and measure shapes the model as much as the architecture. A model trained only on examples from September to November will never see winter-specific behavior. A student-support system trained on cases labeled by one kind of advisor will learn a different definition of ``risk'' than one trained on cases labeled by advisors with different philosophies. A pedestrian detector trained only on sunny weather will fail at dusk.
@@ -111,6 +115,10 @@ Label CONCERNING if:
 
 Label ROUTINE otherwise
 \end{codeexample}
+
+\begin{warningbox}
+High-stakes student-support labels are not only an annotation problem. A dataset that includes mental-health crisis, discrimination, financial hardship, demographics, advising notes, or learning-management-system records also needs governance rules: consent or a lawful institutional basis, data minimization, restricted access, escalation protocols, human review, and a clear statement that the model output is not a welfare decision. Label quality cannot substitute for those safeguards.
+\end{warningbox}
 
 Good guidelines reduce annotator variation and make the labeling task reproducible. But they cannot eliminate disagreement entirely.
 
@@ -652,6 +660,7 @@ Annotator agreement & Inter-annotator agreement scores (kappa, alpha, or agreeme
 Known gaps and limitations & What subgroups or conditions are underrepresented, what distribution shifts are known to exist between training and deployment, and what edge cases may be missing \\
 Class distribution and imbalance strategy & The class balance in the dataset, how it compares to the deployment distribution, and what strategy was used to handle imbalance (reweighting, resampling, threshold adjustment, etc.) \\
 Label-acquisition strategy & Whether labels are gold (expert), silver (weak supervision), or pseudo (self-training); what labeling functions or heuristics were used; what confidence thresholds were applied; and what fraction of training labels come from each source \\
+Governance and escalation & Consent or lawful basis, access controls, sensitive attributes, human-review requirement, crisis-escalation protocol, and no-automation boundaries \\
 Augmentation claims & What augmentations were applied, what transformations they represent, and why those transformations preserve label validity \\
 Synthetic data usage & What synthetic data was included, how it was generated, and what real-data validation was performed to confirm sim-to-real performance \\
 Noise and cleaning & Estimated label-noise rates, what cleaning or validation was performed, and confidence in label quality \\
@@ -671,6 +680,8 @@ Version and refresh plan & The current version, when the data was last updated, 
 \textbf{Data extent.} 12,480 student messages from 840 unique students across four semesters. 7,480 messages from fall 2021--2022 (training), 2,500 messages from fall 2023 (validation), 2,500 from fall 2024 (test). Covers two course sections: in-person (60\%) and hybrid (40\%); all first-year students.
 
 \textbf{Labeling protocol and annotators.} Messages labeled by three trained academic advisors using standardized guidelines. Labels: URGENT (student mentions mental health crisis, financial hardship, or family emergency), CONCERNING (multiple late submissions in one week, sudden engagement drop), ROUTINE (all others). Annotators trained for 4 hours on 50 messages before labeling began.
+
+\textbf{Governance and escalation.} Access is limited to the academic-support team and the data steward. Sensitive personal attributes are excluded from model inputs unless explicitly approved for bias auditing. URGENT labels trigger a human escalation protocol, not an automated decision. Messages indicating immediate danger are routed to the institution's existing crisis-response process regardless of model score. Students are not punished or denied services because of a model output.
 
 \textbf{Annotator agreement.} Fleiss's kappa = 0.72 (substantial agreement). Disagreements most common between ROUTINE and CONCERNING (14\% of examples); disagreements between URGENT and others rare (2\%). URGENT labels rarely disagreed because guidelines are clearest. ROUTINE vs. CONCERNING reflects genuine ambiguity about ``concerning enough to flag.''
 

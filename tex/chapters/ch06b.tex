@@ -129,6 +129,10 @@ R(s, a) = \begin{cases}
 The policy $\pi$ maps each query to a distribution over responses; a deterministic policy always selects the single highest-probability response.
 \end{example}
 
+\begin{example}[A Tiny Episode as the Chapter Spine]
+Consider a two-state support assistant. In state \(s_0\), a student asks a routine deadline question. The agent can answer directly or escalate to an advisor. Answering directly gives reward \(+1\) if the issue resolves and \(-2\) if the student returns frustrated; escalating gives reward \(0\) but moves the case safely to a human. In one episode, the agent answers directly, receives reward \(-2\), and returns to a similar unresolved state. A value-based learner should reduce the value of answering directly in that state. A policy learner should lower the probability of that action. A reward-design audit should ask whether \(-2\) really captures the harm of a poor automated answer. Keep this small loop in mind as the chapter introduces values, policies, exploration, and reward design.
+\end{example}
+
 \section{Value Functions and Temporal Credit Assignment}
 
 The core insight of RL is that an action's value depends on the \emph{total} future reward it enables, not just immediate reward.
@@ -228,6 +232,16 @@ i.e., always choose the action with the highest estimated value.
 \end{enumerate}
 
 The key idea is the $\max$ in step 2: regardless of which action the agent actually took for exploration, the target uses the value of the \emph{best} next action. This separates the behavior policy (which explores) from the target policy (which is greedy), allowing the agent to learn an optimal policy even while exploring suboptimal actions.
+
+For a hand calculation, suppose \(Q(s,a)=0.20\), the observed reward is \(r=1\), \(\gamma=0.9\), the best next-state value is \(\max_{a'}Q(s',a')=0.50\), and the learning rate is \(\alpha=0.1\). The TD target is
+\[
+y=1+0.9(0.50)=1.45,
+\]
+so the update is
+\[
+Q(s,a)\leftarrow 0.20+0.1(1.45-0.20)=0.325.
+\]
+This table-entry update is what the companion gridworld repeats many times.
 
 For large state spaces (e.g., raw images), $Q$ cannot be stored in a table. Instead, we approximate it with a neural network: $\hat{Q}(s, a) = f_\theta(s, a)$. \citet{mnih2015} demonstrated that this approach---\emph{Deep Q-Networks} (DQN)---could learn to play Atari games directly from pixels, a landmark result that revived interest in deep RL. The key stabilization tricks were experience replay (storing past transitions and sampling from them uniformly) and a target network (a slowly updated copy of $Q$ used to compute targets, preventing the moving-target problem).
 \end{advancednote}
@@ -337,7 +351,7 @@ All exploration strategies discussed above (epsilon-greedy, UCB, Thompson sampli
 \textbf{When is exploration safe vs.\ dangerous?}
 \begin{itemize}
 \item \textbf{Safe exploration:} Simulation, offline RL (learning from historical logs without live interaction), or low-stakes domains where bad actions are merely wasteful, not dangerous. Use more aggressive exploration (larger $\epsilon$).
-\item \textbf{Dangerous exploration:} Real-time control systems (shuttle), medical treatment decisions. Use conservative strategies: small $\epsilon$, prior knowledge, or always maintain a safe fallback.
+\item \textbf{Dangerous exploration:} Real-time control systems (shuttle), medical treatment decisions, student welfare, and other high-stakes workflows. Live random exploration is usually inappropriate. Use simulation, offline evaluation, policy constraints, human approval, fallback controllers, and staged deployment before any online adaptation.
 \item \textbf{Mixed:} Many real systems. Quantify the cost of bad exploration; use that to set exploration bounds.
 \end{itemize}
 \end{decisionbox}
@@ -405,7 +419,7 @@ Practical workarounds include \emph{frame stacking}---feeding the agent several 
 
 Large language models from Chapter~\ref{ch:representation-foundation-models} are trained on next-token prediction, which does not directly optimize for user satisfaction. A model can be fluent but unhelpful, biased, or unsafe.
 
-Reinforcement Learning from Human Feedback (RLHF) is a modern technique that finetunes a language model to maximize human preferences, using RL to align the model's outputs with human values \citep{christiano2017,ouyang2022}.
+Reinforcement Learning from Human Feedback (RLHF) is a modern technique that finetunes a language model to optimize a learned proxy for human preferences \citep{christiano2017,ouyang2022}. It should not be described as optimizing human values directly. The reward model is itself a model trained from limited comparisons, and PPO is one common historical optimization choice rather than the conceptual essence of preference-based alignment.
 
 \subsection{The RLHF Pipeline}
 

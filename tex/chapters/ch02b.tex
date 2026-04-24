@@ -113,6 +113,14 @@ The practical point is not that a held-out score becomes infallible, but that an
 
 If the held-out metric is an average of bounded per-example quantities, such as accuracy indicators or a loss rescaled into $[0,1]$, this inequality explains why larger protected test sets produce more stable evidence and why repeated peeking at the same hold-out set is so damaging.
 
+\begin{mathlens}
+For a rough scale check, plug in \(\varepsilon=0.10\). With \(n=100\) held-out examples, Hoeffding gives
+\[
+P(|\bar Z-\mathbb{E}\bar Z|\ge 0.10)\le 2e^{-2}=0.27.
+\]
+With \(n=1000\), the same deviation bound becomes \(2e^{-20}\), essentially zero for practical purposes. This does not mean the estimate is unbiased under distribution shift, duplicate examples, leakage, or test-set reuse. It only says that, under the stated independence and boundedness assumptions, larger untouched samples make random sampling noise smaller.
+\end{mathlens}
+
 Here \emph{preprocessing} means data transformations such as scaling, normalization, or feature extraction that are learned from the training data and then applied unchanged to validation and test data.
 
 \begin{figure}[t]
@@ -306,7 +314,7 @@ Two sanity checks should become automatic. First, run a \emph{shuffled-label che
 \end{practicalnote}
 
 \begin{warningbox}
-The shuffled-label sanity check works as follows: randomly permute the training labels so they no longer correspond to the inputs, then retrain the model from scratch. If the model still achieves non-trivial performance on the validation set, the pipeline is broken---it is learning from data artifacts (leaky features, duplicate rows, or preprocessing that encodes the target) rather than genuine signal. A properly constructed pipeline should fall back to the weak baseline implied by the metric and class balance, not retain meaningful predictive power.
+The shuffled-label sanity check works as follows: split first; randomly permute only the training labels so they no longer correspond to the training inputs; retrain the model from scratch; evaluate on the unchanged validation set; compare against the metric-specific null baseline; and repeat if variance is high. If the model still achieves non-trivial performance on the validation set, the pipeline is broken---it is learning from data artifacts (leaky features, duplicate rows, or preprocessing that encodes the target) rather than genuine signal. A properly constructed pipeline should fall back to the weak baseline implied by the metric and class balance, not retain meaningful predictive power.
 \end{warningbox}
 
 \section{When Good Numbers Still Support Weak Claims}

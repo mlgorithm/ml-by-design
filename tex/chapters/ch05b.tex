@@ -31,9 +31,11 @@ Review Bridge~II if conditional probability, likelihood, expectation, or varianc
 
 \section{Why Probabilistic Thinking Matters}
 
-All models encountered so far---linear classifiers, logistic regression, neural networks---produce a single output for each input. Even logistic regression, which outputs a probability, typically uses that probability only to make a binary decision via a threshold. The probability itself is rarely examined, calibrated, or propagated into downstream decisions.
+Many models encountered so far produce a single operational output for each input: a score, a class label, or a thresholded decision. Some of them, such as logistic regression or softmax classifiers, can also produce class probabilities. The issue is not that previous models were never probabilistic; the issue is that their probabilities were often treated only as a way to choose a label, rather than as quantities to calibrate, audit, or propagate into downstream decisions.
 
-Probabilistic models take a different stance: the output is a \emph{distribution}, not a point. Instead of asking ``what is the predicted class?'' a probabilistic model asks ``what is the distribution over possible classes, and how spread out is that distribution?'' This shift has practical consequences.
+It is useful to keep three levels separate: point labels or scores; class-probability models such as logistic regression; and full predictive or generative distributions that model richer uncertainty about labels, inputs, or latent structure. This chapter focuses on the latter two levels and asks how uncertainty should be represented and used.
+
+Probabilistic models take a different stance: the output is a \emph{distribution}, not merely a point. Instead of asking only ``what is the predicted class?'' a probabilistic model asks ``what distribution over possible outcomes is being represented, and how spread out is that distribution?'' This shift has practical consequences.
 
 \textbf{Decision-making under uncertainty.} A hospital triage system that predicts a 51\% probability of a serious condition should behave differently from one that predicts 99\%. Both may predict the same class (``serious''), but the appropriate action differs. Probabilistic outputs enable cost-sensitive decisions: the downstream system can incorporate the prediction's uncertainty into its response.
 
@@ -148,6 +150,24 @@ The \emph{Expectation-Maximization} (EM) algorithm resolves this chicken-and-egg
 
 Each $\boldsymbol{\mu}_k$ is a weighted average of the data points, where the weights are the soft assignments. Each $\boldsymbol{\Sigma}_k$ is a weighted covariance. Each $\pi_k$ is the average responsibility of component $k$.
 
+\begin{example}[One EM Pass in One Dimension]
+Suppose three points are \(x=\{0,2,8\}\), and a two-component mixture starts with rough means \(\mu_1=1\) and \(\mu_2=7\). After the E-step, imagine the responsibilities for component 1 are
+\[
+\gamma_{\cdot 1}=(0.90,\ 0.80,\ 0.05),
+\]
+so the responsibilities for component 2 are \((0.10,0.20,0.95)\). The M-step updates the first mean as a responsibility-weighted average:
+\[
+\mu_1^{\text{new}}=\frac{0.90(0)+0.80(2)+0.05(8)}{0.90+0.80+0.05}
+=\frac{2.0}{1.75}\approx 1.14.
+\]
+The second mean updates similarly:
+\[
+\mu_2^{\text{new}}=\frac{0.10(0)+0.20(2)+0.95(8)}{0.10+0.20+0.95}
+=\frac{8.0}{1.25}=6.40.
+\]
+This is the whole EM rhythm: infer soft membership with the current parameters, then recompute parameters as weighted statistics under those memberships.
+\end{example}
+
 \textbf{Convergence.} The E-step and M-step are repeated until the parameters stop changing (or the log-likelihood stops increasing). EM is guaranteed to never decrease the log-likelihood, but it can converge to a local optimum. Different initializations can lead to different solutions.
 
 \begin{warningbox}
@@ -155,7 +175,9 @@ EM is sensitive to initialization. If a component's mean starts far from any dat
 \end{warningbox}
 
 \begin{example}[GMM for Student Message Clustering]
-A course-support team has 5,000 student messages with no labels. They fit a GMM with $K=5$ to discover natural groupings. EM converges and reveals five clusters: administrative questions (``when is the assignment due?''), technical help requests (``I can't log in''), content questions (``I don't understand the difference between X and Y''), expressions of frustration (``this is impossible''), and personal disclosures (``I've been dealing with a family issue''). Each message gets soft assignments: a message like ``I can't figure out the homework and I'm really stressed'' has probability 0.4 for content questions, 0.35 for frustration, and 0.25 for personal disclosures. The soft assignments are more informative than forcing a hard cluster label.
+A course-support team has 5,000 student messages with no labels. The GMM does not operate on the raw strings directly: each message is first embedded or featurized into a numeric space where Gaussian clusters are at least a defensible approximation. That representation choice determines whether the mixture assumption makes sense.
+
+They fit a GMM with $K=5$ to discover natural groupings. EM converges and reveals five clusters: administrative questions (``when is the assignment due?''), technical help requests (``I can't log in''), content questions (``I don't understand the difference between X and Y''), expressions of frustration (``this is impossible''), and personal disclosures (``I've been dealing with a family issue''). Each message gets soft assignments: a message like ``I can't figure out the homework and I'm really stressed'' has probability 0.4 for content questions, 0.35 for frustration, and 0.25 for personal disclosures. The soft assignments are more informative than forcing a hard cluster label.
 \end{example}
 
 \subsection{Choosing the Number of Components}

@@ -18,6 +18,10 @@ Every AI system simplifies reality. The question is not whether simplification o
 
 This chapter groups together bias, robustness, privacy, and safety because they are often separated artificially in teaching. In practice they interact. A subgroup failure may be caused by data imbalance, but it may only become visible under a domain shift. A privacy mechanism may reduce memorization risk but also alter utility. A safety guardrail may depend on uncertainty estimation and fallback design. The unifying idea is that reliability means the system continues to behave within acceptable bounds under the conditions that matter. In this chapter, \emph{bounded failure} means that severe errors, exposures, and unsafe actions stay within stated limits rather than being waved away by a good average score.
 
+\begin{decisionbox}
+The reliability review card is the chapter's spine. Fill it in stages: first name harms and critical slices, then add shift scenarios, then privacy exposures, then severe hazards and fallback paths, and only at the end decide whether the remaining bounded failures are acceptable.
+\end{decisionbox}
+
 Keep one running case in view throughout this chapter: the grounded course-support assistant from the earlier language and experiments chapters. It routes student questions, retrieves policy passages, sometimes generates grounded answers, and sometimes escalates to humans. This case is useful because it looks ordinary enough to tempt careless deployment, yet it concentrates all four reliability themes in one pipeline: subgroup gaps in language coverage, robustness failures when wording or policy context shifts, privacy exposure through sensitive student records, and safety failures when the system answers questions that should have been escalated. It also gives the chapter its spine: slice gaps first, then shifts, then exposure, then bounded-failure design.
 
 To keep the reliability story visibly cross-domain, this chapter also returns to the dashboard-camera pedestrian detector from Chapter~\ref{ch:vision}. That contrast case moves the same ideas into sensor shift, bystander privacy, and bounded physical risk. The point is not that the domains are identical. It is that the same reliability questions survive domain change.
@@ -64,6 +68,23 @@ Subgroup evaluation measures model performance separately for distinct groups, c
 One fairness metric in isolation is rarely enough. A subgroup can look acceptable on accuracy while still receiving overconfident automation, too many unsafe direct answers, or too little human review. A better habit is to maintain a small subgroup dashboard that keeps several reliability questions visible at once.
 
 For each operationally relevant subgroup, record at least the sample size so small groups are not overinterpreted or ignored, the task metric that matters for the decision, calibration or confidence quality if confidence affects escalation or abstention, the abstention or escalation rate if the system is allowed to defer, and the severe-failure count when some mistakes matter much more than others.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{2.55cm}p{0.55cm}p{2.4cm}p{1.65cm}p{1.5cm}@{}}
+\toprule
+Slice & \(n\) & Task metric & Escalation rate & Severe failures \\
+\midrule
+Routine policy questions & 400 & 0.91 answer accuracy & 0.18 & 0 \\
+Multilingual phrasing & 70 & 0.74 answer accuracy & 0.42 & 2 \\
+Visa or accommodation questions & 45 & 0.62 safe-routing recall & 0.80 & 5 \\
+\bottomrule
+\end{tabular}
+\caption{A subgroup dashboard should show sample size, task quality, deferral behavior, and severe failures together. The concerning row may not be the one with the lowest aggregate accuracy.}
+\label{tab:subgroup-dashboard-example}
+\end{table}
 
 \begin{practicalnote}
 Small slices are noisy. If a subgroup has only a few dozen examples, a one- or two-case change can move the metric materially. Treat large gaps as real signals, but treat small gaps on tiny slices as hypotheses until they survive more data or repeated evaluation.
@@ -253,6 +274,23 @@ A \emph{threat model} is a structured statement of what sensitive asset is being
 \item \textbf{the access path}: logs, prompts, retained training data, retrieval indexes, debugging tools, model outputs, or linkage across datasets;
 \item \textbf{the consequence}: embarrassment, discrimination, financial loss, legal exposure, or physical risk.
 \end{itemize}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{2.1cm}p{1.9cm}p{2.2cm}p{2.5cm}@{}}
+\toprule
+Sensitive asset & Observer & Access path & Mitigation to check \\
+\midrule
+Health or accommodation disclosure & internal staff outside the case & prompt logs and debugging traces & retention limit, access control, redaction before review \\
+Student identity and grades & compromised service account & retrieval index or analytics export & least-privilege access, audit logs, encrypted storage \\
+Pedestrian faces or license plates & annotation vendor or later data user & retained camera frames & on-device processing, blurring, short retention \\
+\bottomrule
+\end{tabular}
+\caption{A privacy threat model becomes actionable when each sensitive asset is tied to a plausible observer, access path, and mitigation.}
+\label{tab:privacy-threat-model-example}
+\end{table}
 
 For the support-assistant case, one threat model might say: sensitive student records and messages are the asset; internal debugging access and long-lived prompt logs are the path; unauthorized staff or compromised tooling are the observer; and the consequence is exposure of disability, immigration, or health information. For the pedestrian-detector case, the asset may be identifiable faces or movement patterns; the path may be retained video and annotation tooling; and the consequence may be long-term surveillance or unconsented secondary use. Dashboard cameras continuously record public spaces, creating re-identification risk: a pedestrian's face, gait, or clothing pattern may be linkable across frames or cameras, enabling tracking even without deliberate identification. Mitigations include processing frames on-device and discarding raw imagery after bounding-box extraction, retaining only detection metadata. When raw frames must be stored for debugging or retraining, faces and license plates should be blurred or replaced with synthetic identifiers before human review.
 
@@ -459,10 +497,14 @@ No-deploy condition & What finding would be strong enough to delay, narrow, or r
 For the course-support assistant, a disciplined review card would name critical slices such as multilingual phrasing, underrepresented language registers, visa-related questions, disability-accommodation requests, and distressed student messages; shift scenarios such as a new semester, revised syllabus wording, new learning-platform terminology, or policy-page reorganization; spurious cues such as course codes or standard-form wording that may not survive outside the training setting; privacy exposures such as student identifiers, health disclosures, and accommodation records; severe hazards such as answering high-risk questions directly when escalation is required; fallback path as human advising or specialist support teams; monitoring triggers as subgroup degradation, retrieval failures on policy pages, or rising escalation misses; and a no-deploy condition such as unacceptable failure on high-risk slices even when overall metrics remain strong.
 \end{example}
 
-\section{Interpretability and Explanations: The XAI Toolkit}
+\begin{practicalnote}
+Up to this point, the chapter's core artifact is complete: a reliability review card that names bounded-failure requirements before launch. The remaining sections add optional toolkits and narrower previews that can strengthen particular rows on that card. They do not replace the card, and they do not turn reliability into ``whatever extra method was used most recently.''
+\end{practicalnote}
+
+\section{Optional Extension: Interpretability and Explanations}
 \label{sec:xai-toolkit}
 
-Reliability does not always require a full explanation of every prediction, but it often benefits from understanding something about \emph{why} a model behaves as it does, not just \emph{what} it predicts. Interpretability methods---often grouped under ``Explainable AI'' (XAI)---aim to make model behavior legible to developers, auditors, and stakeholders. This section introduces the main families, what they actually show, and when they mislead.
+Reliability does not always require a full explanation of every prediction, and many systems should not wait for perfect interpretability before basic bounded-failure questions are answered. But some deployments benefit from understanding something about \emph{why} a model behaves as it does, not just \emph{what} it predicts. Interpretability methods---often grouped under ``Explainable AI'' (XAI)---are best treated here as an optional toolkit for inspecting suspicious model behavior, auditing spurious cues, or making selected decisions more legible to developers, auditors, and stakeholders. This section introduces the main families, what they actually show, and when they mislead.
 
 \subsection{Feature Attribution Methods}
 
@@ -475,7 +517,7 @@ Feature attribution methods assign an importance score to each input feature for
 \textbf{Partial Dependence Plots (PDP).} PDPs show how the model's average prediction changes as one feature varies, marginalizing over all other features. They are \emph{global} explanations: they show the model's overall reliance on a feature, not its behavior on a specific input. PDPs are easy to compute and interpret but can be misleading when features are correlated---the marginalization may create unrealistic feature combinations.
 
 \begin{practicalnote}
-Start with SHAP for local explanations (``why did the model flag this student?'') and PDPs for global explanations (``which features matter most overall?''). Use LIME when SHAP is too slow (SHAP's exact computation can be expensive for large models). Always compare at least two methods: if SHAP and LIME disagree on the important features for a prediction, treat that as a cue to inspect the background distribution, perturbation scheme, and local fidelity more carefully.
+Choose the explanation method to match the audit question. Use counterfactuals when the stakeholder needs to know what actionable change would alter a decision, PDPs when the question is about average model behavior, and SHAP or LIME when the question is local feature attribution. Always compare at least two methods when the explanation matters: if SHAP and LIME disagree on the important features for a prediction, treat that as a cue to inspect the background distribution, perturbation scheme, and local fidelity more carefully.
 \end{practicalnote}
 
 \subsection{Counterfactual Explanations}
@@ -505,10 +547,10 @@ Interpretability methods have well-documented failure modes:
 \textbf{Explanation audit.} Before trusting an explanation method, test it: does the explanation change when the prediction does not? Does it agree with other explanation methods? Does it identify features that domain experts consider relevant? If the answer to any of these is ``no,'' the explanation method needs more scrutiny than the model it is trying to explain.
 \end{thinkingtool}
 
-\section{Uncertainty Quantification for Reliability}
+\section{Optional Extension: Uncertainty Signals for Reliability}
 \label{sec:uq-reliability}
 
-Chapter~\ref{ch:probabilistic-models} introduced aleatoric and epistemic uncertainty. This section connects uncertainty to reliability: how can uncertainty estimates make deployed systems safer?
+Chapter~\ref{ch:probabilistic-models} introduced aleatoric and epistemic uncertainty. For this chapter, uncertainty quantification is not a second core artifact beside the reliability review card. It is a narrower toolkit for strengthening one specific part of that card: the fallback and review path. The practical question is therefore limited and deployment-facing: when can uncertainty estimates justify deferral, abstention, or extra safety margin, and when do they merely decorate a weak system with confidence language?
 
 \subsection{Predictive Intervals and Conformal Prediction}
 
@@ -545,12 +587,12 @@ The campus pedestrian detector uses an ensemble of 5 models. During normal dayti
 \end{itemize}
 \end{decisionbox}
 
-\section{Security and Abuse as Reliability Problems}
+\section{Extension Preview: Security and Abuse Under Adversarial Pressure}
 \label{sec:security-reliability}
 
-Everything the chapter has covered so far assumed that the pressure on the system came from the world: noisy sensors, shifting populations, imperfect labels, unpredictable users. This section adds the pressure that comes from an \emph{adversary}: someone deliberately crafting inputs, data, or queries to make the system behave in a way it should not. Reliability under natural shift is not the same as reliability under adversarial pressure. A model can be perfectly robust to rain, lighting, and phrasing changes and still fail the moment someone designs an input to cross its guardrails.
+Everything the chapter has covered so far assumed that the pressure on the system came from the world: noisy sensors, shifting populations, imperfect labels, unpredictable users. This section adds a narrower but important extension: pressure that comes from an \emph{adversary}, someone deliberately crafting inputs, data, or queries to make the system behave in a way it should not. Reliability under natural shift is not the same as reliability under adversarial pressure. A model can be perfectly robust to rain, lighting, and phrasing changes and still fail the moment someone designs an input to cross its guardrails.
 
-The book's framing still works here. Security is another bounded-failure problem: given a specific adversary, which failures are unacceptable, and what mitigation, monitoring, and rollback path keeps the envelope closed? The mistake is to treat security as either a separate discipline with its own jargon or as something ML teams can inherit wholesale from the security organization. Neither view survives contact with a real deployment. Adversaries adapt to the behavior of the deployed model, which means the ML team is the only group with enough context to name the threats that matter for its particular system.
+The book's framing still works here. Security is another bounded-failure problem: given a specific adversary, which failures are unacceptable, and what mitigation, monitoring, and rollback path keeps the envelope closed? The mistake is to let this late section pull the chapter's center of gravity away from the main reliability review. Instead, read it as an adversarial extension of the same review discipline. Security is not either a separate world with unrelated jargon or something ML teams can inherit wholesale from the security organization. Neither view survives contact with a real deployment. Adversaries adapt to the behavior of the deployed model, which means the ML team is the only group with enough context to name the threats that matter for its particular system.
 
 \subsection{Threat Modeling Before Controls}
 
@@ -615,9 +657,9 @@ Preventive controls cannot cover everything; the threat card's \emph{monitoring 
 
 Each bullet is a candidate to write into the \emph{monitoring signal} row of the relevant threat card. Audit logs and the rollback paths named on each card are the response side. Chapter~\ref{ch:models-systems} wires these signals to specific production metrics, alert thresholds, and rollback commands; this chapter's responsibility is only to make sure the signals are named in the threat model rather than left as ``an operations problem.''
 
-\subsection{Chapter Artifact: A Security Threat Card}
+\subsection{Extension Artifact: A Security Threat Card}
 
-The chapter's reliability review card asked what might go wrong under natural pressure. The security threat card asks the same question under adversarial pressure. It should be written \emph{per attack class}---poisoning, adversarial examples, extraction, membership inference, prompt injection, retrieval poisoning---rather than as a single table for the whole system. A single card that says ``the attacker is any bad actor'' is too diffuse to drive controls.
+The chapter's reliability review card remains the main pedagogical artifact. The security threat card is an extension for settings where adversarial pressure is genuinely in scope. It asks the same question under attack pressure and should be written \emph{per attack class}---poisoning, adversarial examples, extraction, membership inference, prompt injection, retrieval poisoning---rather than as a single table for the whole system. A single card that says ``the attacker is any bad actor'' is too diffuse to drive controls.
 
 \begin{table}[t]
 \centering
@@ -655,7 +697,7 @@ The pedestrian detector deserves its own cards. An adversarial-example card woul
 
 \section{Common Mistakes in Reliability Work}
 
-These mistakes are surface forms of the chapter's main enemy: confusing a good aggregate score with bounded reliability in deployment. Read them as signs that average-case performance has been mistaken for an acceptable failure envelope.
+These mistakes are surface forms of the chapter's main enemy: confusing a good aggregate score with bounded reliability in deployment. Read them as signs that average-case performance has been mistaken for an acceptable failure envelope, or that a later toolkit has displaced the simpler core review questions it was supposed to support.
 
 \begin{mistakebox}
 \item \textbf{Reporting only overall metrics.} Overall numbers can hide subgroup failures and robustness weaknesses.
@@ -663,6 +705,7 @@ These mistakes are surface forms of the chapter's main enemy: confusing a good a
 \item \textbf{Confusing robustness with clean accuracy.} A model may be accurate on a benchmark and brittle under predictable shift.
 \item \textbf{Treating privacy as an afterthought.} Late privacy fixes are often expensive or insufficient.
 \item \textbf{Thinking safety is just the model's job.} Fallback logic, escalation, monitoring, and interface design often matter more than one extra point of accuracy.
+\item \textbf{Letting auxiliary toolkits become the main story.} Explanations, uncertainty methods, and security evaluations are useful only if they sharpen the reliability review card's decisions about bounded failure, fallback, and no-deploy conditions.
 \item \textbf{Confusing natural robustness with adversarial robustness.} A system that is reliable under rain, phrasing, or camera changes can still fail the first time an attacker designs an input to cross a guardrail; security needs its own threat model and its own evaluation.
 \end{mistakebox}
 
@@ -672,7 +715,7 @@ This chapter treated reliability as an engineering discipline across the full pi
 
 \section*{Chapter Summary}
 
-Reliability is a pipeline property, not a model property. Subgroup evaluation, robustness testing, privacy review, safety cases, fallback design, and monitoring are different views of the same question: does the system stay within acceptable bounds for the people, conditions, and harms that matter in deployment? Interpretability methods (SHAP, LIME, counterfactual explanations) make model behavior legible but have well-documented failure modes---explanations can be unstable, unfaithful, or confused with causation. Uncertainty quantification (conformal prediction, ensemble disagreement) turns model confidence into actionable deployment rules: serve, defer, or abstain. Security and abuse extend the same bounded-failure discipline to adversarial pressure: data and feedback poisoning, adversarial examples, model extraction, membership inference, and prompt injection each need their own threat card with an asset, an adversary, a mitigation, and a monitoring signal. The correct outcome is sometimes redesign, stronger constraint, or refusal to launch.
+Reliability is a pipeline property, not a model property. Subgroup evaluation, robustness testing, privacy review, safety cases, fallback design, and monitoring are different views of the same question: does the system stay within acceptable bounds for the people, conditions, and harms that matter in deployment? The chapter's pedagogical center is the reliability review card, which gathers those views into one bounded-failure launch check. Interpretability methods (SHAP, LIME, counterfactual explanations) are an optional inspection toolkit with well-documented failure modes---explanations can be unstable, unfaithful, or confused with causation. Uncertainty quantification (conformal prediction, ensemble disagreement) is a narrower toolkit for making fallback, deferral, and abstention rules more disciplined. Security and abuse extend the same bounded-failure discipline to adversarial pressure: data and feedback poisoning, adversarial examples, model extraction, membership inference, and prompt injection may require their own threat cards when that pressure is in scope. The correct outcome is sometimes redesign, stronger constraint, a narrower deployment claim, or refusal to launch.
 
 \begin{studyquestions}
 \item Why should bias be treated as a property of the full pipeline rather than only the model?

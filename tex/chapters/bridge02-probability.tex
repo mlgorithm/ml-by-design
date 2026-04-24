@@ -114,7 +114,25 @@ Bayes-optimal decisions formalize this idea. In the simplest binary setup, suppo
 \[
 \tau = \frac{C_{FP}}{C_{FP} + C_{FN}}.
 \]
-If false negatives are nine times more costly than false positives, the optimal threshold is $0.1$, not $0.5$. The default threshold of $0.5$ therefore encodes an implicit equal-cost assumption that is often wrong in practice. Base-rate changes still matter, but they matter through the calibrated posterior probabilities the threshold is applied to.
+The derivation is only an expected-cost comparison. If the posterior probability of the positive class is \(p\), predicting positive has expected mistake cost \((1-p)C_{FP}\), while predicting negative has expected mistake cost \(pC_{FN}\). Predict positive when
+\[
+(1-p)C_{FP} < pC_{FN}.
+\]
+Solving this inequality gives the threshold above. If false negatives are nine times more costly than false positives, the optimal threshold is \(1/(1+9)=0.1\), not \(0.5\). The default threshold of \(0.5\) therefore encodes an implicit equal-cost assumption that is often wrong in practice. Base-rate changes still matter, but they matter through the calibrated posterior probabilities the threshold is applied to.
+
+\begin{example}[A Small Bayes Calculation]
+Suppose only \(10\%\) of messages in a course-support queue are truly urgent. A keyword such as ``deadline'' appears in \(60\%\) of urgent messages and \(20\%\) of non-urgent messages. If a new message contains that keyword, Bayes' rule gives
+\[
+P(\text{urgent}\mid\text{keyword}) =
+\frac{0.60 \cdot 0.10}{0.60 \cdot 0.10 + 0.20 \cdot 0.90}
+= \frac{0.06}{0.24}=0.25.
+\]
+The keyword raised the probability from \(0.10\) to \(0.25\), but the action still depends on cost and capacity. If urgent misses are very costly, \(0.25\) may justify review. If review slots are scarce and the keyword is common, the same probability may be too low for automatic escalation.
+\end{example}
+
+\begin{practicalnote}
+\textbf{Learning-signal card checkpoint.} At this point the card should already distinguish the model output from the decision rule. A probability such as \(0.25\) belongs in the model-output row; the outreach threshold belongs in the decision-rule row.
+\end{practicalnote}
 
 \begin{thinkingtool}
 \textbf{Separate three questions.} Does the model output an honest probability? What are the costs of each kind of mistake? What is the current prevalence and score distribution in deployment? Only when all three are answered does it make sense to ask what the action should be.
