@@ -1,4 +1,4 @@
-# Chapter 18 Companion: From Models to Systems (`ch12`)
+# Chapter 12 Companion: From Models to Systems (`ch12`)
 
 This chapter supports the systems view of the book.
 
@@ -64,3 +64,9 @@ Prerequisites:
 - train/test splits
 - logistic regression
 - confidence scores and thresholds
+
+## Notebook lab
+
+`practical/systems_thinking_lab.ipynb`
+
+Use this notebook when students need a guided systems pass through service objectives, input contracts, selective automation, monitoring signals, and readiness-brief decisions.

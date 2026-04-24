@@ -3,6 +3,15 @@
 
 Vision models are difficult not because images are large arrays of numbers, but because the same underlying object can appear under different lighting, scales, viewpoints, backgrounds, and occlusions. A useful visual representation must preserve what matters while ignoring what should not change the answer. This chapter studies vision from that modeling perspective. It begins with task formulation, because classification, detection, and segmentation do not ask for the same kind of output, and then moves through convolution, pooling, augmentation, transfer, and robustness as different ways of controlling what visual variation the model should treat as signal and what it should treat as nuisance. The running question is not simply whether a model recognizes an object, but whether it learned the right cue under the conditions the deployment camera will actually produce. Here \emph{deployment-camera realism} means matching the data, stress tests, and failure review to the actual lens, mounting position, and acquisition conditions of the deployed system. Later the chapter uses \emph{saliency} maps, visual overlays showing which image regions most affected a prediction, only as diagnostic evidence rather than proof. By the end of the chapter, the reader should be able to diagnose a vision problem in terms of invariance, structure, and deployment realism rather than architecture alone.
 
+\begin{learninggoals}
+\item Frame a vision task by output type: classification, detection, or segmentation.
+\item Use an invariance audit to decide what variation should preserve the label and what should change it.
+\item Explain convolution, pooling, augmentation, and transfer learning as ways to control visual variation.
+\item Diagnose shortcut learning and deployment-camera mismatch through slices and stress tests.
+\item Treat saliency and visual overlays as diagnostic evidence rather than proof.
+\item Write a vision design and stress-test card for a deployment camera setting.
+\end{learninggoals}
+
 \section{Opening Dilemma: The Same Object Can Look Like Many Different Pixel Arrays}
 
 Suppose the task is to support a road-scene system that must detect pedestrians. A person standing on the roadside can appear under bright sun, at dusk, under headlight glare, partially occluded, seen from different camera heights, or blurred by motion. The semantic object may be the same, but the pixel array can change drastically.
@@ -102,11 +111,12 @@ Figure~\ref{fig:vision-street-scene} makes this concrete. Even a simple street i
 \definecolor{c8seg1}{RGB}{100,160,100}
 \definecolor{c8seg2}{RGB}{220,233,251}
 \definecolor{c8seg3}{RGB}{240,220,180}
+\definecolor{c8ped}{RGB}{214,120,62}
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[x=1cm, y=1cm, font=\small]
 
 %% ── Macro: draw a bird's-eye road scene at xshift ───────────────────────
-%% Scene: 4cm wide × 3cm tall.  sidewalk top/bottom, road centre, stripes.
+%% Scene: 4cm wide × 3cm tall with one pedestrian in the shuttle camera view.
 \newcommand{\roadscene}[1]{%  #1 = xshift value
   \begin{scope}[xshift=#1]
     %% sidewalk top
@@ -119,6 +129,13 @@ Figure~\ref{fig:vision-street-scene} makes this concrete. Even a simple street i
     }
     %% sidewalk bottom
     \fill[c8side]  (0,0.0) rectangle (4.0, 0.6);
+    %% pedestrian silhouette
+    \fill[black!75] (2.02,1.56) circle (0.12);
+    \fill[black!75] (1.94,1.06) rectangle (2.10,1.46);
+    \draw[black!75, line width=0.8pt] (1.94,1.35) -- (1.74,1.18);
+    \draw[black!75, line width=0.8pt] (2.10,1.35) -- (2.30,1.18);
+    \draw[black!75, line width=0.8pt] (1.96,1.06) -- (1.82,0.78);
+    \draw[black!75, line width=0.8pt] (2.08,1.06) -- (2.22,0.78);
     %% thin border
     \draw[black!30, thin] (0,0) rectangle (4.0,3.0);
   \end{scope}%
@@ -132,19 +149,19 @@ Figure~\ref{fig:vision-street-scene} makes this concrete. Even a simple street i
 %% label badge
 \node[fill=c8cls!15, draw=c8cls, rounded corners=3pt,
       font=\footnotesize\bfseries, text=c8cls, inner sep=4pt]
-  at (2.0, 3.55) {crossing present: \textbf{yes}};
+  at (2.0, 3.55) {pedestrian present: \textbf{yes}};
 \draw[->, thin, c8cls] (2.0, 3.35) -- (2.0, 3.05);
 \node[font=\small\bfseries, black!70] at (2.0,-0.45) {Classification};
 \node[font=\footnotesize, black!55]   at (2.0,-0.82) {label for the whole image};
 
 %% ─── Panel 2 : Detection ─────────────────────────────────────────────────
 \roadscene{5.0}
-%% bounding box around the crossing region
-\draw[c8det, thick, dashed] (5.45, 0.55) rectangle (8.55, 2.05);
+%% bounding box around the pedestrian
+\draw[c8det, thick, dashed] (6.72, 0.72) rectangle (7.32, 1.72);
 %% corner coordinates
-\node[font=\tiny, c8det, anchor=north west] at (5.45, 0.55)
+\node[font=\tiny, c8det, anchor=north west] at (6.72, 0.72)
   {$(x_{\min},y_{\min})$};
-\node[font=\tiny, c8det, anchor=south east] at (8.55, 2.05)
+\node[font=\tiny, c8det, anchor=south east] at (7.32, 1.72)
   {$(x_{\max},y_{\max})$};
 \node[font=\small\bfseries, black!70] at (7.0,-0.45) {Detection};
 \node[font=\footnotesize, black!55]   at (7.0,-0.82) {box around each object};
@@ -156,18 +173,25 @@ Figure~\ref{fig:vision-street-scene} makes this concrete. Even a simple street i
   \fill[c8seg1!40] (0,2.0) rectangle (4.0,3.0);
   %% road - blue-ish
   \fill[c8seg2]    (0,0.6) rectangle (4.0,2.0);
-  %% crosswalk stripes - amber/tan
+  %% crosswalk stripes remain part of the road surface
   \foreach \s in {0.55,0.95,1.35,1.75,2.15,2.55,2.95} {
-    \fill[c8seg3] (\s,0.62) rectangle (\s+0.28,1.98);
+    \fill[white!92!c8seg2] (\s,0.62) rectangle (\s+0.28,1.98);
   }
   %% sidewalk bottom - green
   \fill[c8seg1!40] (0,0.0) rectangle (4.0,0.6);
+  %% pedestrian mask
+  \fill[c8ped] (2.02,1.56) circle (0.12);
+  \fill[c8ped] (1.94,1.06) rectangle (2.10,1.46);
+  \draw[c8ped, line width=1.1pt] (1.94,1.35) -- (1.74,1.18);
+  \draw[c8ped, line width=1.1pt] (2.10,1.35) -- (2.30,1.18);
+  \draw[c8ped, line width=1.1pt] (1.96,1.06) -- (1.82,0.78);
+  \draw[c8ped, line width=1.1pt] (2.08,1.06) -- (2.22,0.78);
   \draw[black!30, thin] (0,0) rectangle (4.0,3.0);
   %% legend chips – spaced so labels don't clip
   \fill[c8seg2]    (0.05, 3.38) rectangle (0.38, 3.62);
   \node[font=\tiny, anchor=west] at (0.42, 3.50) {road};
-  \fill[c8seg3]    (1.20, 3.38) rectangle (1.53, 3.62);
-  \node[font=\tiny, anchor=west] at (1.57, 3.50) {crossing};
+  \fill[c8ped]     (1.20, 3.38) rectangle (1.53, 3.62);
+  \node[font=\tiny, anchor=west] at (1.57, 3.50) {pedestrian};
   \fill[c8seg1!40] (2.65, 3.38) rectangle (2.98, 3.62);
   \draw[black!20, thin] (2.65, 3.38) rectangle (2.98, 3.62);
   \node[font=\tiny, anchor=west] at (3.02, 3.50) {sidewalk};
@@ -177,7 +201,7 @@ Figure~\ref{fig:vision-street-scene} makes this concrete. Even a simple street i
 
 \end{tikzpicture}%
 }
-\caption{The same scene can be read three ways depending on the output required. Classification asks whether a crossing is present. Detection localises it with a bounding box. Segmentation assigns a label to every pixel. Task formulation must come first because each output demands a different loss, metric, and architecture head.}
+\caption{The same dashboard-camera frame can be read three ways depending on the output required. Classification asks whether a pedestrian is present anywhere in the frame. Detection localizes the pedestrian with a bounding box. Segmentation assigns labels at pixel level, including the pedestrian mask. Task formulation must come first because each output demands a different loss, metric, and architecture head.}
 \label{fig:vision-street-scene}
 \end{figure}
 
@@ -188,9 +212,9 @@ Figure~\ref{fig:vision-street-scene} makes this concrete. Even a simple street i
 \toprule
 Task & Output on the same road-scene image \\
 \midrule
-Classification & \texttt{marked crossing present = yes} \\
-Detection & \texttt{crosswalk = [x\_min, y\_min, x\_max, y\_max]} \\
-Segmentation & Pixelwise mask separating road, crossing markings, sidewalk, and background \\
+Classification & \texttt{pedestrian present = yes} \\
+Detection & \texttt{pedestrian = [x\_min, y\_min, x\_max, y\_max]} \\
+Segmentation & Pixelwise mask separating pedestrian, road, sidewalk, and background \\
 \bottomrule
 \end{tabular}
 \caption{The same image can define very different output structures. This is why task formulation must come before architecture choice.}
@@ -198,7 +222,7 @@ Segmentation & Pixelwise mask separating road, crossing markings, sidewalk, and 
 \end{table}
 
 \begin{example}[Why Task Formulation Matters]
-A system that can classify an image as ``contains a marked crossing'' is not automatically sufficient for a street-scene system. The system may instead need to localize the crossing, identify curb geometry, or reason about nearby objects. The output requirement should be decided before architecture depth becomes the main topic.
+A system that can classify a dashboard-camera frame as ``contains a pedestrian'' is not automatically sufficient for the campus shuttle. The shuttle still needs to localize the person, distinguish one pedestrian from nearby background structure, and preserve enough spatial detail to support downstream decisions. The output requirement should be decided before architecture depth becomes the main topic.
 \end{example}
 
 \begin{practicalnote}
@@ -274,6 +298,10 @@ S_{i,j} = \sum_{u=0}^{2}\sum_{v=0}^{2} K_{u,v} X_{i+u,j+v}.
 \]
 The filter slides across the image and produces a new grid of responses. One filter may respond to horizontal edges, another to vertical edges, another to corners, and later filters may respond to more complex motifs built from earlier ones.
 This operation is technically cross-correlation rather than flipped-kernel convolution, but deep-learning libraries commonly call it convolution. The theorem below uses the unflipped filtering operator defined by this displayed sum.
+
+\begin{practicalnote}
+For the pedestrian-detector running case, these feature maps are not the final output. They are local evidence maps. A detector later turns such evidence into objectness scores, class scores, and bounding boxes, then evaluates localization with IoU and detection precision/recall. A toy digit classifier teaches convolution and pooling, but the deployment task also needs box geometry and false-positive control.
+\end{practicalnote}
 
 \begin{prereqbridge}
 The formula above is just a weighted sum applied repeatedly at many image locations. Instead of learning one set of weights for the whole image at once, the model reuses the same small weights everywhere. That reuse is called parameter sharing.
@@ -435,6 +463,24 @@ In applied vision work, training from scratch should not be the default assumpti
 \begin{practicalnote}
 Transfer learning is not automatic. When the source domain (e.g., ImageNet photographs) differs substantially from the target domain (e.g., satellite imagery or medical scans), even strong pretrained representations may fail. The decision between a frozen backbone with a linear head versus full fine-tuning depends on the size of the labeled target dataset: with few labels, freezing can reduce overfitting risk; with many labels, fine-tuning can adapt features to the new domain. Monitor validation performance under both strategies before committing.
 \end{practicalnote}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{2.45cm}L{3.6cm}L{3.65cm}}
+\toprule
+Vision baseline & When it is useful & Evidence needed to move on \\
+\midrule
+Raw-pixel or simple feature baseline & Sanity check for easy visual cues & Fails on deployment-relevant slices or cannot localize objects \\
+Small CNN from scratch & Tests whether local learned features suffice & Needs enough labeled target data and honest validation gain \\
+Frozen pretrained backbone & Tests reuse with low overfitting risk & Strong probe suggests reusable visual structure \\
+Fine-tuned detector & Justified when target shift or localization demands it & Better detection metrics on deployment slices, not only aggregate accuracy \\
+\bottomrule
+\end{tabular}
+\caption{A vision baseline ladder keeps transfer learning tied to evidence instead of model prestige.}
+\label{tab:vision-baseline-ladder}
+\end{table}
 
 Once the chapter has described how visual structure can be learned, it also has to ask how that same flexibility can go wrong.
 
@@ -628,6 +674,10 @@ Students sometimes hope that a heatmap or saliency map fully explains a model. S
 
 This matters because the rest of the chapter is about evidence quality. A saliency map may help localize suspicion or give a clue about model focus, but it does not by itself settle whether the model learned the intended cue or a shortcut.
 
+\begin{example}[Saliency Suggests, Stress Tests Decide]
+A saliency map for a pedestrian detector may highlight bright crosswalk paint near a person. That is a useful suspicion, not a verdict. Stronger evidence would occlude the paint, compare marked and unmarked crossings, test camera-source holdouts, and inspect low-light or rainy slices. If performance collapses only when the crosswalk cue disappears, the shortcut hypothesis becomes much stronger than any heatmap alone could make it.
+\end{example}
+
 \section{Chapter Artifact: A Vision Design and Stress-Test Card}
 
 By the end of this chapter, the reader should be able to produce a one-page design and stress-test card before making a serious vision claim. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, the structure diagnosis sheet justified leaving it, the training report justified the learned-model claim, and the reuse-and-adaptation plan clarified what transfer could legitimately explain. This card adds the vision-specific layer: what the camera sees, what variation should be ignored, what shortcuts are likely, and what slices must be passed before a benchmark result means anything operational.
@@ -688,20 +738,20 @@ This chapter treated vision as a problem of preserved and discarded variation. I
 \end{studyquestions}
 
 \begin{exercises}
-\item Use the vertical-edge filter from the chapter on a new $3 \times 3$ patch of your own design. Compute the convolution response by hand.
-\item Explain in words why a dense network on raw pixels may need far more parameters than a convolutional network to detect the same local pattern at many image positions.
-\item Perform a short invariance audit for a pedestrian-detection system. Name two variations that should preserve the label and two that should change what the system must output.
-\item Give one example of an augmentation that is likely helpful for a generic object classifier and one example of an augmentation that could be harmful in a specialized vision task.
-\item Describe a real-world setting in which object detection is necessary but classification alone is insufficient.
-\item Give two examples of shortcut signals a vision model might exploit in a poorly designed dataset.
-\item Suppose a model performs well on benchmark photos but poorly on low-light phone images from deployment. Give two plausible technical reasons for the gap.
-\item Sketch a minimal stress-test matrix for a dashboard-camera pedestrian detector. Include at least one lighting slice, one weather slice, one source slice, and one scene-structure slice.
-\item Use Table~\ref{tab:vision-stresstest-card} to sketch a one-page design and stress-test card for a vision task of your choice. If you are carrying one case through the book, explicitly preserve the same task, review policy, and evaluation commitments while adding the vision-specific invariance and shortcut checks.
+\item \exercisetag{Calculation}{Core}Use the vertical-edge filter from the chapter on a new $3 \times 3$ patch of your own design. Compute the convolution response by hand.
+\item \exercisetag{Concept}{Core}Explain in words why a dense network on raw pixels may need far more parameters than a convolutional network to detect the same local pattern at many image positions.
+\item \exercisetag{Concept}{Core}Perform a short invariance audit for a pedestrian-detection system. Name two variations that should preserve the label and two that should change what the system must output.
+\item \exercisetag{Concept}{Core}Give one example of an augmentation that is likely helpful for a generic object classifier and one example of an augmentation that could be harmful in a specialized vision task.
+\item \exercisetag{Concept}{Intermediate}Describe a real-world setting in which object detection is necessary but classification alone is insufficient.
+\item \exercisetag{Concept}{Intermediate}Give two examples of shortcut signals a vision model might exploit in a poorly designed dataset.
+\item \exercisetag{Concept}{Intermediate}Suppose a model performs well on benchmark photos but poorly on low-light phone images from deployment. Give two plausible technical reasons for the gap.
+\item \exercisetag{Design}{Intermediate}Sketch a minimal stress-test matrix for a dashboard-camera pedestrian detector. Include at least one lighting slice, one weather slice, one source slice, and one scene-structure slice.
+\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:vision-stresstest-card} to sketch a one-page design and stress-test card for a vision task of your choice. If you are carrying one case through the book, explicitly preserve the same task, review policy, and evaluation commitments while adding the vision-specific invariance and shortcut checks.
 \end{exercises}
 
 \begin{challengeexercises}
-\item Explain carefully why convolution supports translation equivariance rather than perfect invariance, and why later layers or augmentation are still needed.
-\item A vision model trained to detect disease from scans performs extremely well, but a hospital discovers that the model relies heavily on scanner-specific marks. Explain how this can happen and propose an evaluation protocol that would reveal it.
-\item Compare two deployment strategies for a small vision dataset: frozen pretrained backbone plus linear head, versus full fine-tuning. State when each would be preferable and what evidence would justify the choice.
-\item Design a stress-test suite for a road-scene pedestrian detector that uses at least four shift types or subgroup checks. Explain what failure in each case would mean.
+\item \exercisetag{Concept}{Advanced}Explain carefully why convolution supports translation equivariance rather than perfect invariance, and why later layers or augmentation are still needed.
+\item \exercisetag{Diagnosis}{Advanced}A vision model trained to detect disease from scans performs extremely well, but a hospital discovers that the model relies heavily on scanner-specific marks. Explain how this can happen and propose an evaluation protocol that would reveal it.
+\item \exercisetag{Diagnosis}{Advanced}Compare two deployment strategies for a small vision dataset: frozen pretrained backbone plus linear head, versus full fine-tuning. State when each would be preferable and what evidence would justify the choice.
+\item \exercisetag{Design}{Advanced}Design a stress-test suite for a road-scene pedestrian detector that uses at least four shift types or subgroup checks. Explain what failure in each case would mean.
 \end{challengeexercises}

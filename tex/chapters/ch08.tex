@@ -3,6 +3,19 @@
 
 Language is difficult for machine learning because meaning is not carried by words in isolation. The same words can mean different things in different contexts, and the same meaning can be expressed in many different forms. This chapter studies language models through that tension. It begins with task shape and tokenization, then moves from lexical baselines to contextual representations and sequence models, and finally turns to retrieval, grounding, prompting, and evaluation. The central claim is that language modeling is not only about generating plausible text; it is about deciding what context is needed, what evidence must be present, and what kind of output behavior the task can actually justify. Here \emph{grounding} means constraining an answer by external evidence that can be retrieved, inspected, and checked. By the end of the chapter, the reader should be able to analyze an NLP system in terms of context, grounding, and behavior design rather than only architecture.
 
+\begin{learninggoals}
+\item Use task shape to decide whether the output is a label, span, ranked list, or generated answer.
+\item Explain why token presence, local order, long-range context, and grounding support different NLP designs.
+\item Compare lexical baselines, n-grams, contextual encoders, retrieval, and generation by what context they preserve.
+\item Treat grounding as an evidence constraint rather than as a model-size upgrade.
+\item Evaluate language systems by behavior, faithfulness, escalation, and evidence quality.
+\item Construct an NLP context-and-grounding card for a course-support workflow.
+\end{learninggoals}
+
+\begin{practicalnote}
+\textbf{Core path.} A first pass through this chapter should master the context audit, lexical baselines, contextual representations, retrieval, and grounding. Prompting patterns, social meaning, and broader deployment behavior are important orientation topics, but they do not require full language-model training from scratch.
+\end{practicalnote}
+
 \section{Opening Dilemma: Same Words, Different Meaning; Same Meaning, Different Words}
 
 Suppose a university wants to build a course-support assistant for a large introductory course. Students send messages such as:
@@ -343,7 +356,7 @@ Expanding the second factor the same way, and continuing until only $P(w_1)$ rem
 Conceptually, language modeling asks one repeated question: given the text so far, what token should come next?
 
 \begin{mathlens}
-If the model assigns probabilities \(p_t=P(w_t\mid w_1,\ldots,w_{t-1})\) to the observed tokens, then the sequence probability is \(\prod_{t=1}^T p_t\). The average negative log-likelihood is
+Define \(p_1=P(w_1)\), and for \(t\ge 2\), define \(p_t=P(w_t\mid w_1,\ldots,w_{t-1})\). Then the sequence probability is \(\prod_{t=1}^T p_t\). The average negative log-likelihood is
 \[
 \mathrm{NLL}=-\frac{1}{T}\sum_{t=1}^T \log p_t,
 \]
@@ -726,25 +739,25 @@ Three prompting patterns appear consistently across task settings, but they do n
   The examples demonstrate the expected format and reasoning pattern.};
 
 \node[rung, above=0.4cm of fs] (cot) {%
-  \textbf{Chain-of-thought.}
-  Ask the model to produce intermediate reasoning steps before the final answer.
+  \textbf{Structured decomposition.}
+  Ask the model or workflow to separate subtasks before the final answer.
   This can be added to either zero-shot or few-shot prompts when the task
-  requires multi-step inference or when intermediate steps are part of what
-  needs to be checked.};
+  requires multi-step checks, but the exposed sources and assumptions remain
+  the evidence.};
 \end{tikzpicture}%
 }
-\caption{Three common prompting patterns. Zero-shot and few-shot vary the number of demonstrations, while chain-of-thought adds an optional reasoning scaffold that can be paired with either. The simplest structure that produces reliable behavior under realistic input variation is usually preferable.}
+\caption{Three common prompting patterns. Zero-shot and few-shot vary the number of demonstrations, while structured decomposition adds an optional reasoning scaffold that can be paired with either. The simplest structure that produces reliable behavior under realistic input variation is usually preferable.}
 \label{fig:prompting-ladder}
 \end{figure}
 
 \begin{practicalnote}
-Zero-shot, few-shot, and chain-of-thought are not exclusive rungs on a ladder. They are orthogonal choices that can be combined: zero-shot with chain-of-thought reasoning, few-shot with chain-of-thought demonstrations, or few-shot without explicit reasoning steps. The figure orders them by how much prompt engineering effort they require, not by mutual exclusivity. Your choice should depend on what information the model needs to behave reliably on your task.
+Zero-shot, few-shot, and structured decomposition are not exclusive rungs on a ladder. They are orthogonal choices that can be combined: zero-shot with a checklist, few-shot with worked decompositions, or few-shot without explicit intermediate steps. The figure orders them by how much prompt engineering effort they require, not by mutual exclusivity. Your choice should depend on what information the model needs to behave reliably on your task. Visible reasoning is not evidence by itself; grounded sources, assumptions, policy checks, and abstention rules are what make an answer auditable.
 \end{practicalnote}
 
 \begin{example}[Same Task, Three Prompting Strategies]
 Suppose the task is to classify a student message into one of three routing categories: \emph{deadline}, \emph{grading}, or \emph{administrative}.
-\textbf{Zero-shot} prompting describes the categories and asks for a label. \textbf{Few-shot} prompting includes two or three labeled examples before the new message. A \textbf{chain-of-thought variant} can be paired with either one by asking the model to first identify the main concern in the message and only then select the category.
-If the zero-shot result is already reliable under realistic message variation, adding examples or reasoning steps may not improve it. If the model makes consistent errors on edge cases, few-shot examples that cover those cases may help. If the routing logic is genuinely multi-step---for example, distinguishing a visa question from a course question requires identifying a specific entity type first---a chain-of-thought version of either prompt may reduce errors by making the intermediate step explicit. Chain-of-thought is therefore not a third rung above few-shot; it is an extra scaffold that can be paired with different demonstration choices.
+\textbf{Zero-shot} prompting describes the categories and asks for a label. \textbf{Few-shot} prompting includes two or three labeled examples before the new message. A \textbf{structured-decomposition variant} can be paired with either one by asking the workflow to identify the main concern, check whether policy evidence is needed, and only then select the category.
+If the zero-shot result is already reliable under realistic message variation, adding examples or decomposition steps may not improve it. If the model makes consistent errors on edge cases, few-shot examples that cover those cases may help. If the routing logic is genuinely multi-step---for example, distinguishing a visa question from a course question requires identifying a specific entity type first---a decomposition version of either prompt may reduce errors by making the required checks explicit. The scaffold should support auditability, not persuade the reader that fluent intermediate text is proof.
 \end{example}
 
 \begin{thinkingtool}
@@ -1010,20 +1023,20 @@ This chapter treated language as a problem of context, sequence, and evidence. I
 \end{studyquestions}
 
 \begin{exercises}
-\item For a support-email classifier, decide whether bag-of-words, n-grams, or contextual modeling is justified first. Explain what structure the task really needs.
-\item Construct two short sentences with identical bag-of-words representations but different meanings. Explain which downstream task would fail under bag-of-words and which might still work.
-\item Give one example of an NLP task for which local order is the main missing structure and one for which external grounding is the main missing structure.
-\item Explain why a language model can assign high probability to a sentence that is factually false.
-\item Design a context audit for a small question-answering system over product manuals, policy documents, or another document collection of your choice.
-\item A retrieval system returns ranked passages with relevance labels $[0,1,0,1]$ in the top four positions, and there are three relevant passages in the collection. Compute precision@2, recall@4, and reciprocal rank.
-\item For a support assistant, propose two message types that should be answered automatically and two that should be escalated to a human. Justify the boundary technically, not only socially.
-\item Give one example in which dialect or register variation creates a technical coverage problem rather than merely a stylistic difference.
-\item Use Table~\ref{tab:nlp-context-grounding-card} to sketch a one-page context-and-grounding card for a language task of your choice. End by naming the smallest workflow that could meet the card's requirements. If you are carrying one case through the book, state which parts come over unchanged from the framing memo, evaluation plan, and reliability discipline, and which parts become language-specific here.
+\item \exercisetag{Concept}{Core}For a support-email classifier, decide whether bag-of-words, n-grams, or contextual modeling is justified first. Explain what structure the task really needs.
+\item \exercisetag{Design}{Core}Construct two short sentences with identical bag-of-words representations but different meanings. Explain which downstream task would fail under bag-of-words and which might still work.
+\item \exercisetag{Concept}{Core}Give one example of an NLP task for which local order is the main missing structure and one for which external grounding is the main missing structure.
+\item \exercisetag{Diagnosis}{Intermediate}Explain why a language model can assign high probability to a sentence that is factually false.
+\item \exercisetag{Design}{Intermediate}Design a context audit for a small question-answering system over product manuals, policy documents, or another document collection of your choice.
+\item \exercisetag{Calculation}{Intermediate}A retrieval system returns ranked passages with relevance labels $[0,1,0,1]$ in the top four positions, and there are three relevant passages in the collection. Compute precision@2, recall@4, and reciprocal rank.
+\item \exercisetag{Design}{Intermediate}For a support assistant, propose two message types that should be answered automatically and two that should be escalated to a human. Justify the boundary technically, not only socially.
+\item \exercisetag{Concept}{Intermediate}Give one example in which dialect or register variation creates a technical coverage problem rather than merely a stylistic difference.
+\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:nlp-context-grounding-card} to sketch a one-page context-and-grounding card for a language task of your choice. End by naming the smallest workflow that could meet the card's requirements. If you are carrying one case through the book, state which parts come over unchanged from the framing memo, evaluation plan, and reliability discipline, and which parts become language-specific here.
 \end{exercises}
 
 \begin{challengeexercises}
-\item Show algebraically or with a concrete vector example that two sentences can have identical unigram count vectors and different bigram count vectors.
-\item A unigram baseline performs poorly on an order-sensitive classification task, while a bigram logistic-regression model performs very well. Explain why this does not mean deep learning is unnecessary in general.
-\item A retrieval-augmented assistant produces better answers than a pure generator. Describe what evidence would support the claim that retrieval, rather than prompt wording alone, caused the gain.
-\item A language model achieves low perplexity on a benchmark corpus but frequently invents unsupported details in long-form answers. Explain why these facts can coexist, and describe an evaluation protocol that would surface the problem clearly.
+\item \exercisetag{Proof}{Advanced}Show algebraically or with a concrete vector example that two sentences can have identical unigram count vectors and different bigram count vectors.
+\item \exercisetag{Concept}{Advanced}A unigram baseline performs poorly on an order-sensitive classification task, while a bigram logistic-regression model performs very well. Explain why this does not mean deep learning is unnecessary in general.
+\item \exercisetag{Concept}{Advanced}A retrieval-augmented assistant produces better answers than a pure generator. Describe what evidence would support the claim that retrieval, rather than prompt wording alone, caused the gain.
+\item \exercisetag{Concept}{Advanced}A language model achieves low perplexity on a benchmark corpus but frequently invents unsupported details in long-form answers. Explain why these facts can coexist, and describe an evaluation protocol that would surface the problem clearly.
 \end{challengeexercises}

@@ -5,6 +5,14 @@ Once a task has been framed and its success criteria have been stated, a harder 
 
 This chapter turns evaluation discipline into procedure. It defines what should count as new evidence, how train, validation, and test roles must remain separate, and which simple checks keep a promising result honest. By the end of the chapter, the reader should be able to write a minimal evaluation plan that makes a model claim credible on genuinely new data.
 
+\begin{learninggoals}
+\item Explain why a strong-looking score is not credible without a protected evaluation workflow.
+\item Distinguish training, validation, test, and external evidence roles.
+\item Identify leakage, duplicate cases, weak baselines, and repeated test-set tuning.
+\item Use sanity checks and simple baselines as evidence controls rather than decorations.
+\item Write a minimal evaluation plan that protects a model claim on new data.
+\end{learninggoals}
+
 \begin{problemsolvinglens}
 Protect the claim by keeping development, external evidence, and baseline comparison separate. A strong-looking score is not enough if the workflow that produced it made the result too easy to win.
 \end{problemsolvinglens}
@@ -104,6 +112,14 @@ P\!\left(\left|\bar{Z}-\mathbb{E}[\bar{Z}]\right|\ge \varepsilon\right)\le 2e^{-
 The practical point is not that a held-out score becomes infallible, but that an untouched test set gives a statistically interpretable estimate of performance. Repeated reuse of that same test set weakens exactly that interpretation.
 
 If the held-out metric is an average of bounded per-example quantities, such as accuracy indicators or a loss rescaled into $[0,1]$, this inequality explains why larger protected test sets produce more stable evidence and why repeated peeking at the same hold-out set is so damaging.
+
+\begin{mathlens}
+For a rough scale check, plug in \(\varepsilon=0.10\). With \(n=100\) held-out examples, Hoeffding gives
+\[
+P(|\bar Z-\mathbb{E}\bar Z|\ge 0.10)\le 2e^{-2}=0.27.
+\]
+With \(n=1000\), the same deviation bound becomes \(2e^{-20}\), essentially zero for practical purposes. This does not mean the estimate is unbiased under distribution shift, duplicate examples, leakage, or test-set reuse. It only says that, under the stated independence and boundedness assumptions, larger untouched samples make random sampling noise smaller.
+\end{mathlens}
 
 Here \emph{preprocessing} means data transformations such as scaling, normalization, or feature extraction that are learned from the training data and then applied unchanged to validation and test data.
 
@@ -298,7 +314,7 @@ Two sanity checks should become automatic. First, run a \emph{shuffled-label che
 \end{practicalnote}
 
 \begin{warningbox}
-The shuffled-label sanity check works as follows: randomly permute the training labels so they no longer correspond to the inputs, then retrain the model from scratch. If the model still achieves non-trivial performance on the validation set, the pipeline is broken---it is learning from data artifacts (leaky features, duplicate rows, or preprocessing that encodes the target) rather than genuine signal. A properly constructed pipeline should fall back to the weak baseline implied by the metric and class balance, not retain meaningful predictive power.
+The shuffled-label sanity check works as follows: split first; randomly permute only the training labels so they no longer correspond to the training inputs; retrain the model from scratch; evaluate on the unchanged validation set; compare against the metric-specific null baseline; and repeat if variance is high. If the model still achieves non-trivial performance on the validation set, the pipeline is broken---it is learning from data artifacts (leaky features, duplicate rows, or preprocessing that encodes the target) rather than genuine signal. A properly constructed pipeline should fall back to the weak baseline implied by the metric and class balance, not retain meaningful predictive power.
 \end{warningbox}
 
 \section{When Good Numbers Still Support Weak Claims}
@@ -409,17 +425,17 @@ Chapter 3 shifts the focus from judging model behavior to judging the evidence f
 \end{studyquestions}
 
 \begin{exercises}
-\item Design a train-validation-test workflow for a small tabular dataset. State clearly which choices may use the validation set and which choices must not use the test set.
-\item A researcher scales all input features using the mean and variance of the entire dataset before creating train and test splits. Explain why this is leakage.
-\item Give one example of a weak baseline and one example of a serious baseline for the same task. Explain what each one would and would not tell you.
-\item Propose two sanity checks for a model-development workflow in a domain of your choice, and explain what failure on each check would mean.
-\item Use a public task such as sports-shot prediction or news topic classification and state one sensible primary metric, one possible secondary metric, and one failure mode the headline metric cannot rule out.
-\item Write a one-page evaluation plan using Table~\ref{tab:evaluation-plan} for either spam filtering, course support, or another application of your choice. If you are carrying one case through the book, write this for the same case as your framing memo and metric-and-action worksheet so the three documents can be read together.
+\item \exercisetag{Design}{Intermediate}Design a train-validation-test workflow for a small tabular dataset. State clearly which choices may use the validation set and which choices must not use the test set.
+\item \exercisetag{Diagnosis}{Advanced}A researcher scales all input features using the mean and variance of the entire dataset before creating train and test splits. Explain why this is leakage.
+\item \exercisetag{Concept}{Core}Give one example of a weak baseline and one example of a serious baseline for the same task. Explain what each one would and would not tell you.
+\item \exercisetag{Design}{Intermediate}Propose two sanity checks for a model-development workflow in a domain of your choice, and explain what failure on each check would mean.
+\item \exercisetag{Diagnosis}{Intermediate}Use a public task such as sports-shot prediction or news topic classification and state one sensible primary metric, one possible secondary metric, and one failure mode the headline metric cannot rule out.
+\item \exercisetag{Design}{Intermediate}Write a one-page evaluation plan using Table~\ref{tab:evaluation-plan} for either spam filtering, course support, or another application of your choice. If you are carrying one case through the book, write this for the same case as your framing memo and metric-and-action worksheet so the three documents can be read together.
 \end{exercises}
 
 \begin{challengeexercises}
-\item A team tunes ten different model families by checking their performance on the test set and reports the best one. Explain precisely why this invalidates the final claim even if the reported score is numerically correct for that one run.
-\item A pipeline beats a strong baseline by a small margin, but the shuffled-label check still reports high performance. Diagnose what kinds of bug or contamination could create that result.
-\item A course-support team trains on one semester and evaluates on a random split from the same semester. Explain why that may still exaggerate generalization and propose a better split protocol.
-\item Write the strongest honest claim for a model that wins on the main metric, loses on a critical slice, and was compared under unequal tuning effort.
+\item \exercisetag{Diagnosis}{Advanced}A team tunes ten different model families by checking their performance on the test set and reports the best one. Explain precisely why this invalidates the final claim even if the reported score is numerically correct for that one run.
+\item \exercisetag{Diagnosis}{Advanced}A pipeline beats a strong baseline by a small margin, but the shuffled-label check still reports high performance. Diagnose what kinds of bug or contamination could create that result.
+\item \exercisetag{Design}{Advanced}A course-support team trains on one semester and evaluates on a random split from the same semester. Explain why that may still exaggerate generalization and propose a better split protocol.
+\item \exercisetag{Design}{Advanced}Write the strongest honest claim for a model that wins on the main metric, loses on a critical slice, and was compared under unequal tuning effort.
 \end{challengeexercises}

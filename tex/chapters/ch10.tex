@@ -3,6 +3,14 @@
 
 The earlier chapters showed how to frame tasks, choose representations, train models, and judge their outputs. This chapter changes the question. Once a result looks promising, what kind of scientific claim does it actually support? A small gain can be meaningful, accidental, unstable, or irrelevant depending on the protocol behind it. This chapter turns evaluation into scientific judgment: state the claim, protect the premises, test whether the gain is stable, ask what caused it, inspect where it fails, and only then decide what sentence is actually honest. A \emph{claim audit}, meaning the habit of writing that sentence before reading the headline number, is the chapter's organizing discipline. By the end of the chapter, the reader should be able to turn a result table into a bounded empirical claim.
 
+\begin{learninggoals}
+\item Turn a result table into a bounded empirical claim rather than a headline number.
+\item State the claim, baseline, metric, slices, and uncertainty plan before reading the final result.
+\item Use controls, paired comparisons, repeated runs, ablations, and slice analysis to block rival explanations.
+\item Distinguish evidence for performance, evidence for mechanism, and evidence for deployment scope.
+\item Write a claim sheet that records what the result supports and what it still does not support.
+\end{learninggoals}
+
 Suppose an experiment table reports the following:
 
 \begin{table}[t]
@@ -78,6 +86,17 @@ This habit is especially valuable when the expected gain is small. Tiny improvem
 \begin{practicalnote}
 If the claimed win is only a few tenths of a point, write down before the run which metric counts, which slices matter, how many seeds will be used, and what baseline must be beaten. Otherwise the comparison is too easy to rewrite after the numbers arrive.
 \end{practicalnote}
+
+\begin{decisionbox}
+\textbf{Which tool answers which doubt?}
+\begin{itemize}[leftmargin=*]
+\item If the doubt is ``maybe the baseline was too weak,'' add a stronger baseline or control.
+\item If the doubt is ``maybe the gain was lucky,'' use repeated runs, paired differences, or confidence intervals.
+\item If the doubt is ``maybe the wrong component got credit,'' run an ablation.
+\item If the doubt is ``maybe the average hides harm,'' inspect deployment-relevant slices and error clusters.
+\item If the doubt is ``maybe the claim is too broad,'' narrow the supported sentence and name the missing external evidence.
+\end{itemize}
+\end{decisionbox}
 
 \subsection{Worked Claim Audit for the 0.004 Gain}
 
@@ -451,6 +470,24 @@ A serious human evaluation design usually specifies:
 \item whether the rubric separates factual support from stylistic preference.
 \end{itemize}
 
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{2.35cm}p{3.35cm}p{3.35cm}@{}}
+\toprule
+Rubric dimension & Pass condition & Common failure \\
+\midrule
+Faithfulness & Every substantive claim is supported by retrieved evidence & adds an unsupported policy condition \\
+Escalation appropriateness & High-risk or authority-requiring cases are routed to humans & answers a visa, accommodation, or crisis case directly \\
+Completeness & The answer includes the required next step or boundary & omits a deadline, office, or required form \\
+Clarity & A student can act on the response without guessing & fluent but vague wording hides the action \\
+\bottomrule
+\end{tabular}
+\caption{A compact human-evaluation rubric separates evidence support, safety, completeness, and readability instead of collapsing them into one impressionistic preference score.}
+\label{tab:human-eval-rubric}
+\end{table}
+
 This matters because otherwise human review can collapse into impressionistic scoring. A fluent answer may be preferred even when it is less faithful to the retrieved policy. A shorter answer may look safer simply because reviewers do not see the omitted requirement. The same scientific discipline from earlier sections applies here: define the claim, make the rubric legible, and inspect disagreement rather than hiding it.
 
 \section{From Improvement to Mechanism: Ablation}
@@ -622,145 +659,18 @@ A result showing failure under noise, subgroup shift, or strict chronological ev
 
 \section{Prediction Is Not Causation}
 
-A predictive model learns associations between inputs and outputs. This is its strength: it can capture complex patterns in data and make useful forecasts. But this is also a critical boundary: \emph{association is not causation}. Learning that umbrella sales predict rain does not mean selling umbrellas causes rain. Learning that students who visit the tutoring center have lower subsequent grades does not mean the tutoring center causes poor performance. Yet many machine learning systems are deployed as interventions---actions taken on the basis of a model's prediction---and interventions have causal consequences. When a course-support assistant flags a student as at-risk, the university may assign tutoring resources, increase advising touchpoints, or restrict elective choices. If the model learned a correlation that is actually spurious or confounded, the intervention can backfire catastrophically.
-
-This section explores the distinction between prediction and causation, shows why it matters for deployment, and outlines conditions under which a predictive model can responsibly guide action.
-
-\subsection{The Prediction-Causation Boundary}
+A predictive model learns associations between inputs and outputs. That is often enough for forecasting or ranking, but it is not enough to justify an intervention. Learning that umbrella sales predict rain does not mean selling umbrellas causes rain. Learning that students who visit the tutoring center later earn lower grades does not mean tutoring causes poor performance. The chapter's workflow therefore needs one last warning before deployment: a predictive win does not automatically license a causal story.
 
 \begin{thinkingtool}
 \textbf{Association versus causation.} A model that predicts $Y$ from $X$ has learned $P(Y \mid X)$, the conditional distribution of outcomes given inputs. This does not tell us what happens if we \emph{intervene} to change $X$. The causal question is: does changing $X$ cause $Y$ to change?
 \end{thinkingtool}
 
-Consider three scenarios:
-\begin{itemize}[leftmargin=*]
-\item \textbf{Causal:} A tutoring intervention improves a student's grade. The system should recommend or provide tutoring.
-\item \textbf{Reverse causal:} A student who is struggling seeks tutoring. The tutoring-seeking behavior predicts poor grades, but the tutoring is not the cause; struggle is. A system that uses tutoring-center visits as a feature may flag at-risk students accurately, but an intervention that \emph{prevents} center visits would be absurd.
-\item \textbf{Confounded:} Both tutoring-center visits and poor grades are caused by low self-efficacy or prior knowledge gaps. The system learns that visits predict grades, but the true cause is the latent factor. Removing the correlate (visits) does not address the root (gaps).
-\end{itemize}
+The course-support assistant makes the danger concrete. Suppose the model learns that students with fewer early help-desk visits tend to score lower on the midterm. Using that signal to \emph{identify} at-risk students may be useful. Using it to conclude that mandatory tutoring is the right intervention is a stronger claim: low help-seeking may be a cause, or it may be a symptom of disengagement, schedule constraints, or prerequisite gaps. The prediction alone does not decide among those stories.
 
-\begin{example}[Umbrella Sales and Rain]
-Umbrella sales spike before rainfall. A predictive model trained on weather patterns learns this association and may predict rain from sales with decent accuracy. However, the causal relationship runs the opposite direction: rain causes sales, not vice versa. If a policy maker tried to induce rainfall by \emph{increasing} umbrella production, the strategy would fail. The model's association captures the real world, but its causal direction does not.
-\end{example}
-
-The risk is steepest when the modeler does not notice the causal assumption embedded in the deployment decision. A system might predict well and still support a harmful action if the causal model is wrong.
-
-\subsection{Confounders and Simpson's Paradox}
-
-A \emph{confounder} is a third variable that influences both the feature and the outcome, creating a spurious association. Classic examples include:
-\begin{itemize}[leftmargin=*]
-\item A hospital that treats sicker patients appears to have worse survival outcomes. The confounder is \emph{illness severity}: sicker patients both receive more intensive treatment and have lower survival rates. A naive model trained on treatment type and outcome would learn that intensive treatment predicts poor outcomes, even if the treatment is actually beneficial.
-\item A study finds that people who take vitamin supplements have worse health outcomes. The confounder is \emph{preexisting health status}: people with preexisting illness are more likely to take supplements and also more likely to have poor outcomes. The supplements did not cause the poor outcomes; the underlying condition did.
-\item In student support, a model might find that students who attend help sessions have lower subsequent exam scores. The confounder is \emph{academic struggle}: students who struggle seek help and also score lower on exams. The help sessions themselves might be beneficial, but the model learned a spurious association.
-\end{itemize}
-
-\begin{definition}[Confounder]
-A variable $C$ is a confounder for a feature $X$ and outcome $Y$ if $C$ causally influences both $X$ and $Y$, creating an association between $X$ and $Y$ that does not reflect a direct causal effect of $X$ on $Y$.
-\end{definition}
-
-One famous consequence of confounding is \emph{Simpson's paradox}: a trend that holds in aggregate data reverses when the data is separated by a lurking variable. The paradox is not a logical contradiction; it reveals that the aggregate trend was confounded all along.
-
-\begin{example}[Simpson's Paradox in Admissions]
-Suppose a university has two departments, STEM and Humanities, and is evaluating whether gender bias affects admission rates. The data at first glance suggest:
-\begin{center}
-\begin{tabular}{lcc}
-\toprule
-Gender & Admission Rate & Sample Size \\
-\midrule
-Male & $45\%$ & $200$ \\
-Female & $40\%$ & $100$ \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-It appears males are admitted at a higher rate overall. But stratifying by department reveals:
-\begin{center}
-\begin{tabular}{llcc}
-\toprule
-Department & Gender & Admission Rate & Sample Size \\
-\midrule
-STEM & Male & $30\%$ & $80$ \\
-STEM & Female & $35\%$ & $80$ \\
-Humanities & Male & $55\%$ & $120$ \\
-Humanities & Female & $60\%$ & $20$ \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-Within \emph{each} department, females are admitted at higher rates. Yet the aggregate rate favors males. The confounder is \emph{application volume}: more females apply to STEM, the more selective department, while more males apply to Humanities, the less selective one. The aggregate trend is a statistical artifact of the distribution of applicants across departments, not direct evidence of gender-based bias in admission decisions.
-\end{example}
-
-Simpson's paradox is not merely an academic curiosity. It shows that predictive associations learned from aggregate data can misguide deployment decisions. A model trained on the aggregate data would learn that gender predicts admission, but the causally relevant story is departmental selectivity and application distribution, not discrimination.
-
-\subsection{When Can a Predictive Model Inform an Intervention?}
-
-Not all deployments of predictive models rest on causal claims. A system that recommends a movie based on viewing history does not require a causal explanation for why you liked previous films; association is enough. But many real-world deployments are interventions: the system's prediction triggers an action that changes someone's experience or outcome.
+By contrast, the pedestrian detector is less causally ambiguous. The system predicts whether a pedestrian is present, and the downstream action is to brake. The main scientific question is reliability under the chapter's evaluation protocol: false negatives, false positives, latency, and slice performance. The system still needs careful testing, but it does not require the same causal leap from correlation to intervention design.
 
 \begin{practicalnote}
-If your deployment decision is an \emph{intervention}---if acting on the model's prediction changes a person's treatment, conditions, or outcome process---then you must be explicit about the causal assumptions. Write them down in the claim sheet before deployment.
-\end{practicalnote}
-
-For an intervention to rest safely on a predictive model, three conditions should hold:
-
-\begin{itemize}[leftmargin=*]
-\item \textbf{Causal direction:} The features being acted on are causally upstream of the outcome. If the intervention is to increase tutoring visits, the model must have learned that visiting the tutoring center itself improves grades, not merely that visit-seeking predicts grades. If the true causal path is ``struggle $\to$ visit-seeking and poor grades,'' then removing visits does not address struggle.
-\item \textbf{Intervention invariance:} The relationship the model learned must hold under the new conditions created by the intervention. A model trained on ``students who stay enrolled improve'' might not transfer to an intervention that forcibly keeps struggling students enrolled; the counterfactual regime is different. The converse is also true: a model trained on data from a population where a tutoring center is scarce may not transfer to an intervention that floods the center with referrals.
-\item \textbf{Domain shift:} The training data must be representative of the post-intervention world, or at least the divergence must be quantified and understood. If the model was trained on historical applications from one demographic but deployed to a broader population, the learned association may not hold under the new distribution.
-\end{itemize}
-
-\begin{example}[When Model Predictions Should Not Guide Intervention]
-A system learns that high school students who take Advanced Placement exams have higher college graduation rates. An administrator, seeing this correlation, proposes an intervention: \emph{require all high school students to take AP exams}. The intervention violates causal direction. The model did not learn that taking AP exams \emph{causes} graduation; it learned that motivated, prepared students both take AP exams \emph{and} graduate. Forcing unprepared students to attempt AP exams would likely harm rather than help them. The association is real, but the causal interpretation is backwards.
-\end{example}
-
-Conversely, an intervention that respects causal direction is more likely to succeed:
-
-\begin{example}[When Model Predictions Can Guide Intervention]
-A model trained on randomized tutoring sessions learns that students assigned to tutoring improve their grades on average. Here, the causal direction is clear: the intervention (tutoring assignment) is the cause, and the outcome (grade improvement) is the result. A deployed system can therefore use this evidence to justify tutoring as an intervention for similar students in the same operational setting. More ambitious claims about which students would benefit \emph{most} would require additional evidence about heterogeneous treatment effects.
-\end{example}
-
-\subsection{Observational Data, Experiments, and Causal Inference}
-
-The gold standard for establishing causation is a randomized experiment: randomly assign some units to treatment and others to control, keep everything else constant, and measure the difference in outcomes. Random assignment aims to balance confounders, measured and unmeasured, across groups in expectation. In any finite experiment some imbalance can remain by chance, but randomization makes that imbalance analyzable rather than systematically tied to treatment choice.
-
-Observational data---data where the experimenter did not control assignment---cannot establish causation with certainty. But it is not useless. When an experiment is infeasible due to ethics, cost, or time, causal inference methods can offer partial remedies by making and testing strong assumptions about confounders.
-
-\begin{itemize}[leftmargin=*]
-\item \textbf{Instrumental variables:} If a variable $Z$ influences $X$ but does not directly influence $Y$ except through $X$, then $Z$ can help isolate the causal effect of $X$ on $Y$. Example: random assignment to a tutoring voucher changes who actually attends tutoring, but the voucher itself should affect exam performance only through tutoring uptake. The voucher can therefore serve as an instrument for tutoring attendance when compliance is imperfect.
-\item \textbf{Difference-in-differences:} If two populations follow parallel trends before an intervention, then the post-intervention divergence can be attributed to the intervention itself. This requires the strong assumption that trends would have remained parallel in the counterfactual world without intervention.
-\item \textbf{Regression discontinuity:} If assignment to treatment is determined sharply by crossing a threshold (e.g., students scoring exactly at the cutoff for financial aid eligibility), then comparing outcomes just above and just below the threshold can estimate the causal effect. The assumption is that other factors do not change discontinuously at the same threshold.
-\end{itemize}
-
-All of these methods require strong assumptions. Instrumental variables assume the exclusion restriction (that the instrument does not directly affect the outcome). Difference-in-differences assumes parallel counterfactual trends. Regression discontinuity assumes no other threshold effects at the same point.
-
-\begin{advancednote}
-Causal inference from observational data is an active research area with methods like causal forests, doubly robust estimation, and targeted learning. These methods combine modeling flexibility with semiparametric theory to reduce bias under weaker assumptions than classical approaches. However, all observational methods remain sensitive to unmeasured confounding. A method that reduces bias for measured confounders is still vulnerable to variables you did not observe.
-\end{advancednote}
-
-The practical upshot for practitioners is clear:
-
-\begin{warningbox}
-If your deployment decision is an intervention, and you cannot run an experiment, then state the causal assumptions explicitly in the claim sheet. Do not pretend observational evidence provides causal certainty. Instead, describe the confounder you are assuming away and consider whether that assumption is reasonable given the domain. If the assumption seems fragile, either redesign the intervention to rest on prediction alone, or conduct a small pilot experiment to test the causal hypothesis.
-\end{warningbox}
-
-\subsection{Causal and Predictive Reasoning in the Running Cases}
-
-The course-support assistant case illustrates the distinction vividly. Suppose the model uses ``number of help-desk visits in the first two weeks'' as a feature, and it learns that students with fewer visits score lower on midterms. An administrator might propose an intervention: place students with few visits into a mandatory tutoring program. But the causally relevant question is: does additional help-seeking improve performance, or do fewer visits proxy disengagement, schedule constraints, lack of access, or other barriers? If the latter, then the feature is a symptom, not a cause, and the intervention may not help---or may even harm, if mandatory tutoring takes time away from independent study that weaker students need.
-
-A safer interpretation is that help-seeking behavior is a proxy for struggle, and struggle is the true cause of lower scores. The intervention should target struggle directly: improved teaching, better prerequisite support, adaptive problem sets. Using the model to \emph{identify} at-risk students is reasonable. Using it to determine the \emph{nature} of the intervention requires causal evidence.
-
-\begin{example}[Course-Support Causal Reasoning]
-The model flags a student as at-risk because they have not visited the help desk. Two causal hypotheses:
-\begin{enumerate}[leftmargin=*]
-\item \textbf{Help-desk visits cause grade improvement.} Intervene by providing more tutoring, more accessible office hours, or more intensive one-on-one support.
-\item \textbf{Low visits are a symptom of disengagement, access barriers, or prerequisite gaps.} Tutoring may help some students, but it may not address the root cause. Intervene by improving the curriculum, providing early warning feedback, adjusting prerequisites, or making support easier to access.
-\end{enumerate}
-The model \emph{predicts} lower grades from fewer visits, but it does not disambiguate the causal hypotheses. A disciplined claim sheet would state which hypothesis the system relies on and note the evidence supporting it. If the evidence is observational only, the claim should be cautious.
-\end{example}
-
-The pedestrian detection case is less causally loaded. The model predicts whether a pedestrian is in the image, and the downstream action is to brake if a pedestrian is detected. The causal chain is clear: a pedestrian exists in the world, the system detects them (imperfectly), and the vehicle brakes if detection is confident. The causal assumption---that a detected pedestrian is actually present---is modest. What matters for safety is the model's \emph{reliability}: false negatives (missed pedestrians) are costly, and false positives (phantom detections) cause wasted braking or annoyance. These are deployment-quality questions, not causal-inference questions. The prediction is faithful to the causal reality in a way that socioeconomic or medical predictions often are not, because the system is detecting a physical object rather than inferring a latent human trait or social outcome.
-
-\begin{practicalnote}
-Prediction is not causation, but some predictions are closer to causal truth than others. Detecting a pedestrian is closer to causal truth than inferring individual potential from test scores. When designing an intervention, ask: how much of the model's learned association captures a true causal mechanism, and how much is spurious correlation or confounding? The answer should be in the claim sheet.
+If a deployment action changes treatment, resources, or opportunity, write the causal assumption explicitly in the claim sheet. If that assumption is supported only by observational correlation, keep the claim narrow or run a pilot experiment before treating the model as a policy guide.
 \end{practicalnote}
 
 By the end of this chapter, the reader should be able to write down not only what result they obtained, but what scientific sentence it actually supports. Earlier artifacts in the book named the decision, the metric, the evaluation boundary, the baseline family, the structure diagnosis, the training claim, the reuse plan, the modality-specific deployment constraints, and the sequential prediction-time contract. This chapter's sheet adds the scientific-argument layer: which premise is fixed, which rival explanation is blocked, and what scope remains.
@@ -793,6 +703,10 @@ Stronger claim still unsupported & What the result does \emph{not} justify yet \
 \begin{thinkingtool}
 \textbf{Experiment claim sheet.} Before reporting a result, write the claim, the control, the protocol premises, the uncertainty summary, the key ablations, the critical slices, and the strongest supported conclusion.
 \end{thinkingtool}
+
+\begin{practicalnote}
+Treat the claim sheet as a table that is filled throughout the chapter, not as prose written at the end. The baseline and metric are filled before the run, the repeated-run summary after stability checks, the mechanism row after ablation, the slice row after error analysis, and the strongest supported claim only after those rows stop changing.
+\end{practicalnote}
 
 \begin{example}[Filled Experiment Claim Sheet]
 For the $0.004$ gain in Table~\ref{tab:score-improved-so-what}, a disciplined sheet might read as follows: claim in one sentence is ``the contextual-retrieval support assistant improves held-out answer accuracy over the lexical-template baseline on this question set''; strongest baseline is the grounded lexical-template system rather than an ungrounded chatbot; protocol assumptions are identical question splits, frozen policy-document snapshot, fixed grading rubric, and no test-set reuse; sources of randomness include initialization, retrieval tie breaking, and generation stochasticity; repeated-run summary now shows a modest mean gain across five seeds, so the pilot no longer rests on one lucky run; essential ablations are still missing for that pilot comparison, so the mechanism behind the gain remains unresolved; critical slices include multilingual questions, distressed messages, and high-risk advising requests where aggregate accuracy may hide failure; remaining alternative explanations include weak controls, better retrieval rather than better generation, and unsafe slice tradeoffs; strongest supported claim right now is that under this protocol the contextual-retrieval system achieved a modest accuracy gain on this benchmark; stronger unsupported claim is that the new system is generally better for course support or safer for deployment.
@@ -834,20 +748,20 @@ An experimental result means only what its claim, controls, and uncertainty allo
 \end{studyquestions}
 
 \begin{exercises}
-\item Write a one-sentence claim for a model comparison on one dataset, then rewrite it into a weaker but clearly justified version. (\emph{Example}: ``Our model achieves state-of-the-art accuracy'' might become ``On the held-out test split, the model's accuracy exceeds the lexical baseline by 3.2 percentage points, with a 95\% confidence interval of [1.8, 4.6].'')
-\item Suppose a model obtains validation accuracies $0.81$, $0.84$, $0.79$, and $0.82$ across four seeds. Compute the sample mean.
-\item Give one example of a strong baseline for a classification task and one for a forecasting task. Explain why each is meaningful.
-\item Construct a simple two-slice evaluation example where the overall metric looks strong but one slice is clearly unacceptable.
-\item Describe an ablation plan for a system with pretraining, augmentation, and a postprocessing rule.
-\item State one broader claim that would remain unsupported even if a method beat a baseline on one benchmark.
-\item For a retrieval-augmented support assistant, name one slice where generation quality matters most and one slice where escalation quality matters most. Explain why the evidence should differ.
-\item A pedestrian detector improves on familiar daytime footage but degrades on night-rain or unseen-camera slices. State the strongest honest claim and one deployment recommendation that follows.
-\item Use Table~\ref{tab:experiment-claim-sheet} to sketch an experiment claim sheet for a system of your choice. If you are carrying one case through the book, state which earlier artifact supplies the baseline, the critical slices, and the strongest remaining deployment limitation.
+\item \exercisetag{Design}{Intermediate}Write a one-sentence claim for a model comparison on one dataset, then rewrite it into a weaker but clearly justified version. (\emph{Example}: ``Our model achieves state-of-the-art accuracy'' might become ``On the held-out test split, the model's accuracy exceeds the lexical baseline by 3.2 percentage points, with a 95\% confidence interval of [1.8, 4.6].'')
+\item \exercisetag{Calculation}{Core}Suppose a model obtains validation accuracies $0.81$, $0.84$, $0.79$, and $0.82$ across four seeds. Compute the sample mean.
+\item \exercisetag{Concept}{Core}Give one example of a strong baseline for a classification task and one for a forecasting task. Explain why each is meaningful.
+\item \exercisetag{Design}{Intermediate}Construct a simple two-slice evaluation example where the overall metric looks strong but one slice is clearly unacceptable.
+\item \exercisetag{Design}{Intermediate}Describe an ablation plan for a system with pretraining, augmentation, and a postprocessing rule.
+\item \exercisetag{Concept}{Intermediate}State one broader claim that would remain unsupported even if a method beat a baseline on one benchmark.
+\item \exercisetag{Concept}{Intermediate}For a retrieval-augmented support assistant, name one slice where generation quality matters most and one slice where escalation quality matters most. Explain why the evidence should differ.
+\item \exercisetag{Diagnosis}{Advanced}A pedestrian detector improves on familiar daytime footage but degrades on night-rain or unseen-camera slices. State the strongest honest claim and one deployment recommendation that follows.
+\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:experiment-claim-sheet} to sketch an experiment claim sheet for a system of your choice. If you are carrying one case through the book, state which earlier artifact supplies the baseline, the critical slices, and the strongest remaining deployment limitation.
 \end{exercises}
 
 \begin{challengeexercises}
-\item A research team reports that a new model is better because its best run beats the baseline by $0.4$ points. Give three reasons why this claim may still be weak, and state what additional evidence would strengthen it.
-\item A model improves overall performance but worsens a critical subgroup. Explain how you would report this result scientifically and what deployment recommendation might follow.
-\item Take the experiment claim sheet you wrote in the standard exercises and identify the field that was hardest to fill honestly. Explain what additional evidence would be needed to defend it.
-\item A result survives strong baselines and repeated runs but has no ablation and no slice analysis. Explain exactly what claim remains possible and what claim is still too strong.
+\item \exercisetag{Diagnosis}{Advanced}A research team reports that a new model is better because its best run beats the baseline by $0.4$ points. Give three reasons why this claim may still be weak, and state what additional evidence would strengthen it.
+\item \exercisetag{Diagnosis}{Advanced}A model improves overall performance but worsens a critical subgroup. Explain how you would report this result scientifically and what deployment recommendation might follow.
+\item \exercisetag{Concept}{Advanced}Take the experiment claim sheet you wrote in the standard exercises and identify the field that was hardest to fill honestly. Explain what additional evidence would be needed to defend it.
+\item \exercisetag{Concept}{Advanced}A result survives strong baselines and repeated runs but has no ablation and no slice analysis. Explain exactly what claim remains possible and what claim is still too strong.
 \end{challengeexercises}

@@ -5,6 +5,14 @@ Chapter 1 defined the problem. Chapter 2 asks what it would mean for a predictio
 
 This chapter separates those pieces carefully. It distinguishes the number optimized during learning from the number reported after training, then shows how thresholds, rankings, and abstention rules turn scores into actions. It closes by asking whether those scores can be trusted as probabilities. By the end of the chapter, the reader should be able to write a short metric-and-action plan that matches the real decision rather than merely reporting a convenient score.
 
+\begin{learninggoals}
+\item Separate training losses from the metrics used to justify a model.
+\item Choose metrics that match the decision, action capacity, and cost of mistakes.
+\item Explain how thresholds, top-$k$ rules, ranking metrics, and abstention turn scores into actions.
+\item Recognize when calibration matters because a score is being treated as confidence.
+\item Write a metric-and-action worksheet for a framed learning problem.
+\end{learninggoals}
+
 \begin{problemsolvinglens}
 This chapter turns framed tasks into judged behavior. The core move is to separate the penalty minimized during training, the behavior reported after training, the rule that turns scores into actions, and the confidence interpretation that makes that rule defensible.
 \end{problemsolvinglens}
@@ -766,6 +774,14 @@ Accuracy tells us whether labels were often right. Calibration tells us whether 
 
 This is not just a theoretical concern. Modern neural networks can achieve strong classification accuracy while still being systematically overconfident \citep{guo2017}. A model that looks accurate at one threshold may still be unsafe to use as a probability estimator for intervention, triage, or automated action.
 
+\begin{example}[One Calibration Bin By Hand]
+Suppose five cases all receive predicted probabilities between \(0.70\) and \(0.80\):
+\[
+0.71,\ 0.74,\ 0.75,\ 0.78,\ 0.79
+\]
+and their observed labels are \(1,1,0,1,0\). The mean predicted probability in the bin is \(0.754\), while the observed frequency is \(3/5=0.60\). In this bin the model is overconfident: it acts like roughly \(75\%\) of such cases should be positive, but only \(60\%\) were. A reliability diagram repeats this calculation across bins.
+\end{example}
+
 \begin{figure}[t]
 \centering
 \definecolor{c2overBg}{RGB}{254,237,215}
@@ -1037,6 +1053,10 @@ Abstention or review rule & Which cases should be deferred rather than forced in
 \textbf{Metric and action worksheet.} Before reporting a model output, write down the decision context, primary metric, supporting metrics, threshold or ranking policy, selection protocol, calibration need, and abstention rule. If the action rule or the held-out selection rule is still fuzzy, the score is not yet ready to defend.
 \end{thinkingtool}
 
+\begin{practicalnote}
+Use the worksheet progressively. After the metric section, fill the primary and supporting metrics. After threshold and ranking sections, fill the action policy. After calibration, fill the confidence requirement. The final table should not be the first time the reader thinks about these fields.
+\end{practicalnote}
+
 \section{Looking Ahead}
 
 This chapter made predictive judgment explicit: metrics, losses, thresholds, rankings, calibration, and abstention. Once the metric, action rule, and confidence interpretation are in place, the remaining question is whether the evidence for those choices can survive protected evaluation on new data.
@@ -1056,22 +1076,22 @@ Chapter 2 defines what good predictive behavior means once a task has been frame
 \end{studyquestions}
 
 \begin{exercises}
-\item For the course-support example, explain why a model with lower training loss could still be less useful than a model with better top-five ranking quality.
-\item Draw a tiny four-example binary classification problem in which two models have the same accuracy but different log loss. Explain what the probability assignments say about the models.
-\item Give a real-world example where mean absolute error would be more appropriate than mean squared error, and justify your answer.
-\item Using the theorem on best constant predictors, explain why squared error prefers the mean while absolute error prefers a median. Then give one example where that difference would matter in practice.
-\item Using Table~\ref{tab:threshold-example}, compute the confusion matrix at threshold $0.3$ and verify the precision, recall, and F1 values by hand.
-\item Reproduce the threshold sweep from the chapter in plain Python without external libraries. For each threshold, print the confusion counts, accuracy, precision, recall, and F1 score.
-\item A ranked list of six candidate passages has relevance labels $[0,1,1,0,1,0]$ from rank $1$ to rank $6$, and there are four relevant passages in the collection overall. Compute precision@3, recall@3, and reciprocal rank.
-\item Explain why the weather-forecasting example is a calibration question rather than a threshold question.
-\item A team compares three regularization strengths and two thresholds for the same classifier. Describe a protected workflow for choosing among the six settings, and explain where cross-validation could help if the dataset is small.
-\item Use Table~\ref{tab:metric-action-worksheet} to sketch a one-page metric-and-action worksheet for either spam filtering, course support, or another application of your choice. If you are carrying forward a framing memo from Chapter 1, use the same case and state which parts of the original memo stay fixed while the decision rule becomes more explicit.
+\item \exercisetag{Concept}{Core}For the course-support example, explain why a model with lower training loss could still be less useful than a model with better top-five ranking quality.
+\item \exercisetag{Concept}{Core}Draw a tiny four-example binary classification problem in which two models have the same accuracy but different log loss. Explain what the probability assignments say about the models.
+\item \exercisetag{Concept}{Core}Give a real-world example where mean absolute error would be more appropriate than mean squared error, and justify your answer.
+\item \exercisetag{Proof}{Advanced}Using the theorem on best constant predictors, explain why squared error prefers the mean while absolute error prefers a median. Then give one example where that difference would matter in practice.
+\item \exercisetag{Calculation}{Intermediate}Using Table~\ref{tab:threshold-example}, compute the confusion matrix at threshold $0.3$ and verify the precision, recall, and F1 values by hand.
+\item \exercisetag{Implementation}{Intermediate}Reproduce the threshold sweep from the chapter in plain Python without external libraries. For each threshold, print the confusion counts, accuracy, precision, recall, and F1 score.
+\item \exercisetag{Calculation}{Intermediate}A ranked list of six candidate passages has relevance labels $[0,1,1,0,1,0]$ from rank $1$ to rank $6$, and there are four relevant passages in the collection overall. Compute precision@3, recall@3, and reciprocal rank.
+\item \exercisetag{Diagnosis}{Intermediate}Explain why the weather-forecasting example is a calibration question rather than a threshold question.
+\item \exercisetag{Concept}{Intermediate}A team compares three regularization strengths and two thresholds for the same classifier. Describe a protected workflow for choosing among the six settings, and explain where cross-validation could help if the dataset is small.
+\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:metric-action-worksheet} to sketch a one-page metric-and-action worksheet for either spam filtering, course support, or another application of your choice. If you are carrying forward a framing memo from Chapter 1, use the same case and state which parts of the original memo stay fixed while the decision rule becomes more explicit.
 \end{exercises}
 
 \begin{challengeexercises}
-\item Construct a tiny binary classification example with six data points for which two different thresholds produce the same accuracy but very different precision and recall. Show the confusion matrix for both thresholds.
-\item Suppose a hospital has resources to review only the highest-risk 10\% of cases each day. Explain why ranking quality and calibration may matter more than raw accuracy in that setting.
-\item Extend the course-support example in Table~\ref{tab:student-threshold-example}. Propose a rule for handling the six students above threshold $0.5$ when staff can contact only five of them, and justify the rule using the chapter's evaluation vocabulary.
-\item A model is well ranked overall but slightly miscalibrated near the review boundary. Explain when that is an acceptable limitation and when it becomes a deployment problem.
-\item A team tunes thresholds by checking the test set after each change and keeps the best final operating point. Explain precisely why the final precision and recall are no longer external evidence, even if the confusion counts were computed honestly.
+\item \exercisetag{Calculation}{Advanced}Construct a tiny binary classification example with six data points for which two different thresholds produce the same accuracy but very different precision and recall. Show the confusion matrix for both thresholds.
+\item \exercisetag{Concept}{Advanced}Suppose a hospital has resources to review only the highest-risk 10\% of cases each day. Explain why ranking quality and calibration may matter more than raw accuracy in that setting.
+\item \exercisetag{Design}{Advanced}Extend the course-support example in Table~\ref{tab:student-threshold-example}. Propose a rule for handling the six students above threshold $0.5$ when staff can contact only five of them, and justify the rule using the chapter's evaluation vocabulary.
+\item \exercisetag{Concept}{Advanced}A model is well ranked overall but slightly miscalibrated near the review boundary. Explain when that is an acceptable limitation and when it becomes a deployment problem.
+\item \exercisetag{Concept}{Advanced}A team tunes thresholds by checking the test set after each change and keeps the best final operating point. Explain precisely why the final precision and recall are no longer external evidence, even if the confusion counts were computed honestly.
 \end{challengeexercises}

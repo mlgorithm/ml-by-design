@@ -1,9 +1,17 @@
 \chapter{Structure Beyond Linearity}
 \label{ch:structure-beyond-linearity}
 
-A failed linear baseline does not merely say that the task is harder than expected. More often, it says something specific about the kind of structure that is missing. Sometimes the missing structure is conditional and region-specific; sometimes the current feature space needs a margin-based separator; sometimes simple class-conditional assumptions give a transparent probabilistic baseline; sometimes the relevant structure is local and geometric; and sometimes the real task is not supervised prediction at all but exploratory organization. This chapter is about reading that failure correctly so that the next model family is chosen for a structural reason rather than out of habit.
+A failed linear baseline does not merely say that the task is harder than expected. More often, it says something specific about the kind of structure that is missing. On a first pass, three possibilities matter most. Sometimes the missing structure is conditional and region-specific. Sometimes the current representation should be used differently, because geometry or another simple supervised assumption matters more than one weighted sum captured. And sometimes the real task is not supervised prediction at all but exploratory organization. This chapter is about reading that failure correctly so that the next model family is chosen for a structural reason rather than out of habit.
 
-The central task is diagnostic. Trees, ensembles, support vector machines, nearest neighbors, clustering, and dimensionality reduction are presented here not as a bag of methods, but as different responses to different structural deficits. By the end, the reader should be able to name what the linear model missed and justify the next family for that reason.
+The central task is diagnostic. The chapter opens with a deliberately small selection schema: branching structure, geometry within the current representation, or unlabeled organization. Trees, nearest neighbors, clustering, and dimensionality reduction supply that first map. Support vector machines and Naive Bayes then appear as narrower later refinements rather than as equal-weight answers from the first page. By the end, the reader should be able to name what the linear model missed and justify the next family for that reason.
+
+\begin{learninggoals}
+\item Diagnose what kind of structure a failed linear baseline is missing.
+\item Start from a small structural map: branching logic, supervised geometry in the current representation, or unlabeled organization.
+\item Explain why trees, nearest neighbors, clustering, and dimensionality reduction are the first stable answers in that map, and where SVMs and Naive Bayes enter as later refinements.
+\item Compare model families by the structure they add rather than by generic strength.
+\item Write a structural diagnostic that justifies the next modeling move.
+\end{learninggoals}
 
 \section{Opening Question: What Kind of Structure Is Missing?}
 
@@ -11,50 +19,48 @@ Return to that same early student-support setting. Suppose a university wants to
 
 That rule is not just ``nonlinear.'' It is region-specific. Different logic applies in different parts of the feature space. That is one possible answer to a failed baseline.
 
-But it is not the only answer. Sometimes the right story is that the representation already gives a plausible geometry and the task needs a wide-margin separator. Sometimes simple class-conditional assumptions give a useful probabilistic baseline. Sometimes similar examples should borrow judgment from one another. Sometimes labels are absent and the job is exploratory organization rather than supervised prediction.
+But it is not the only answer. Sometimes the right story is not branching at all, but that the current feature space should be used differently: perhaps similar examples should borrow judgment from one another, or perhaps later we will want a stricter margin-based or probabilistic supervised baseline. And sometimes labels are absent and the job is exploratory organization rather than supervised prediction.
 
 The opening question of the chapter should therefore be stated brutally clearly:
 
 \begin{center}
-\emph{When the linear baseline fails, is the missing structure mainly conditional thresholds and interactions, margin structure, class-conditional probabilistic structure, local similarity, or unlabeled organization?}
+\emph{When the linear baseline fails, is the missing structure mainly branching logic, supervised geometry in the current representation, or unlabeled organization?}
 \end{center}
 
-Everything that follows should be read as one answer to that question.
+Everything that follows should be read as a refinement of that smaller question. The chapter will later split the supervised-geometry branch into more specialized options, but the opening map should stay compact.
 
-\section{A Structural Map Before the Methods}
+\section{A Small Structural Map Before the Methods}
 
 Before naming model families, it helps to name the diagnostic.
 
 The representation card from Bridge~I recorded what counts as an example and what its coordinates mean. The structural diagnostic asks what that representation \emph{missed}---and which model family can recover the missing structure.
 
-Before changing model families, state what structural mismatch the baseline has revealed. If the task sounds like branching logic, think trees. If the representation already looks separable and you want a robust boundary, think SVM. If the task has many sparse features and a transparent class-conditional baseline is useful, think Naive Bayes. If prediction should come from nearby similar cases, think neighbors. If labels are absent and you are looking for organization or compression, think clustering or dimensionality reduction.
+Before changing model families, state what structural mismatch the baseline has revealed. On a first pass, do not sort among six method names. Sort among three structural stories. If the task sounds like branching logic, think trees. If prediction should come from the geometry of nearby cases or some other supervised assumption inside the current representation, begin with the geometry branch and refine later. If labels are absent and you are looking for organization or compression, think clustering or dimensionality reduction.
 
 \begin{table}[t]
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.67cm}L{3.32cm}L{3.96cm}}
+\begin{tabular}{L{2.9cm}L{2.9cm}L{4.15cm}}
 \toprule
-Structural mismatch & Natural next family & What the family contributes \\
+First-pass structural mismatch & Stable first answer & What to learn first \\
 \midrule
 Conditional thresholds and interactions & Trees and tree ensembles & Different rules in different regions of feature space \\
-Margin structure in a defended feature space & Support vector machines & Prefer wide-margin separators when the representation is already plausible \\
-Class-conditional signal with many features & Naive Bayes & Use simple likelihood assumptions as a transparent probabilistic baseline \\
-Local similarity & Nearest neighbors and related geometry-based methods & Borrow prediction from nearby examples under a chosen similarity notion \\
+Supervised prediction, but the current representation should be used through geometry or another simple assumption & Nearest neighbors first; SVM and Naive Bayes later as refinements & Learn to ask whether the current coordinates already support a justified supervised rule \\
 Unlabeled organization & Clustering and dimensionality reduction & Summarize groupings, directions of variation, or lower-dimensional views without labels \\
 \bottomrule
 \end{tabular}
-\caption{This chapter is one diagnostic with five answers. The point is not to memorize method names, but to connect model families to structural mismatch.}
+\caption{The opening map is intentionally small. The point is to stabilize the diagnosis before splitting one branch into narrower later method choices.}
 \label{tab:structure-map}
 \end{table}
 
-Keep one tiny student-profile cloud in mind throughout the chapter. Students A and B have around 50{,}000 clicks and at most one late submission and look safe; students C and D have around 20{,}000 clicks and four or five late submissions and look risky. Trees read that cloud as threshold logic, SVMs read it as a margin problem when the feature geometry is plausible, Naive Bayes reads it through class-conditional feature likelihoods, k-NN reads it as distance, k-means reads it as grouping, and PCA reads it as a dominant direction of variation. The better question is therefore not ``Which stronger model should we try next?'' but ``What specific structure did the baseline miss?''
+Keep one tiny student-profile cloud in mind throughout the chapter. Students A and B have around 50{,}000 clicks and at most one late submission and look safe; students C and D have around 20{,}000 clicks and four or five late submissions and look risky. On the first pass, that cloud should be read only three ways: as threshold logic for trees, as geometry for supervised methods that trust the current representation, or as grouping and variation for unsupervised methods. Later sections will show how SVMs and Naive Bayes sharpen the supervised branch in different ways. The better question is therefore not ``Which stronger model should we try next?'' but ``What specific structure did the baseline miss?''
 
 The chapter should therefore be read left to right as a diagnostic tree: first identify the missing structure, then choose the family that naturally expresses it.
 
 \section{Method Selection by Missing Structure}
 
-Moving beyond the linear baseline is not a choice to make at random. It is a diagnostic response to a specific structural deficit. When a linear model falls short, it usually does so in several identifiable ways, and each way points toward a different family of methods.
+Moving beyond the linear baseline is not a choice to make at random. It is a diagnostic response to a specific structural deficit. The first decision should stay coarse: branching logic, supervised structure in the current representation, or unlabeled organization. Only after that coarse diagnosis is stable should the reader split the supervised branch into narrower options.
 
 \paragraph{Conditional thresholds and interactions.} If the decision rule sounds like branching logic---``if this condition holds \emph{and} that other condition holds, then the outcome changes''---then a linear model will fail because it cannot express regions. Trees are the natural response. They partition the input space recursively, and each leaf can express a different rule. This is the right structure for problems like loan approval, customer segmentation, or academic risk scoring, where the relevant factors interact nonlinearly across subgroups.
 
@@ -62,22 +68,24 @@ Moving beyond the linear baseline is not a choice to make at random. It is a dia
 
 \paragraph{No labels: organization or compression.} If labels are absent and the goal is to discover natural groups, reduce dimensions for visualization, or build a compact intermediate representation, then clustering or dimensionality reduction is the right response. These methods ask different questions than supervised methods do, and they should be chosen when the task is genuinely exploratory rather than predictive.
 
+SVMs and Naive Bayes belong later in the same diagnostic story, but not at the same pedagogical level as the opening split. Once the reader is confident that the task is supervised and the current representation is worth defending, SVM asks for a wide-margin separator and Naive Bayes asks whether simple class-conditional assumptions provide a useful probabilistic baseline. Those are important refinements, but the chapter works better if they arrive after the smaller map is already stable.
+
 \begin{table}[t]
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{3.26cm}L{2.23cm}L{4.46cm}}
+\begin{tabular}{L{3.1cm}L{2.75cm}L{4.1cm}}
 \toprule
-Structural deficit observed & Method family & What it contributes \\
+Diagnostic stage & Method family & What it contributes \\
 \midrule
-Threshold interactions, region-specific rules & Trees and ensembles & Different rules in different parts of feature space \\
-Wide-margin separation in existing geometry & SVM & Robust boundary that resists small perturbations \\
-Class-conditional feature distributions, need for outlier detection or probabilistic baseline & Naive Bayes & Generative model; interpretable, fast, handles small data and missing features \\
-Local similarity should drive prediction & Nearest neighbors & Borrow labels from nearby examples under a chosen metric \\
-No labels; seek grouping or compression & Clustering, PCA & Organize or compress without a target label \\
+First-pass: threshold interactions, region-specific rules & Trees and ensembles & Different rules in different parts of feature space \\
+First-pass: supervised geometry should drive prediction & Nearest neighbors & Borrow labels from nearby examples under a chosen metric \\
+Later refinement of the geometry branch & SVM & Robust boundary when a defended representation should support wide-margin separation \\
+Later probabilistic refinement within supervised modeling & Naive Bayes & Generative baseline; interpretable, fast, and useful when simple class-conditional assumptions are plausible \\
+First-pass: no labels; seek grouping or compression & Clustering, PCA & Organize or compress without a target label \\
 \bottomrule
 \end{tabular}
-\caption{Method selection should follow structural diagnosis. The question is not ``which stronger model shall we try?'' but ``what specific structure did the baseline miss?''}
+\caption{Method selection should follow structural diagnosis, but the early chapter should not force every family into the reader's first decision.}
 \label{tab:method-selection}
 \end{table}
 
@@ -1271,24 +1279,24 @@ This chapter treated model choice as structural diagnosis. When a linear baselin
 \end{studyquestions}
 
 \begin{exercises}
-\item Give a real-world example of a problem that naturally sounds like a branching rule rather than a single weighted score. Explain why.
-\item Using Table~\ref{tab:tree-split-data}, verify the impurity reduction for the two candidate root splits by hand.
-\item Explain why classification trees and regression trees share the same recursive structure even though their leaf predictions are different.
-\item Classify the query student in Table~\ref{tab:knn-scaling-data} with $k=1$ and $k=3$ before and after scaling. Explain why the prediction changes.
-\item For the one-dimensional SVM example in this chapter, explain why the threshold at \(x=2\) has a larger margin than a threshold at \(x=1.5\).
-\item Using the binary-case identity $G=2p(1-p)$, compute the Gini impurity of nodes with positive-class fractions $0.1$, $0.5$, and $0.9$. Explain which node is hardest to split cleanly.
-\item Run one k-means iteration by hand for the two-cluster example in Figure~\ref{fig:kmeans-iteration}. State the assignments and the recomputed centers.
-\item Sketch a small 2D dataset for which a shallow tree should beat a linear model for the right reason. State clearly what threshold or interaction the tree captures.
-\item Why might a random forest outperform a single decision tree even though both are built from the same basic building block?
-\item Give one example in which clustering could be useful for exploration and one example in which clustering could be dangerously overinterpreted.
-\item Write language-neutral pseudocode for 1-nearest-neighbor classification using Euclidean distance, then explain how the returned label can change after rescaling one feature.
-\item Use Table~\ref{tab:structure-diagnosis-sheet} to write a one-page diagnosis for a failed linear baseline in either student support, spam filtering, or another application of your choice. If you are carrying one case through the book, extend the baseline design sheet from the previous chapter instead of inventing a fresh failure.
+\item \exercisetag{Concept}{Core}Give a real-world example of a problem that naturally sounds like a branching rule rather than a single weighted score. Explain why.
+\item \exercisetag{Calculation}{Core}Using Table~\ref{tab:tree-split-data}, verify the impurity reduction for the two candidate root splits by hand.
+\item \exercisetag{Diagnosis}{Core}Explain why classification trees and regression trees share the same recursive structure even though their leaf predictions are different.
+\item \exercisetag{Concept}{Core}Classify the query student in Table~\ref{tab:knn-scaling-data} with $k=1$ and $k=3$ before and after scaling. Explain why the prediction changes.
+\item \exercisetag{Concept}{Intermediate}For the one-dimensional SVM example in this chapter, explain why the threshold at \(x=2\) has a larger margin than a threshold at \(x=1.5\).
+\item \exercisetag{Concept}{Intermediate}Using the binary-case identity $G=2p(1-p)$, compute the Gini impurity of nodes with positive-class fractions $0.1$, $0.5$, and $0.9$. Explain which node is hardest to split cleanly.
+\item \exercisetag{Calculation}{Intermediate}Run one k-means iteration by hand for the two-cluster example in Figure~\ref{fig:kmeans-iteration}. State the assignments and the recomputed centers.
+\item \exercisetag{Design}{Intermediate}Sketch a small 2D dataset for which a shallow tree should beat a linear model for the right reason. State clearly what threshold or interaction the tree captures.
+\item \exercisetag{Concept}{Intermediate}Why might a random forest outperform a single decision tree even though both are built from the same basic building block?
+\item \exercisetag{Concept}{Intermediate}Give one example in which clustering could be useful for exploration and one example in which clustering could be dangerously overinterpreted.
+\item \exercisetag{Design}{Intermediate}Write language-neutral pseudocode for 1-nearest-neighbor classification using Euclidean distance, then explain how the returned label can change after rescaling one feature.
+\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:structure-diagnosis-sheet} to write a one-page diagnosis for a failed linear baseline in either student support, spam filtering, or another application of your choice. If you are carrying one case through the book, extend the baseline design sheet from the previous chapter instead of inventing a fresh failure.
 \end{exercises}
 
 \begin{challengeexercises}
-\item Construct a tiny binary classification dataset in two dimensions for which a linear separator performs poorly but a depth-2 decision tree performs perfectly. Explain the split sequence.
-\item Suppose a 1-nearest-neighbor classifier gives unstable predictions when one feature is added to the dataset. Give two different explanations for why this could happen.
-\item A team clusters user behavior data into four groups and labels them ``leaders,'' ``followers,'' ``at risk,'' and ``disengaged.'' Explain why this move from mathematical grouping to substantive naming requires additional evidence, and describe what evidence would help.
-\item Give a clustering result that looks convincing on one 2D plot but should still fail a stability sanity check. Explain what change in scaling, initialization, or sampling would reveal the weakness.
-\item DBSCAN, hierarchical clustering, t-SNE, and UMAP sit alongside k-means and PCA for different reasons. Give one sentence each on what problem characteristic might make you look beyond k-means.
+\item \exercisetag{Design}{Advanced}Construct a tiny binary classification dataset in two dimensions for which a linear separator performs poorly but a depth-2 decision tree performs perfectly. Explain the split sequence.
+\item \exercisetag{Concept}{Advanced}Suppose a 1-nearest-neighbor classifier gives unstable predictions when one feature is added to the dataset. Give two different explanations for why this could happen.
+\item \exercisetag{Concept}{Advanced}A team clusters user behavior data into four groups and labels them ``leaders,'' ``followers,'' ``at risk,'' and ``disengaged.'' Explain why this move from mathematical grouping to substantive naming requires additional evidence, and describe what evidence would help.
+\item \exercisetag{Diagnosis}{Advanced}Give a clustering result that looks convincing on one 2D plot but should still fail a stability sanity check. Explain what change in scaling, initialization, or sampling would reveal the weakness.
+\item \exercisetag{Concept}{Advanced}DBSCAN, hierarchical clustering, t-SNE, and UMAP sit alongside k-means and PCA for different reasons. Give one sentence each on what problem characteristic might make you look beyond k-means.
 \end{challengeexercises}
