@@ -59,6 +59,31 @@ Instructors should keep that framework visible across the whole course. The cour
 
 ## Recommended Teaching Paths
 
+The source tree keeps historical directory names such as `ch02b`, `ch04b`, and `ch06a`. Printed chapter numbers are assigned by the order in `tex/book.tex`. Use this mapping when preparing syllabi and companion assignments:
+
+| Printed chapter | Source / companion folder | Title |
+|---|---|---|
+| Bridge I | `bridge01` | Linear Algebra for AI Thinking |
+| Bridge II | `bridge02` | Probability, Risk, and Learning Signals |
+| 1 | `ch01` | Framing Learning Problems |
+| 2 | `ch02` | Prediction, Loss, and Decision Rules |
+| 3 | `ch02b` | Generalization, Leakage, and Evaluation Discipline |
+| 4 | `ch03` | Linear Models and Representation |
+| 5 | `ch04` | Structure Beyond Linearity |
+| 6 | `ch04b` | Designing the Dataset |
+| 7 | `ch05` | Optimization and Neural Networks |
+| 8 | `ch05b` | Probabilistic Models and Latent Structure |
+| 9 | `ch06` | Representation Learning and Foundation Models |
+| 10 | `ch06a` | Generative Representations |
+| 11 | `ch06b` | Learning from Interaction: Reinforcement Learning |
+| 12 | `ch07` | Vision: Learning from Images |
+| 13 | `ch08` | Language: Context and Grounding |
+| 14 | `ch09` | Sequential and Structured Data |
+| 15 | `ch09a` | Ranking, Recommendation, and Exposure |
+| 16 | `ch10` | Experiments, Error Analysis, and Scientific Claims |
+| 17 | `ch11` | Reliability: Bias, Robustness, Privacy, and Safety |
+| 18 | `ch12` | From Models to Systems |
+
 ### Ten-Week Course
 
 This path is the default recommendation for a first serious undergraduate course.

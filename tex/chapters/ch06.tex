@@ -260,6 +260,7 @@ This measures the angle between two vectors rather than their raw length. It is 
 The dot product $e_i^\top e_j$ is large when two vectors point in similar directions. Dividing by the vector lengths turns that raw alignment into a scale-free similarity score.
 \end{prereqbridge}
 
+\begin{advancednote}
 \begin{theorem}[Johnson--Lindenstrauss dimension reduction]
 For any finite set $S$ of $n$ points in $\mathbb{R}^d$ and any $0<\varepsilon<1$, there exists a map $f:\mathbb{R}^d\to\mathbb{R}^k$ with
 \[
@@ -273,6 +274,7 @@ such that for all $u,v\in S$,
 \end{theorem}
 
 The theorem does not say every useful embedding is a random projection, and it does not replace task-specific representation learning. It does justify a central geometric intuition of the chapter: moderately low-dimensional spaces can still preserve many of the pairwise relationships that downstream retrieval, clustering, or probing depend on.
+\end{advancednote}
 
 
 \begin{figure}[t]
@@ -643,7 +645,7 @@ Use broad reuse-first workflows only when the source representation is plausibly
 
 \section{Probe, Freeze, Partial Tune, or Full Tune?}
 
-The previous section argued for probing first. This section names the broader menu of adaptation choices that comes after that first diagnostic. The choice of adaptation strategy is not only a computational decision. It is an experimental claim about the quality and fit of the pretrained representation. Each strategy implies a different answer to the question: ``how much of the pretrained representation do I trust for this new task?''
+The previous section argued for probing first. This section is the chapter's single adaptation ladder: first run the clean diagnostic, then choose the shallowest adaptation that the evidence justifies. The choice of adaptation strategy is not only a computational decision. It is an experimental claim about the quality and fit of the pretrained representation. Each strategy implies a different answer to the question: ``how much of the pretrained representation do I trust for this new task?''
 
 \textbf{Linear probe (frozen encoder).} Train only a linear head on top of the frozen pretrained features. This strategy makes the strongest claim about the representation: the task-relevant information is already linearly accessible in the frozen space. The probe is also the cleanest diagnostic: if it works well, the frozen representation is reusable for that target under a simple linear readout. If it works poorly, you learn that either the representation does not contain the right signals or those signals require a more complex readout.
 
@@ -679,9 +681,9 @@ Adapter / low-rank & Low-medium & Small-moderate & Moderate & Good with less com
 
 The judgment rule is to start with the linear probe. If the probe achieves strong performance, the pretrained representation is already a strong candidate for the task and deeper adaptation may add little. If the probe performs poorly, partial or full fine-tuning may be warranted, but one should then ask \emph{why} the probe failed. Was the pretraining task too different? Is the target task genuinely out-of-distribution? Is the labeled set too small for fine-tuning to help? The probe failure is a diagnostic, not just a prompt to try the next strategy in the table.
 
-\section{Adaptation Depth: Freeze, Partial Tuning, Full Tuning}
+\section{Adaptation Depth: Scenario Guide}
 
-The previous section named the options. This section turns that menu into a decision rule. Once a representation is shown to contain useful information, the next question is how much of it should be allowed to move.
+The previous section named the options. This short scenario guide turns the same menu into a decision rule rather than a second list of methods. Once a representation is shown to contain useful information, the next question is how much of it should be allowed to move.
 
 The modern design space is wider than freeze versus full fine-tuning. Gradual-unfreezing strategies such as ULMFiT made this visible early in NLP, and later adapter modules and low-rank updates made the same point at larger scale: teams can specialize a pretrained model while moving only part of it \citep{howard2018ulmfit,houlsby2019adapters,hu2021lora}. These methods can lower compute and preserve more of the original model, but they do not remove the need to show whether the observed gain came from reused representation or from extra task-specific capacity.
 

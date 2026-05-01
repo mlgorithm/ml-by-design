@@ -19,10 +19,10 @@ Point predictions hide what the model does not know. A probabilistic model makes
 \item Treat latent variables as hidden structure inferred from observed data.
 \item Describe the EM algorithm and Gaussian mixtures as a workflow for soft latent assignments.
 \item Use Bayesian vocabulary---prior, likelihood, posterior, MLE, and MAP---to explain uncertainty-aware modeling choices.
-\item Interpret Gaussian processes as an orientation to input-dependent uncertainty rather than as a full derivation target.
 \item Distinguish aleatoric uncertainty from epistemic uncertainty and connect the distinction to data collection and review.
 \item Use Naive Bayes as a transparent probabilistic baseline whose probabilities still need calibration.
 \item Construct an uncertainty audit card that documents what the model knows it does not know.
+\item Treat Bayesian linear regression and Gaussian processes as extension lenses for input-dependent uncertainty unless the course emphasizes probabilistic modeling.
 \end{learninggoals}
 
 \begin{prereqbridge}
@@ -240,6 +240,7 @@ Full Bayesian inference (computing exact posteriors) is tractable for linear reg
 \subsection{Gaussian Processes}
 \label{sec:gaussian-processes}
 
+\begin{advancednote}
 Bayesian linear regression reasons about a distribution over weights. A \emph{Gaussian process} (GP) reasons about a distribution over \emph{functions} directly, without committing to a parametric form. Given training inputs and outputs, a GP returns, for every possible new input, a Gaussian distribution over the function value at that input. The predictive mean gives the best point estimate; the predictive variance says how much the GP is willing to commit to that estimate at that particular location.
 
 The shift from weights to functions is not just philosophical. It changes what the prior encodes. In Bayesian linear regression, a prior on $\mathbf{w}$ expresses ``parameters should be small.'' In a GP, the prior is specified by a \emph{kernel} $k(\mathbf{x}, \mathbf{x}')$ that measures similarity between inputs, and the implicit belief is ``nearby inputs should produce nearby outputs.'' The choice of kernel therefore encodes what ``nearby'' means. A squared-exponential kernel assumes the underlying function is smooth; a Mat\'ern kernel allows rougher behavior; a periodic kernel expresses the belief that the function repeats with a known period. Every kernel is a hypothesis about the function family the data lives in.
@@ -249,6 +250,7 @@ The shift from weights to functions is not just philosophical. It changes what t
 \begin{warningbox}
 The ``variance does not depend on $\mathbf{y}$'' property is a feature of the exact GP-regression formula with \emph{fixed} hyperparameters. In practice the noise variance $\sigma_n^2$ and the kernel hyperparameters (length-scales, output scale) are almost always learned from the training data---typically by maximizing the marginal likelihood $p(\mathbf{y} \mid \mathbf{X})$---and that learning couples the predictive variance to $\mathbf{y}$ indirectly. The geometry-of-inputs intuition is right for a fixed kernel and is a useful teaching lens for why GPs extrapolate honestly, but a deployed GP whose hyperparameters were fitted to data does carry output information in its uncertainty. Non-Gaussian likelihoods (GP classification, count data) break the closed-form Gaussian posterior altogether and require approximate inference.
 \end{warningbox}
+\end{advancednote}
 
 \begin{thinkingtool}
 \textbf{Kernel as a hypothesis.} Every GP kernel is a claim about which inputs should share information. When choosing a kernel, ask: if two inputs are ``similar'' under this kernel, does that similarity predict anything the task actually cares about? A spatial kernel over GPS coordinates may be right for crowd density but wrong for student-message similarity, where lexical or semantic distance matters more than Euclidean distance in some feature space.

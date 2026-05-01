@@ -1,4 +1,4 @@
-# Chapter 12 Companion: From Models to Systems (`ch12`)
+# Chapter 18 Companion: From Models to Systems (`ch12`)
 
 This chapter supports the systems view of the book.
 
@@ -58,6 +58,11 @@ What to notice:
 - the best model-only policy is not automatically the best system policy
 - sending the most uncertain cases to review can improve the full system
 - review capacity becomes a first-class design constraint
+
+After running it:
+
+- fill the review-capacity, operating-threshold, fallback, and no-launch rows of the system readiness brief
+- state one guardrail that would block rollout even if offline accuracy improved
 
 Prerequisites:
 

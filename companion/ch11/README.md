@@ -29,6 +29,11 @@ What to notice:
 - the subgroup gap is much clearer once TPR and FPR are separated
 - overall correctness does not capture all important reliability behavior
 
+After running it:
+
+- fill the subgroup-slice and unacceptable-harm rows of the reliability review card
+- name one piece of evidence still missing before deployment
+
 Prerequisites:
 
 - confusion matrices

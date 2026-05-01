@@ -4,7 +4,7 @@ This chapter is about three closely connected ideas:
 
 - losses used during training
 - metrics used during evaluation
-- the difference between fitting training data and generalizing to new data
+- thresholds, ranked-list policies, abstention, and calibration as action choices
 
 The code here supports that in two layers.
 

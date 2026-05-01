@@ -57,9 +57,9 @@ Prepare these privately:
 
 Build instructor-only support in this order:
 
-1. Chapters 1, 2, 3, 13, 16, 17, and 18
-2. Chapters 4, 5, 7, 8, and 9
-3. Chapters 6, 10, 11, 12, 14, and 15
+1. Printed Chapters 1, 2, 3, 13, 16, 17, and 18: framing, metrics, protected evaluation, grounded language systems, experiments, reliability, and systems.
+2. Printed Chapters 4, 5, 7, 8, and 9: linear baselines, structural methods, neural training, probabilistic uncertainty, and reusable representations.
+3. Printed Chapters 6, 10, 11, 12, 14, and 15: dataset design, generative representations, reinforcement learning, vision, sequential data, and recommendation.
 
 This order matches the book's main differentiator: framing, evidence, grounded language systems, experiments, reliability, and systems.
 

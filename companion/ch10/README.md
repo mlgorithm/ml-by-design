@@ -30,6 +30,11 @@ What to notice:
 - one slice is still clearly weak
 - slice-based evaluation changes what claim is justified
 
+After running it:
+
+- fill the slice and claim-scope rows of the experiment claim sheet
+- write one sentence that weakens the original aggregate claim honestly
+
 Prerequisites:
 
 - basic accuracy calculation

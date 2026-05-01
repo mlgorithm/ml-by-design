@@ -482,183 +482,6 @@ Detecting drift in practice requires monitoring, not just awareness. Common stra
 No single signal is definitive. Combining performance, input, and output monitoring provides the most robust early warning.
 \end{practicalnote}
 
-\section{Chapter Artifact: A Sequential Design Card}
-
-By the end of this chapter, the reader should be able to write down not only which sequence model they want to use, but what was truly available at decision time and what evaluation would make the claim honest. Earlier artifacts in the book named the decision, the metric, the evaluation plan, the baseline, the structure diagnosis, the training claim, the reuse strategy, the vision deployment constraints, and the language grounding contract. This chapter's card adds the sequential layer: decision time, allowed context, backtesting regime, latency, and drift.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{3.25cm}L{6.98cm}}
-\toprule
-Card field & What must be written clearly \\
-\midrule
-Seven-question focus & Questions 1, 3, 4, 6, and 7: what decision or action moment matters, what information is really available then, what sequential representation is permitted, what evaluation is honest through time, and how latency shapes action \\
-Decision time & The moment the system must act or emit a prediction \\
-Horizon & How far into the future the prediction or detection target lies \\
-Allowed context window & What past observations, frames, or tokens are legitimately available \\
-Forbidden future information & What timestamps, summaries, or future windows must never enter the model \\
-Timestamp and missingness handling & Whether the stream is regular or irregular, and whether gaps or missing values carry signal that must be represented explicitly \\
-Task type & Recognition, keyword spotting, speaker verification, forecasting, anomaly detection, or another sequence task \\
-Key invariances & What noise, channel variation, or temporal variation should be ignored \\
-Baseline family & Persistence, seasonal repeat, simple lag model, or another realism-check baseline \\
-Split and backtesting logic & Chronological holdout, grouped-by-source, expanding-window, sliding-window, streaming, or another deployment-faithful evaluation design \\
-Latency budget & How quickly the system must respond \\
-Operating mode & Whether the system is offline with full-sequence access or streaming with only partial context \\
-Noise and drift risks & What channel variation or process change is likely in deployment \\
-\bottomrule
-\end{tabular}
-\caption{A sequential design card turns prediction-time realism into a concrete protocol before a sequential-model claim is made.}
-\label{tab:sequential-design-card}
-\end{table}
-
-The same card produces different answers in the two running cases. For the wake-word detector, the decision time is every incoming frame, the horizon is immediate detection, the allowed context is only the recent audio already heard, and any later audio is forbidden. Dropped or clipped frames should be represented explicitly rather than treated as if the stream were complete. The task type is keyword spotting, the key invariances include speaker identity and mild background noise, the baseline may be a simple spectral classifier on short windows, and the evaluation should separate speakers, devices, and recording sessions before replaying held-out sessions in streaming order. The latency budget is extremely small, the operating mode is streaming, and the main risks are room acoustics, new microphones, household noise, and gradual drift in speaking style.
-
-For the one-hour-ahead campus demand forecaster, the decision time is the top of the hour, the horizon is one hour ahead, the allowed context is past load, calendar, and weather information already issued by that hour, and forbidden future information includes realized future demand or revised weather posted later. Gaps, outages, and imputations should remain visible in the representation. The task type is forecasting, the relevant invariances include seasonal repetition but not arbitrary regime change, the baseline family should include persistence and seasonal-repeat checks, and the evaluation should use chronological holdout plus expanding-window or sliding-window backtests. The latency budget is modest, the operating mode is scheduled batch scoring, and the main risks are holidays, extreme weather, building schedule changes, and policy shifts.
-
-\section{When Modalities Combine}
-
-Real-world systems rarely operate on a single data type. A campus security system combines video feeds (vision) with audio alerts (audio). A course-support assistant handles text queries but may also process uploaded screenshots or diagrams. A medical system combines lab values (tabular), clinical notes (text), and imaging (vision). The question is not whether to combine modalities but how to do so without losing the audit discipline developed in Chapters~\ref{ch:vision}--\ref{ch:audio-time}.
-
-\subsection{Fusion Strategies}
-
-Multimodal systems must choose how information from different modalities flows into the decision. Three broad families dominate:
-
-\begin{itemize}[leftmargin=*]
-  \item \textbf{Early fusion}: Concatenate raw or preprocessed inputs from all modalities before the model sees them. This assumes that low-level structure is shared across modalities and that the model can learn useful interactions from the combined input.
-  \item \textbf{Late fusion}: Train separate models on each modality, then combine their outputs (scores, embeddings, or decisions) at the end. This works best when modality-specific processing can stay mostly separate until the final decision.
-  \item \textbf{Cross-modal attention}: Let modalities interact during processing through attention mechanisms that allow each modality to selectively focus on relevant parts of other modalities. This assumes learned interaction is beneficial and computationally feasible.
-\end{itemize}
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}L{2.55cm}L{1.95cm}L{2.05cm}L{2.9cm}@{}}
-\toprule
-Strategy & Assumption & Strength & Weakness \\
-\midrule
-Early fusion & Aligned joint input or features & Can model low-level cross-modal interactions & High-dimensional input; all modalities equally weighted \\
-Late fusion & Separable modality-specific predictors & Interpretable per-modality; scalable & May miss complementary signals \\
-Cross-modal attention & Learned selective interaction & Flexible; modality-adaptive & Computationally expensive; often benefits from substantial pretraining or supervision \\
-\bottomrule
-\end{tabular}
-\caption{Fusion strategies trade off between assumption simplicity, computational cost, and flexibility in modeling multimodal interaction.}
-\label{tab:fusion-strategies}
-\end{table}
-
-Each strategy makes different assumptions about how modalities relate. Early fusion assumes shared low-level structure; late fusion keeps the modalities separate until the decision stage; cross-modal attention allows learned interaction throughout processing. The right choice depends on the task, the computational budget, and whether modality interaction is theoretically justified.
-
-\subsection{The Multimodal Audit}
-
-Each modality still needs its own audit following the frameworks of Chapters~\ref{ch:vision}--\ref{ch:audio-time}. A vision component needs its invariances (lighting, scale, occlusion). A language component needs grounding (unambiguous reference, context). A sequence component needs respect for prediction time (no future leakage). The multimodal audit adds new questions:
-
-\begin{itemize}[leftmargin=*]
-  \item Which modality is primary vs.\ supplementary? If text is primary and images are illustrative, the system should degrade gracefully if images are missing.
-  \item What happens when one modality is missing, degraded, or conflicting? A pedestrian detector combining camera and thermal imaging should not crash if one sensor fails.
-  \item Does the system fail gracefully or catastrophically? If the camera feed becomes noisy (poor lighting, blur, occlusion), can audio or temporal context (tire sounds, footsteps, motion patterns) provide backup, or does the system safely halt?
-  \item Is the audit applied uniformly or does modality imbalance hide problems? If vision is the dominant signal in late fusion, the language component may be tested weakly and contain silent failures.
-\end{itemize}
-
-\begin{example}[Pedestrian Detector with Vision and Thermal]
-Consider a campus pedestrian detector that combines a visual camera feed with thermal imaging to detect people on walkways at any time of day. At night, visible light fails: the camera captures only noise and shadows. Thermal imaging becomes essential. The audit must ask: does the system degrade to safe-mode automatically when camera quality drops (measured by blur, contrast, or detection consistency), or does it blindly trust a camera that can no longer see? A well-audited system would flag low-confidence camera frames, shift weight to thermal features, or both. An unaudited system might output spurious detections because the visual backbone is still producing embeddings even though they are meaningless in darkness.
-\end{example}
-
-\subsection{Alignment and Grounding Across Modalities}
-
-Recent multimodal models like CLIP learn shared embedding spaces where images and text are compared in a common representation. The claim is that semantic alignment in the embedding space corresponds to semantic alignment in meaning. But the audit must verify:
-
-\begin{itemize}[leftmargin=*]
-  \item Does high cosine similarity in embedding space correspond to genuine semantic correspondence? A system may confidently match an image of a dog to the text ``furry animal,'' but fail on metaphorical language (``that person is a dog'') or visual ambiguity (a toy dog).
-  \item What is the alignment quality on data that diverges from training distribution? Embeddings trained on ImageNet captions may not align well for medical images and scientific text.
-  \item Can the model hallucinate confident descriptions of features not actually present in the image? Multimodal hallucination is a documented failure mode in which a model generates fluent text about an image but describes features the image does not contain.
-\end{itemize}
-
-\begin{warningbox}
-Multimodal models can generate confident, grammatically correct text that describes image features not actually present. If a model is asked to caption an image of a dog wearing a collar and harness, but the harness is partially occluded, the model might still confidently generate ``The dog is wearing a red harness'' even if the color is invisible. In deployment, treat multimodal text generation as a signal that requires human verification, not a ground-truth report of what is visible.
-\end{warningbox}
-
-\begin{practicalnote}
-A pragmatic approach to multimodal grounding is to test alignment on held-out data where you know the ground truth. For CLIP-style models, create a small set of image--text pairs where similarity should be high (matching pairs) and low (mismatched pairs), and measure precision and recall of the alignment. This reveals whether embeddings transfer to your domain before deploying on unseen data.
-\end{practicalnote}
-
-\subsection{Running Cases}
-
-The two running cases introduced in this chapter can be extended to multimodal settings:
-
-\begin{itemize}[leftmargin=*]
-  \item \textbf{Video understanding for the pedestrian detector}: Instead of a single static image, the detector now processes video frames as a sequence. Vision (spatial detection in each frame), audio (footsteps, tire sounds), and temporal consistency (is this person in frame $t-1$ the same as in frame $t$?) all combine. The audit must specify: which modality is primary, what temporal window is allowed (no future frames), and how to handle missing or degraded modalities.
-  \item \textbf{The course-support assistant receiving screenshots}: A student asks ``Why does this code crash?'' and uploads a screenshot of an error message. The system now must ground text understanding (what is the question?) to visual information (what does the error message say?). The audit must verify: is the screenshot always legible, or can poor lighting or phone angle make it unreadable? If the screenshot is unreadable, should the system ask for clarification or attempt to infer intent from the text alone?
-\end{itemize}
-
-\section{Beyond Grids and Sequences: Graph-Structured Data}
-
-The prediction-time audit extends one more step. Not all data fits naturally into grids (images), sequences (audio, text), or tables (tabular data). Some data is fundamentally relational: social networks (who follows whom), molecular structures (atoms and bonds), knowledge graphs (entities and relationships), citation networks (papers citing papers), supply chains (supplier dependencies). The structure of these relationships is a graph, and the graph topology carries information that flat or sequential representations discard. The same discipline still applies: the graph must be the graph the deployed system is actually allowed to know at prediction time, not a future-completed or retrospectively cleaned version of the relationship structure.
-
-\subsection{Message Passing: The Core Idea}
-
-Graph neural networks (GNNs) operate on the principle of \emph{message passing}: each node updates its representation by aggregating information from its neighbors. After $k$ rounds of message passing, a node's representation reflects information from its $k$-hop neighborhood. This is structurally analogous to convolution (local aggregation of neighboring values in a grid), but applied to irregular graph structure.
-
-\begin{definition}[Message Passing in Graphs]
-In a graph neural network with $k$ layers, a node $v$ at layer $\ell$ computes its new representation as:
-\[
-h_v^{(\ell+1)} = \text{COMBINE}\left( h_v^{(\ell)}, \text{AGGREGATE}\left( \{ h_u^{(\ell)} : u \in \text{Neighbors}(v) \} \right) \right)
-\]
-where AGGREGATE pools messages from neighbors (e.g., sum, mean, max) and COMBINE updates the node's state (e.g., via a neural network). After $k$ layers, each node's representation can depend on aggregated information from its $k$-hop neighborhood, though different neighborhoods may still collapse to the same representation if the aggregation is not expressive enough.
-\end{definition}
-
-The key design choices in a graph neural network are:
-
-\begin{itemize}[leftmargin=*]
-  \item \textbf{What information to aggregate}: Node features, edge features, or both?
-  \item \textbf{How to combine}: Simple sum, weighted average, learned gating, or attention?
-  \item \textbf{How many rounds}: More rounds mean larger receptive fields (more distant neighbors), but also risk over-smoothing (all nodes become similar).
-\end{itemize}
-
-\subsection{When Graph Structure Matters}
-
-Graph-aware models outperform flat models (logistic regression on node features alone) or sequence models only when the relational structure carries predictive information that cannot be captured by node features alone. This is the critical audit question: does the graph structure actually matter for this task?
-
-\begin{example}[Molecular Property Prediction]
-Consider predicting the boiling point of a molecule from its atomic composition. Ethanol and dimethyl ether have the same formula, \(\mathrm{C_2H_6O}\), but very different bonding arrangements and boiling points. A ``bag-of-atoms'' model that counts carbon, hydrogen, and oxygen atoms cannot distinguish these isomers because it ignores structure. A graph model that represents atoms as nodes and bonds as edges can distinguish an O--H alcohol group from a C--O--C ether group. In this task, graph structure is essential. The audit would ask: what information does connectivity add beyond node features?
-\end{example}
-
-\begin{example}[Social Network Influence]
-In a social network, suppose the task is to predict whether a user will adopt a new behavior (e.g., install an app). A flat model using only user features (age, location, activity level) might perform reasonably. But if adoption depends on social influence (whether friends have adopted), a graph model that propagates information through the network will capture homophily and peer effects. Again, the audit asks: is the performance gain from graph structure significant enough to justify the added complexity? If a simple user-feature baseline already predicts adoption well, the graph may not add signal for this particular task.
-\end{example}
-
-\subsection{The Relational Audit}
-
-Before deploying a graph neural network, ask whether the graph itself is reliable, complete, and whether the task actually requires relational reasoning:
-
-\begin{decisionbox}
-\begin{itemize}[leftmargin=*]
-  \item \textbf{Is the graph structure reliable?} Do edges represent ground truth or noisy observations? In a citation network, are all citations captured, or are some missing due to database incompleteness? In a social network, are all follows recorded, or do private accounts hide edges?
-  \item \textbf{Are edges meaningful or spurious?} A link in a knowledge graph may be incorrect. A friendship in a social network may be inactive (they never interact). The audit must assess edge quality.
-  \item \textbf{Is the graph structure complete?} If a molecule has atoms in space but only bonds in the graph are represented, are non-bonded interactions (Van der Waals forces) important? If a supply chain graph omits informal supplier relationships, is the formal graph sufficient?
-  \item \textbf{Does the task actually require relational reasoning?} Run a baseline that uses only node features (ignoring edges). If that baseline performs nearly as well as the graph model, the graph structure may not carry useful signal for this task. This is an honest sanity check.
-\end{itemize}
-\end{decisionbox}
-
-\begin{practicalnote}
-Before training a graph neural network, always establish a non-relational baseline. Train a logistic regression or simple neural network on node features alone. If the graph model's improvement is small relative to split variability, run-to-run variability, or operational cost, the gain may not justify the added complexity, debugging effort, and deployment risk. A large and stable gain across splits, seeds, and important slices is stronger evidence that relational structure matters. The threshold is task-specific; the habit is to compare the gain with the uncertainty and the cost of using the graph.
-\end{practicalnote}
-
-\subsection{Limitations and Pitfalls}
-
-Graph neural networks come with three major limitations:
-
-\begin{itemize}[leftmargin=*]
-  \item \textbf{Over-smoothing}: Each message-passing layer propagates information from farther neighborhoods, but after many layers, all nodes' representations converge to a global average. This limits the effective depth of graph networks, often to 3--5 layers, even if the graph is much larger.
-  \item \textbf{Scalability}: Computing attention or aggregation over large neighborhoods is expensive. Real-world graphs (social networks with billions of edges, knowledge graphs with millions of nodes) require sampling strategies (neighborhood sampling, subgraph sampling) or partition-based approaches, which introduce approximation.
-  \item \textbf{The Graph Is an Assumption}: The observed graph is treated as ground truth, but it is really a modelling choice. If the graph is missing important edges (incomplete), includes spurious edges (noisy), or encodes the wrong relationships for the task, the model cannot overcome that. The graph structure itself should be audited before the model.
-\end{itemize}
-
-\begin{advancednote}
-Heterogeneous graphs (where nodes and edges have different types) require extended message passing: a bank transaction network might have ``person'' nodes and ``account'' nodes with different features, and edges representing different transaction types. Heterogeneous graph neural networks learn type-specific aggregation functions. The audit becomes more complex: the graph structure includes edge types, and the model's representation learning must respect that structure. Do not assume a standard GNN designed for homogeneous graphs will work well without modification.
-\end{advancednote}
-
 \section{Classical Forecasting Toolkit}
 \label{sec:classical-forecasting}
 
@@ -733,6 +556,183 @@ This state-space perspective unifies classical forecasting with models that main
 \begin{thinkingtool}
 \textbf{State-space unification.} When choosing a sequence model, ask: what is the hidden state, how does it evolve, and how does it generate observations? Exponential smoothing has a simple scalar state (the level). ARIMA has a vector state (recent values and errors). An RNN has a learned vector state. A Transformer has an attended context window. The question is not ``which architecture is best?'' but ``what state representation does the task require?''
 \end{thinkingtool}
+
+\section{Chapter Artifact: A Sequential Design Card}
+
+By the end of this chapter, the reader should be able to write down not only which sequence model they want to use, but what was truly available at decision time and what evaluation would make the claim honest. Earlier artifacts in the book named the decision, the metric, the evaluation plan, the baseline, the structure diagnosis, the training claim, the reuse strategy, the vision deployment constraints, and the language grounding contract. This chapter's card adds the sequential layer: decision time, allowed context, backtesting regime, latency, and drift.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{3.25cm}L{6.98cm}}
+\toprule
+Card field & What must be written clearly \\
+\midrule
+Seven-question focus & Questions 1, 3, 4, 6, and 7: what decision or action moment matters, what information is really available then, what sequential representation is permitted, what evaluation is honest through time, and how latency shapes action \\
+Decision time & The moment the system must act or emit a prediction \\
+Horizon & How far into the future the prediction or detection target lies \\
+Allowed context window & What past observations, frames, or tokens are legitimately available \\
+Forbidden future information & What timestamps, summaries, or future windows must never enter the model \\
+Timestamp and missingness handling & Whether the stream is regular or irregular, and whether gaps or missing values carry signal that must be represented explicitly \\
+Task type & Recognition, keyword spotting, speaker verification, forecasting, anomaly detection, or another sequence task \\
+Key invariances & What noise, channel variation, or temporal variation should be ignored \\
+Baseline family & Persistence, seasonal repeat, simple lag model, or another realism-check baseline \\
+Split and backtesting logic & Chronological holdout, grouped-by-source, expanding-window, sliding-window, streaming, or another deployment-faithful evaluation design \\
+Latency budget & How quickly the system must respond \\
+Operating mode & Whether the system is offline with full-sequence access or streaming with only partial context \\
+Noise and drift risks & What channel variation or process change is likely in deployment \\
+\bottomrule
+\end{tabular}
+\caption{A sequential design card turns prediction-time realism into a concrete protocol before a sequential-model claim is made.}
+\label{tab:sequential-design-card}
+\end{table}
+
+The same card produces different answers in the two running cases. For the wake-word detector, the decision time is every incoming frame, the horizon is immediate detection, the allowed context is only the recent audio already heard, and any later audio is forbidden. Dropped or clipped frames should be represented explicitly rather than treated as if the stream were complete. The task type is keyword spotting, the key invariances include speaker identity and mild background noise, the baseline may be a simple spectral classifier on short windows, and the evaluation should separate speakers, devices, and recording sessions before replaying held-out sessions in streaming order. The latency budget is extremely small, the operating mode is streaming, and the main risks are room acoustics, new microphones, household noise, and gradual drift in speaking style.
+
+For the one-hour-ahead campus demand forecaster, the decision time is the top of the hour, the horizon is one hour ahead, the allowed context is past load, calendar, and weather information already issued by that hour, and forbidden future information includes realized future demand or revised weather posted later. Gaps, outages, and imputations should remain visible in the representation. The task type is forecasting, the relevant invariances include seasonal repetition but not arbitrary regime change, the baseline family should include persistence and seasonal-repeat checks, and the evaluation should use chronological holdout plus expanding-window or sliding-window backtests. The latency budget is modest, the operating mode is scheduled batch scoring, and the main risks are holidays, extreme weather, building schedule changes, and policy shifts.
+
+\section{Extension: When Modalities Combine}
+
+Real-world systems rarely operate on a single data type. A campus security system combines video feeds (vision) with audio alerts (audio). A course-support assistant handles text queries but may also process uploaded screenshots or diagrams. A medical system combines lab values (tabular), clinical notes (text), and imaging (vision). The question is not whether to combine modalities but how to do so without losing the audit discipline developed in Chapters~\ref{ch:vision}--\ref{ch:audio-time}.
+
+\subsection{Fusion Strategies}
+
+Multimodal systems must choose how information from different modalities flows into the decision. Three broad families dominate:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Early fusion}: Concatenate raw or preprocessed inputs from all modalities before the model sees them. This assumes that low-level structure is shared across modalities and that the model can learn useful interactions from the combined input.
+  \item \textbf{Late fusion}: Train separate models on each modality, then combine their outputs (scores, embeddings, or decisions) at the end. This works best when modality-specific processing can stay mostly separate until the final decision.
+  \item \textbf{Cross-modal attention}: Let modalities interact during processing through attention mechanisms that allow each modality to selectively focus on relevant parts of other modalities. This assumes learned interaction is beneficial and computationally feasible.
+\end{itemize}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}L{2.55cm}L{1.95cm}L{2.05cm}L{2.9cm}@{}}
+\toprule
+Strategy & Assumption & Strength & Weakness \\
+\midrule
+Early fusion & Aligned joint input or features & Can model low-level cross-modal interactions & High-dimensional input; all modalities equally weighted \\
+Late fusion & Separable modality-specific predictors & Interpretable per-modality; scalable & May miss complementary signals \\
+Cross-modal attention & Learned selective interaction & Flexible; modality-adaptive & Computationally expensive; often benefits from substantial pretraining or supervision \\
+\bottomrule
+\end{tabular}
+\caption{Fusion strategies trade off between assumption simplicity, computational cost, and flexibility in modeling multimodal interaction.}
+\label{tab:fusion-strategies}
+\end{table}
+
+Each strategy makes different assumptions about how modalities relate. Early fusion assumes shared low-level structure; late fusion keeps the modalities separate until the decision stage; cross-modal attention allows learned interaction throughout processing. The right choice depends on the task, the computational budget, and whether modality interaction is theoretically justified.
+
+\subsection{The Multimodal Audit}
+
+Each modality still needs its own audit following the frameworks of Chapters~\ref{ch:vision}--\ref{ch:audio-time}. A vision component needs its invariances (lighting, scale, occlusion). A language component needs grounding (unambiguous reference, context). A sequence component needs respect for prediction time (no future leakage). The multimodal audit adds new questions:
+
+\begin{itemize}[leftmargin=*]
+  \item Which modality is primary vs.\ supplementary? If text is primary and images are illustrative, the system should degrade gracefully if images are missing.
+  \item What happens when one modality is missing, degraded, or conflicting? A pedestrian detector combining camera and thermal imaging should not crash if one sensor fails.
+  \item Does the system fail gracefully or catastrophically? If the camera feed becomes noisy (poor lighting, blur, occlusion), can audio or temporal context (tire sounds, footsteps, motion patterns) provide backup, or does the system safely halt?
+  \item Is the audit applied uniformly or does modality imbalance hide problems? If vision is the dominant signal in late fusion, the language component may be tested weakly and contain silent failures.
+\end{itemize}
+
+\begin{example}[Pedestrian Detector with Vision and Thermal]
+Consider a campus pedestrian detector that combines a visual camera feed with thermal imaging to detect people on walkways at any time of day. At night, visible light fails: the camera captures only noise and shadows. Thermal imaging becomes essential. The audit must ask: does the system degrade to safe-mode automatically when camera quality drops (measured by blur, contrast, or detection consistency), or does it blindly trust a camera that can no longer see? A well-audited system would flag low-confidence camera frames, shift weight to thermal features, or both. An unaudited system might output spurious detections because the visual backbone is still producing embeddings even though they are meaningless in darkness.
+\end{example}
+
+\subsection{Alignment and Grounding Across Modalities}
+
+Recent multimodal models like CLIP learn shared embedding spaces where images and text are compared in a common representation. The claim is that semantic alignment in the embedding space corresponds to semantic alignment in meaning. But the audit must verify:
+
+\begin{itemize}[leftmargin=*]
+  \item Does high cosine similarity in embedding space correspond to genuine semantic correspondence? A system may confidently match an image of a dog to the text ``furry animal,'' but fail on metaphorical language (``that person is a dog'') or visual ambiguity (a toy dog).
+  \item What is the alignment quality on data that diverges from training distribution? Embeddings trained on ImageNet captions may not align well for medical images and scientific text.
+  \item Can the model hallucinate confident descriptions of features not actually present in the image? Multimodal hallucination is a documented failure mode in which a model generates fluent text about an image but describes features the image does not contain.
+\end{itemize}
+
+\begin{warningbox}
+Multimodal models can generate confident, grammatically correct text that describes image features not actually present. If a model is asked to caption an image of a dog wearing a collar and harness, but the harness is partially occluded, the model might still confidently generate ``The dog is wearing a red harness'' even if the color is invisible. In deployment, treat multimodal text generation as a signal that requires human verification, not a ground-truth report of what is visible.
+\end{warningbox}
+
+\begin{practicalnote}
+A pragmatic approach to multimodal grounding is to test alignment on held-out data where you know the ground truth. For CLIP-style models, create a small set of image--text pairs where similarity should be high (matching pairs) and low (mismatched pairs), and measure precision and recall of the alignment. This reveals whether embeddings transfer to your domain before deploying on unseen data.
+\end{practicalnote}
+
+\subsection{Running Cases}
+
+The two running cases introduced in this chapter can be extended to multimodal settings:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Video understanding for the pedestrian detector}: Instead of a single static image, the detector now processes video frames as a sequence. Vision (spatial detection in each frame), audio (footsteps, tire sounds), and temporal consistency (is this person in frame $t-1$ the same as in frame $t$?) all combine. The audit must specify: which modality is primary, what temporal window is allowed (no future frames), and how to handle missing or degraded modalities.
+  \item \textbf{The course-support assistant receiving screenshots}: A student asks ``Why does this code crash?'' and uploads a screenshot of an error message. The system now must ground text understanding (what is the question?) to visual information (what does the error message say?). The audit must verify: is the screenshot always legible, or can poor lighting or phone angle make it unreadable? If the screenshot is unreadable, should the system ask for clarification or attempt to infer intent from the text alone?
+\end{itemize}
+
+\section{Extension: Beyond Grids and Sequences: Graph-Structured Data}
+
+The prediction-time audit extends one more step. Not all data fits naturally into grids (images), sequences (audio, text), or tables (tabular data). Some data is fundamentally relational: social networks (who follows whom), molecular structures (atoms and bonds), knowledge graphs (entities and relationships), citation networks (papers citing papers), supply chains (supplier dependencies). The structure of these relationships is a graph, and the graph topology carries information that flat or sequential representations discard. The same discipline still applies: the graph must be the graph the deployed system is actually allowed to know at prediction time, not a future-completed or retrospectively cleaned version of the relationship structure.
+
+\subsection{Message Passing: The Core Idea}
+
+Graph neural networks (GNNs) operate on the principle of \emph{message passing}: each node updates its representation by aggregating information from its neighbors. After $k$ rounds of message passing, a node's representation reflects information from its $k$-hop neighborhood. This is structurally analogous to convolution (local aggregation of neighboring values in a grid), but applied to irregular graph structure.
+
+\begin{definition}[Message Passing in Graphs]
+In a graph neural network with $k$ layers, a node $v$ at layer $\ell$ computes its new representation as:
+\[
+h_v^{(\ell+1)} = \text{COMBINE}\left( h_v^{(\ell)}, \text{AGGREGATE}\left( \{ h_u^{(\ell)} : u \in \text{Neighbors}(v) \} \right) \right)
+\]
+where AGGREGATE pools messages from neighbors (e.g., sum, mean, max) and COMBINE updates the node's state (e.g., via a neural network). After $k$ layers, each node's representation can depend on aggregated information from its $k$-hop neighborhood, though different neighborhoods may still collapse to the same representation if the aggregation is not expressive enough.
+\end{definition}
+
+The key design choices in a graph neural network are:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{What information to aggregate}: Node features, edge features, or both?
+  \item \textbf{How to combine}: Simple sum, weighted average, learned gating, or attention?
+  \item \textbf{How many rounds}: More rounds mean larger receptive fields (more distant neighbors), but also risk over-smoothing (all nodes become similar).
+\end{itemize}
+
+\subsection{When Graph Structure Matters}
+
+Graph-aware models outperform flat models (logistic regression on node features alone) or sequence models only when the relational structure carries predictive information that cannot be captured by node features alone. This is the critical audit question: does the graph structure actually matter for this task?
+
+\begin{example}[Molecular Property Prediction]
+Consider predicting the boiling point of a molecule from its atomic composition. Ethanol and dimethyl ether have the same formula, \(\mathrm{C_2H_6O}\), but very different bonding arrangements and boiling points. A ``bag-of-atoms'' model that counts carbon, hydrogen, and oxygen atoms cannot distinguish these isomers because it ignores structure. A graph model that represents atoms as nodes and bonds as edges can distinguish an O--H alcohol group from a C--O--C ether group. In this task, graph structure is essential. The audit would ask: what information does connectivity add beyond node features?
+\end{example}
+
+\begin{example}[Social Network Influence]
+In a social network, suppose the task is to predict whether a user will adopt a new behavior (e.g., install an app). A flat model using only user features (age, location, activity level) might perform reasonably. But if adoption depends on social influence (whether friends have adopted), a graph model that propagates information through the network will capture homophily and peer effects. Again, the audit asks: is the performance gain from graph structure significant enough to justify the added complexity? If a simple user-feature baseline already predicts adoption well, the graph may not add signal for this particular task.
+\end{example}
+
+\subsection{The Relational Audit}
+
+Before deploying a graph neural network, ask whether the graph itself is reliable, complete, and whether the task actually requires relational reasoning:
+
+\begin{decisionbox}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Is the graph structure reliable?} Do edges represent ground truth or noisy observations? In a citation network, are all citations captured, or are some missing due to database incompleteness? In a social network, are all follows recorded, or do private accounts hide edges?
+  \item \textbf{Are edges meaningful or spurious?} A link in a knowledge graph may be incorrect. A friendship in a social network may be inactive (they never interact). The audit must assess edge quality.
+  \item \textbf{Is the graph structure complete?} If a molecule has atoms in space but only bonds in the graph are represented, are non-bonded interactions (Van der Waals forces) important? If a supply chain graph omits informal supplier relationships, is the formal graph sufficient?
+  \item \textbf{Does the task actually require relational reasoning?} Run a baseline that uses only node features (ignoring edges). If that baseline performs nearly as well as the graph model, the graph structure may not carry useful signal for this task. This is an honest sanity check.
+\end{itemize}
+\end{decisionbox}
+
+\begin{practicalnote}
+Before training a graph neural network, always establish a non-relational baseline. Train a logistic regression or simple neural network on node features alone. If the graph model's improvement is small relative to split variability, run-to-run variability, or operational cost, the gain may not justify the added complexity, debugging effort, and deployment risk. A large and stable gain across splits, seeds, and important slices is stronger evidence that relational structure matters. The threshold is task-specific; the habit is to compare the gain with the uncertainty and the cost of using the graph.
+\end{practicalnote}
+
+\subsection{Limitations and Pitfalls}
+
+Graph neural networks come with three major limitations:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Over-smoothing}: Each message-passing layer propagates information from farther neighborhoods, but after many layers, all nodes' representations converge to a global average. This limits the effective depth of graph networks, often to 3--5 layers, even if the graph is much larger.
+  \item \textbf{Scalability}: Computing attention or aggregation over large neighborhoods is expensive. Real-world graphs (social networks with billions of edges, knowledge graphs with millions of nodes) require sampling strategies (neighborhood sampling, subgraph sampling) or partition-based approaches, which introduce approximation.
+  \item \textbf{The Graph Is an Assumption}: The observed graph is treated as ground truth, but it is really a modelling choice. If the graph is missing important edges (incomplete), includes spurious edges (noisy), or encodes the wrong relationships for the task, the model cannot overcome that. The graph structure itself should be audited before the model.
+\end{itemize}
+
+\begin{advancednote}
+Heterogeneous graphs (where nodes and edges have different types) require extended message passing: a bank transaction network might have ``person'' nodes and ``account'' nodes with different features, and edges representing different transaction types. Heterogeneous graph neural networks learn type-specific aggregation functions. The audit becomes more complex: the graph structure includes edge types, and the model's representation learning must respect that structure. Do not assume a standard GNN designed for homogeneous graphs will work well without modification.
+\end{advancednote}
 
 \section{Common Mistakes in Sequential Modeling}
 

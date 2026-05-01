@@ -41,6 +41,10 @@ Prerequisites:
 - discount factors and cumulative rewards
 - the Q-learning update rule
 
+Pre-lab primer:
+
+- If the Q-learning update was treated as optional in lecture, spend ten minutes on one hand update before running the gridworld. For current value `Q(s,a)`, reward `r`, discount `gamma`, best next value `max Q(s',a')`, and learning rate `alpha`, compute `target = r + gamma * max Q(s',a')`, then update `Q(s,a) <- Q(s,a) + alpha * (target - Q(s,a))`.
+
 ## Practical example
 
 `practical/rl_exploration_lab.ipynb`
