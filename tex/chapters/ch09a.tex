@@ -15,17 +15,6 @@ A recommender system is not a neutral mirror of user preferences. It is an activ
 \textbf{Exposure as allocation.} When evaluating a recommendation system, ask: who or what is being exposed, and who or what is being suppressed? Ranking is an allocation of user attention, and that allocation has consequences for content creators, students, job seekers, and anyone whose opportunities depend on being visible.
 \end{thinkingtool}
 
-\begin{learninggoals}
-\item Frame recommendation as a ranking problem and connect it to classification and retrieval.
-\item Explain collaborative filtering and its cold-start limitations.
-\item Describe matrix factorization as a latent-factor model for recommendation.
-\item Distinguish explicit from implicit feedback and explain why implicit feedback is harder to interpret.
-\item Identify exposure bias and explain how it corrupts both training data and evaluation.
-\item Interpret NDCG, MAP, and MRR as position-aware evidence for ranked lists.
-\item Explain why offline evaluation of recommender systems is unreliable without counterfactual correction.
-\item Construct a recommendation audit card documenting what the system exposes, suppresses, and amplifies.
-\end{learninggoals}
-
 \begin{practicalnote}
 \textbf{Depth guide.} The core target is to understand ranking as exposure allocation and to recognize the feedback-loop risks that ordinary classifiers do not create. Full-scale recommender optimization, production counterfactual logging, and marketplace fairness are natural project extensions.
 \end{practicalnote}
@@ -100,22 +89,22 @@ Student 3 & 4 &  &  & 5 \\
 
 The pedagogical question is: can the observed pattern suggest a plausible score for a missing entry, such as Student 1 on Resource B, without pretending that every blank is negative feedback? Matrix factorization answers by giving each student and each resource a small latent vector, then using vector compatibility to fill in plausible scores for unobserved pairs.
 
-Matrix factorization addresses the sparsity problem by learning latent factors for users and items. The interaction matrix $\mathbf{R}$ (users $\times$ items) is approximated as the product of two low-rank matrices:
+Matrix factorization addresses the sparsity problem by learning latent factors for users and items. The interaction matrix $R$ (users $\times$ items) is approximated as the product of two low-rank matrices:
 \[
-\mathbf{R} \approx \mathbf{U} \mathbf{V}^\top
+R \approx U V^\top
 \]
 
-where $\mathbf{U} \in \mathbb{R}^{m \times k}$ contains $k$-dimensional latent vectors for each of $m$ users, and $\mathbf{V} \in \mathbb{R}^{n \times k}$ contains $k$-dimensional latent vectors for each of $n$ items. The predicted rating for user $u$ on item $i$ is:
+where $U \in \mathbb{R}^{m \times k}$ contains $k$-dimensional latent vectors for each of $m$ users, and $V \in \mathbb{R}^{n \times k}$ contains $k$-dimensional latent vectors for each of $n$ items. The predicted rating for user $u$ on item $i$ is:
 \[
-\hat{r}_{ui} = \mathbf{u}_u^\top \mathbf{v}_i
+\hat{r}_{ui} = u_u^\top v_i
 \]
 
 The latent factors are learned by minimizing the reconstruction error on observed entries:
 \[
-\min_{\mathbf{U}, \mathbf{V}} \sum_{(u,i) \in \text{observed}} (r_{ui} - \mathbf{u}_u^\top \mathbf{v}_i)^2 + \lambda(\|\mathbf{U}\|_F^2 + \|\mathbf{V}\|_F^2)
+\min_{U, V} \sum_{(u,i) \in \text{observed}} (r_{ui} - u_u^\top v_i)^2 + \lambda(\|U\|_F^2 + \|V\|_F^2)
 \]
 
-The regularization term $\lambda(\|\mathbf{U}\|_F^2 + \|\mathbf{V}\|_F^2)$ uses squared Frobenius norms, meaning sums of squared entries in the user and item factor matrices. It prevents overfitting---without it, the model can memorize the observed ratings without learning generalizable structure.
+The regularization term $\lambda(\|U\|_F^2 + \|V\|_F^2)$ uses squared Frobenius norms, meaning sums of squared entries in the user and item factor matrices. It prevents overfitting---without it, the model can memorize the observed ratings without learning generalizable structure.
 
 \subsection{What the Latent Factors Mean}
 
@@ -136,7 +125,7 @@ Pure matrix factorization uses only the interaction data. But additional informa
 \begin{itemize}[leftmargin=*]
 \item \emph{Content-based features.} Use item attributes (resource type, topic, difficulty level) to compute item similarity, addressing the cold-start problem for new items.
 \item \emph{Context features.} Use temporal and contextual signals (time of day, device, position in the semester) to adjust recommendations.
-\item \emph{Deep learning models.} Neural collaborative filtering replaces the dot product $\mathbf{u}_u^\top \mathbf{v}_i$ with a neural network that takes user and item embeddings as input. This can capture nonlinear interactions but requires more data and is harder to interpret.
+\item \emph{Deep learning models.} Neural collaborative filtering replaces the dot product $u_u^\top v_i$ with a neural network that takes user and item embeddings as input. This can capture nonlinear interactions but requires more data and is harder to interpret.
 \end{itemize}
 
 \section{Implicit Feedback: The Missing-Data Problem}

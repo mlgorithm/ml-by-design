@@ -9,17 +9,6 @@ The previous chapters built systems that learn from labeled examples (supervised
 
 Reinforcement learning (RL) formalizes this kind of problem. The agent interacts with an environment, receives feedback in the form of rewards, and improves its behavior over time. This chapter introduces the core framework---Markov Decision Processes, value functions, and policy optimization---and then turns to the problem that makes RL hardest in practice: specifying a reward signal that actually captures what we care about. It ends with RLHF, a modern technique that connects RL to the foundation-model workflows introduced earlier in this part, and with an artifact---the Interaction Design Card---that forces practitioners to document the assumptions baked into any RL system before deployment.
 
-\begin{learninggoals}
-\item Understand when prediction alone is insufficient and why agents must learn from interaction.
-\item Formalize the reinforcement learning problem using states, actions, rewards, and the Markov Decision Process framework.
-\item Explain value functions, the Bellman equation, and the credit assignment problem in plain language and mathematical terms.
-\item Distinguish between value-based, policy-based, and actor-critic approaches to learning policies.
-\item Recognize the exploration-exploitation trade-off and how it differs from supervised learning's batch training regime.
-\item Identify reward design failures (misspecification, hacking, drift) and evaluate them critically using the ``what does the metric measure?'' principle.
-\item Understand RLHF as a modern method for aligning language models and see its connection to foundation models (Chapter~\ref{ch:representation-foundation-models}) and modalities (Chapters~\ref{ch:vision}--\ref{ch:audio-time}).
-\item Apply an Interaction Design Card to document and audit RL systems before deployment.
-\end{learninggoals}
-
 \section{Opening Dilemma: When Prediction Is Not Enough}
 
 Throughout this book, we have built systems that \emph{predict}. Given an image, predict whether it contains a pedestrian. Given a document, predict its topic. Given a student's interaction history, predict whether they will complete a course.
@@ -256,10 +245,11 @@ Instead of learning $Q$, we can directly learn a policy $\pi_\theta(a | s)$ by o
 J(\theta) = \mathbb{E}_{\tau \sim p_{\pi_\theta}}\left[\sum_{t=0}^{\infty} \gamma^t r_t\right].
 \]
 
-Let $\rho_{\pi_\theta}$ denote the discounted state-visitation distribution induced by policy $\pi_\theta$. The policy gradient theorem \citep{sutton2000policy} shows that one common state-action form of the gradient is:
+Let $\rho_{\pi_\theta}$ denote the (normalized) discounted state-visitation distribution induced by policy $\pi_\theta$. The policy gradient theorem \citep{sutton2000policy} shows that one common state-action form of the gradient is:
 \[
-\nabla_\theta J(\theta) = \mathbb{E}_{s \sim \rho_{\pi_\theta},\, a \sim \pi_\theta(\cdot|s)}\left[\nabla_\theta \log \pi_\theta(a | s) \cdot Q^{\pi_\theta}(s, a)\right].
+\nabla_\theta J(\theta) = \frac{1}{1-\gamma}\,\mathbb{E}_{s \sim \rho_{\pi_\theta},\, a \sim \pi_\theta(\cdot|s)}\left[\nabla_\theta \log \pi_\theta(a | s) \cdot Q^{\pi_\theta}(s, a)\right].
 \]
+The factor $1/(1-\gamma)$ comes from collapsing the trajectory sum into a state distribution; many practical implementations absorb it into the learning rate and write the expectation alone.
 
 In words: increase the log-probability of actions that led to high returns; decrease the log-probability of actions that led to low returns. Note that this gradient does not inherently encourage exploration---it simply reinforces what worked and penalizes what did not. Exploration must be added separately (e.g., by entropy regularization or by maintaining a stochastic policy). Without explicit encouragement to explore, policy gradient methods can converge prematurely to a narrow set of actions.
 \end{mathlens}
@@ -419,7 +409,7 @@ Practical workarounds include \emph{frame stacking}---feeding the agent several 
 
 Large language models from Chapter~\ref{ch:representation-foundation-models} are trained on next-token prediction, which does not directly optimize for user satisfaction. A model can be fluent but unhelpful, biased, or unsafe.
 
-Reinforcement Learning from Human Feedback (RLHF) is a modern technique that finetunes a language model to optimize a learned proxy for human preferences \citep{christiano2017,ouyang2022}. It should not be described as optimizing human values directly. The reward model is itself a model trained from limited comparisons, and PPO is one common historical optimization choice rather than the conceptual essence of preference-based alignment.
+Reinforcement Learning from Human Feedback (RLHF) is a modern technique that fine-tunes a language model to optimize a learned proxy for human preferences \citep{christiano2017,ouyang2022}. It should not be described as optimizing human values directly. The reward model is itself a model trained from limited comparisons, and PPO is one common historical optimization choice rather than the conceptual essence of preference-based alignment.
 
 \subsection{The RLHF Pipeline}
 
@@ -431,7 +421,7 @@ Reinforcement Learning from Human Feedback (RLHF) is a modern technique that fin
 
 \item \textbf{Train a reward model.} Learn a function $r_\theta(s, a)$ that predicts which of two outputs a human would prefer. This is supervised learning: $s$ is a prompt, $a$ is the model's response, and the label is the human's preference.
 
-\item \textbf{Optimize the policy with PPO.} Use the learned reward model as the RL objective. Run an RL algorithm such as Proximal Policy Optimization \citep[PPO;][]{schulman2017} to finetune the language model to maximize the reward model's predictions.
+\item \textbf{Optimize the policy with PPO.} Use the learned reward model as the RL objective. Run an RL algorithm such as Proximal Policy Optimization \citep[PPO;][]{schulman2017} to fine-tune the language model to maximize the reward model's predictions.
 
 \end{enumerate}
 
@@ -462,7 +452,7 @@ When optimizing the reward model, the language model might drift far from the or
 \[
 J = \mathbb{E}[r_\theta(s, a)] - \beta \cdot \text{KL}(\pi_\phi(\cdot | s) \| \pi_{\text{base}}(\cdot | s)),
 \]
-where $\pi_{\text{base}}$ is the original model. The penalty term encourages the finetuned model to stay close to the base model.
+where $\pi_{\text{base}}$ is the original model. The penalty term encourages the fine-tuned model to stay close to the base model.
 \end{failurebox}
 
 \begin{failurepattern}[Reward model hacking]
@@ -478,11 +468,11 @@ Detecting such gaming requires evaluating on out-of-distribution prompts where v
 \end{example}
 
 \begin{practicalnote}
-RLHF is computationally expensive (multiple forward/backward passes through both the language model and reward model, for many rollouts). In practice, practitioners often limit the amount of RL finetuning to a few thousand optimization steps, keeping compute manageable.
+RLHF is computationally expensive (multiple forward/backward passes through both the language model and reward model, for many rollouts). In practice, practitioners often limit the amount of RL fine-tuning to a few thousand optimization steps, keeping compute manageable.
 \end{practicalnote}
 
 \begin{sanitycheck}
-\textbf{Is RLHF necessary?} No. Supervised finetuning on high-quality human demonstrations often works nearly as well as RLHF and is cheaper. Use RLHF when preferences are easier to annotate than demonstrations (e.g., ``which response is better?'' vs.\ ``generate the ideal response''), or when you want to scale human feedback.
+\textbf{Is RLHF necessary?} No. Supervised fine-tuning on high-quality human demonstrations often works nearly as well as RLHF and is cheaper. Use RLHF when preferences are easier to annotate than demonstrations (e.g., ``which response is better?'' vs.\ ``generate the ideal response''), or when you want to scale human feedback.
 \end{sanitycheck}
 
 \section{The Chapter Artifact: Interaction Design Card}
