@@ -1,39 +1,47 @@
 \chapter{Generalization, Leakage, and Evaluation Discipline}
 \label{ch:evaluation-discipline}
 
-Once a task has been framed and its success criteria have been stated, a harder question remains: when does the evidence deserve trust? Strong numbers can reflect real learning, but they can also come from leakage, weak baselines, unstable splits, or a test set that quietly became part of development.
+Once a task has been framed and its success criteria stated, a harder question remains: when does the evidence deserve trust? Strong numbers can reflect real learning, but they can also come from leakage, weak baselines, unstable splits, or a test set that quietly became part of development.
 
-This chapter turns evaluation discipline into procedure. It defines what should count as new evidence, how train, validation, and test roles must remain separate, and which simple checks keep a promising result honest. By the end of the chapter, the reader should be able to write a minimal evaluation plan that makes a model claim credible on genuinely new data.
+This chapter turns evaluation discipline into procedure. It defines what should count as new evidence, why the train, validation, and test roles must stay separate, and which simple checks keep a promising result honest. By the end, the reader should be able to write a minimal evaluation plan that makes a model claim credible on genuinely new data.
 
 \begin{problemsolvinglens}
 Protect the claim by keeping development, external evidence, and baseline comparison separate. A strong-looking score is not enough if the workflow that produced it made the result too easy to win.
 \end{problemsolvinglens}
 
 \begin{thinkingtool}
-\textbf{Claim protection.} Before trusting a win, ask what part of the pipeline could have let future information, duplicate cases, excessive tuning, or a weak baseline make the score look better than it really is.
+\textbf{Claim protection.} Before trusting a win, ask what part of the pipeline could have let future information, duplicate cases, excessive tuning, or a weak baseline inflate the score.
 \end{thinkingtool}
 
 \section{Opening Dilemma: The Validation Score Looks Great. Can We Trust It?}
 
-Keep the same course-support setting in view from the first two chapters. Suppose a support team trains several early-warning models on historical course data and one of them produces excellent validation recall and a strong final test score. Before celebrating, the team still has to ask harder questions. Were the preprocessing steps learned only from the training data? Was the test set kept external until the end? Did the model beat a serious baseline or only an unrealistically weak comparison? Would the result still look strong next semester? Each later section of the chapter turns one of those questions into a procedural safeguard.
+Keep the course-support setting from the first two chapters in view. Suppose a support team trains several early-warning models on historical course data, and one of them produces excellent validation recall and a strong final test score. Before celebrating, the team still has to ask harder questions. Were the preprocessing steps learned only from the training data? Was the test set kept external until the end? Did the model beat a serious baseline or only an unrealistically weak comparison? Would the result still look strong next semester? Each later section turns one of those questions into a procedural safeguard.
 
-Those questions are not paperwork added after the model. They are what make the number mean anything.
+These questions are not paperwork added after the model. They are what make the number mean anything.
 
 \section{Can the Result Survive New Data? Generalization and Overfitting}
 
-The training loss tells us how well the model matches data it has already seen. The next judgment question is whether the result survives new examples.
+Training loss tells us how well the model matches data it has already seen. The next judgment question is whether the result survives new examples.
 
 \begin{definition}[Generalization]
 Generalization is the ability of a model to maintain good performance on unseen examples drawn from the same underlying problem as the training data.
 \end{definition}
 
-Two classic failure modes define the landscape. \emph{Underfitting} means the model is too simple, too restricted, or too poorly trained to capture even the main patterns in the training data. \emph{Overfitting} means the model matches the training data too closely, including noise or accidental details that do not hold for new data.
+Two classic failure modes define the landscape. \emph{Underfitting} means the model is too simple, too restricted, or too poorly trained to capture even the main patterns in the training data. \emph{Overfitting} means the model matches the training data too closely, including noise and accidental details that do not hold for new data.
 
-One way to see this is through the \emph{generalization gap}, the difference between training performance and performance on held-out data. A small gap does not guarantee excellence, but a large gap is a warning sign that the model has learned something too specific to the observed sample.
+One way to see this is the \emph{generalization gap}: the difference between training performance and performance on held-out data. A small gap does not guarantee excellence, but a large gap warns that the model has learned something too specific to the observed sample.
 
-Model capacity, meaning how complex a pattern the model can represent, plays a central role here. A more flexible model can represent more complicated functions. That flexibility is useful when the data contains real structure, but dangerous when the data is limited or noisy. Overfitting is not evidence of intelligence. It is evidence that the experimental setup allowed memorization or unstable pattern matching to masquerade as learning.
+Model capacity---how complex a pattern the model can represent---plays a central role. A more flexible model can represent more complicated functions. That flexibility helps when the data contains real structure, but it hurts when the data is limited or noisy. Overfitting is not evidence of intelligence. It is evidence that the experimental setup let memorization or unstable pattern matching masquerade as learning.
 
-If generalization is the real target, then evaluation cannot be improvised after training. It has to be built into the experimental workflow from the start.
+\begin{mathlens}
+\textbf{Bias--variance decomposition.} Underfitting and overfitting have a precise mathematical reading. For a regression target $y = f^*(x) + \epsilon$ with irreducible noise variance $\sigma^2$, the expected squared error of a learned predictor $\hat f$ at a point $x$ decomposes as
+\[
+\mathbb{E}\bigl[(y - \hat f(x))^2\bigr] = \underbrace{\bigl(\mathbb{E}[\hat f(x)] - f^*(x)\bigr)^2}_{\text{bias}^2} + \underbrace{\mathbb{E}\bigl[(\hat f(x) - \mathbb{E}[\hat f(x)])^2\bigr]}_{\text{variance}} + \underbrace{\sigma^2}_{\text{noise}},
+\]
+where the expectation is over training samples. \emph{Bias} measures systematic miss: a model class too restricted to represent the true function. \emph{Variance} measures sensitivity: how much the fit fluctuates as the training sample changes. Underfitting corresponds to high bias; overfitting to high variance. Total error is the sum; reducing one usually requires accepting a little of the other. The classification case is messier, but the same intuition---bias from a restricted model class, variance from finite-sample sensitivity---carries over.
+\end{mathlens}
+
+If generalization is the real target, evaluation cannot be improvised after training. It has to be built into the experimental workflow from the start.
 
 \begin{figure}[t]
 \centering
@@ -75,20 +83,20 @@ If generalization is the real target, then evaluation cannot be improvised after
 \end{figure}
 
 \begin{evidencebox}
-Zech et al.\ studied pneumonia detection from chest radiographs across multiple hospital systems and found that generalization changed substantially across institutions; they also analyzed how hospital-specific cues could act as confounders \citep{zech2018}. That is the chapter's lesson in real form: success on familiar held-out data is not the same as robust generalization after deployment.
+Zech et al.\ studied pneumonia detection from chest radiographs across multiple hospital systems. Generalization changed substantially across institutions, and hospital-specific cues acted as confounders \citep{zech2018}. That is the chapter's lesson in concrete form: success on familiar held-out data is not the same as robust generalization after deployment.
 \end{evidencebox}
 
 \section{Protected Evaluation Workflow}
 
-The next question is procedural rather than mathematical: how do we protect evaluation from development? The answer is the disciplined split between training, validation, and test data. This is the chapter's workflow spine, because every later safeguard depends on these roles staying distinct. The \emph{training set} is used to fit parameters. The \emph{validation set} is used to choose tuning settings, model structures, thresholds, or stopping points. The \emph{test set} is reserved for the final report after the important decisions are already made.
+The next question is procedural rather than mathematical: how do we protect evaluation from development? The answer is the disciplined split between training, validation, and test data. This is the chapter's workflow spine, because every later safeguard depends on these roles staying distinct. The \emph{training set} fits parameters. The \emph{validation set} chooses tuning settings, model structures, thresholds, or stopping points. The \emph{test set} is reserved for the final report after the important decisions are already made.
 
 \begin{practicalnote}
-The workflow is simple enough to say plainly: split first, fit preprocessing on train only, train candidate models on train, choose among them on validation, and touch the test set once at the end.
+The workflow is simple enough to state plainly: split first, fit preprocessing on train only, train candidate models on train, choose among them on validation, and touch the test set once at the end.
 \end{practicalnote}
 
-Students often understand those definitions and still run the workflow incorrectly. The key is not only what the sets are called. The key is the order in which they are used. The names matter less than the boundary: once information crosses from held-out evidence back into development, the claim is weaker even if the code still runs cleanly.
+Students often understand the definitions and still run the workflow incorrectly. What matters is not only the names of the sets but the order in which they are used. Once information crosses from held-out evidence back into development, the claim is weaker even when the code runs cleanly.
 
-A protected test set matters not just procedurally but statistically. When a bounded metric is averaged over independent held-out examples, its empirical value concentrates around the true expected performance.
+A protected test set matters statistically as well as procedurally. When a bounded metric is averaged over independent held-out examples, its empirical value concentrates around the true expected performance.
 
 \begin{theorem}[Hoeffding Bound for Held-Out Evaluation {\citep{hoeffding1963}}]
 Let $Z_1,\ldots,Z_n$ be independent random variables with $0 \le Z_i \le 1$, and let
@@ -101,7 +109,7 @@ P\!\left(\left|\bar{Z}-\mathbb{E}[\bar{Z}]\right|\ge \varepsilon\right)\le 2e^{-
 \]
 \end{theorem}
 
-The practical point is not that a held-out score becomes infallible, but that an untouched test set gives a statistically interpretable estimate of performance. Repeated reuse of that same test set weakens exactly that interpretation.
+The practical point is not that a held-out score is infallible. It is that an untouched test set gives a statistically interpretable estimate of performance, and that repeated reuse of the same test set destroys that interpretation.
 
 If the held-out metric is an average of bounded per-example quantities, such as accuracy indicators or a loss rescaled into $[0,1]$, this inequality explains why larger protected test sets produce more stable evidence and why repeated peeking at the same hold-out set is so damaging.
 
@@ -110,7 +118,7 @@ For a rough scale check, plug in \(\varepsilon=0.10\). With \(n=100\) held-out e
 \[
 P(|\bar Z-\mathbb{E}\bar Z|\ge 0.10)\le 2e^{-2}=0.27.
 \]
-With \(n=1000\), the same deviation bound becomes \(2e^{-20}\), essentially zero for practical purposes. This does not mean the estimate is unbiased under distribution shift, duplicate examples, leakage, or test-set reuse. It only says that, under the stated independence and boundedness assumptions, larger untouched samples make random sampling noise smaller.
+With \(n=1000\), the same deviation bound becomes \(2e^{-20}\), essentially zero in practice. This does not mean the estimate is unbiased under distribution shift, duplicate examples, leakage, or test-set reuse. Under the stated independence and boundedness assumptions, larger untouched samples merely shrink random sampling noise.
 \end{mathlens}
 
 Here \emph{preprocessing} means data transformations such as scaling, normalization, or feature extraction that are learned from the training data and then applied unchanged to validation and test data.
@@ -191,7 +199,7 @@ final_score = evaluate_once(chosen_model, test_ready)
 print(final_score)
 \end{codeexample}
 
-Cross-validation is a useful extension when data is limited. Instead of relying on one validation split, the training data is partitioned into several folds, meaning several train-validation partitions, and the validation role is rotated across them. Even then, a final untouched test set remains valuable when possible.
+Cross-validation is a useful extension when data is limited. Instead of relying on one validation split, the training data is partitioned into several folds (several train-validation partitions), and the validation role is rotated across them. A final untouched test set remains valuable when possible.
 
 \begin{practicalnote}
 Chapter~\ref{ch:evaluation-discipline} establishes minimal experimental discipline for one credible result. Chapter~\ref{ch:experiments-claims} returns to the same logic at larger scale with repeated runs, ablations, slice analysis, and stronger empirical claims.
@@ -199,13 +207,13 @@ Chapter~\ref{ch:evaluation-discipline} establishes minimal experimental discipli
 
 \section{How Experiments Lie: Leakage}
 
-Data leakage occurs when information from outside the legitimate training process reaches the model or the experiment design. Leakage is dangerous because it often produces excellent-looking results for the wrong reason. The cleanest way to think about it is as a broken boundary: some information that should have stayed outside development was allowed back in.
+Data leakage occurs when information from outside the legitimate training process reaches the model or the experiment design. It is dangerous because it tends to produce excellent-looking results for the wrong reason. The cleanest way to think about leakage is as a broken boundary: information that should have stayed outside development was allowed back in.
 
-Common forms of leakage are straightforward once the boundary is clear: normalizing or scaling the full dataset before the train-test split, selecting features using all examples before separating the test set, using duplicate or near-duplicate examples across training and test data, allowing future information into a prediction task that should use only past information, or tuning repeatedly on the test set until the score looks good.
+Common forms of leakage become clear once the boundary is clear: normalizing or scaling the full dataset before the train-test split; selecting features using all examples before separating the test set; using duplicate or near-duplicate examples across training and test data; letting future information enter a prediction task that should use only past information; or tuning repeatedly on the test set until the score looks good.
 
-The fourth item---\emph{temporal leakage}---deserves a brief forward reference: Chapter~\ref{ch:reliability} returns to it in the context of concept drift and deployment shift, where the same logic that forbids training on future labels also explains why time-ordered evaluation splits are essential whenever the deployment environment evolves.
+The fourth item---\emph{temporal leakage}---earns a brief forward reference. Chapter~\ref{ch:reliability} returns to it under concept drift and deployment shift, where the same logic that forbids training on future labels also explains why time-ordered evaluation splits matter whenever the deployment environment evolves.
 
-Leakage is not a small classroom mistake. Bernett et al.\ present it as a recurring threat to validity in machine learning for biology and argue that guarding against it is central to trustworthy evaluation and reproducibility \citep{bernett2024}. The setting in their paper is biological ML, but the lesson is completely general.
+Leakage is not a small classroom mistake. Bernett et al.\ present it as a recurring threat to validity in machine learning for biology and argue that guarding against it is central to trustworthy evaluation and reproducibility \citep{bernett2024}. Their setting is biological ML, but the lesson is general.
 
 \begin{figure}[t]
 \centering
@@ -272,12 +280,12 @@ test_data = scaler.transform(test_data)
 \end{codeexample}
 
 \begin{warningbox}
-Leakage does not merely make a result slightly noisy. It can destroy the meaning of the experiment. A leaked benchmark score is not a weaker scientific claim; it is often no scientific claim at all.
+Leakage does not merely add noise. It can destroy the meaning of the experiment. A leaked benchmark score is not a weaker scientific claim; often it is no scientific claim at all.
 \end{warningbox}
 
 \section{Baseline Ladder and Sanity Checks}
 
-A clean pipeline is necessary, but it is not sufficient; the result still needs an honest comparison point. Before trusting a sophisticated model, ask how well simple serious baselines perform. Always predicting the majority class, using a simple weighted linear model, or fitting a small decision tree can reveal whether the task is easy, imbalanced, or poorly specified. A random predictor belongs in a different category: it is a sanity check that can catch a broken pipeline, not a serious rung in the ladder. The ladder is not a ritual of humility for its own sake. It is a way to make sure the final claim is about real added value rather than about avoiding an obvious comparison.
+A clean pipeline is necessary but not sufficient. The result still needs an honest comparison point. Before trusting a sophisticated model, ask how well simple serious baselines perform. Always predicting the majority class, using a simple weighted linear model, or fitting a small decision tree can reveal whether the task is easy, imbalanced, or poorly specified. A random predictor belongs in a different category: it is a sanity check that catches a broken pipeline, not a serious rung in the ladder. The ladder is not a ritual of humility. It makes sure the final claim is about real added value rather than about avoiding an obvious comparison.
 
 \begin{table}[t]
 \centering
@@ -297,21 +305,21 @@ Only then a complex model & Whether additional complexity is buying something re
 \label{tab:baseline-ladder}
 \end{table}
 
-Baselines are not only practical convenience. They are part of the philosophy of evidence. They show whether the new method actually improves on something simple, expose hidden issues such as class imbalance or weak labels, and anchor interpretation. A score of $85\%$ may be excellent or trivial depending on the baseline.
+Baselines are more than practical convenience. They are part of the philosophy of evidence. They show whether the new method actually improves on something simple, expose hidden issues such as class imbalance or weak labels, and anchor interpretation. A score of $85\%$ may be excellent or trivial depending on the baseline.
 
-The same habit appears in good course design and good benchmark practice. Starter baselines, public datasets, and example solutions do not make the work trivial. They make the claim legible.
+The same habit shows up in good course design and good benchmark practice. Starter baselines, public datasets, and example solutions do not make the work trivial. They make the claim legible.
 
 \begin{practicalnote}
-Two sanity checks should become automatic. First, run a \emph{shuffled-label check}: randomly reassign the labels and confirm that performance collapses toward a non-informative baseline. If it does not, the pipeline is broken. Second, inspect \emph{split stability}: if validation performance swings wildly under small changes in the train-validation split, the setup may be too fragile for a strong conclusion.
+Two sanity checks should become automatic. First, run a \emph{shuffled-label check}: randomly reassign the labels and confirm that performance collapses toward a non-informative baseline. If it does not, the pipeline is broken. Second, inspect \emph{split stability}: if validation performance swings wildly under small changes in the train-validation split, the setup is too fragile for a strong conclusion.
 \end{practicalnote}
 
 \begin{warningbox}
-The shuffled-label sanity check works as follows: split first; randomly permute only the training labels so they no longer correspond to the training inputs; retrain the model from scratch; evaluate on the unchanged validation set; compare against the metric-specific null baseline; and repeat if variance is high. If the model still achieves non-trivial performance on the validation set, the pipeline is broken---it is learning from data artifacts (leaky features, duplicate rows, or preprocessing that encodes the target) rather than genuine signal. A properly constructed pipeline should fall back to the weak baseline implied by the metric and class balance, not retain meaningful predictive power.
+The shuffled-label sanity check runs as follows. Split first. Randomly permute only the training labels so they no longer correspond to the training inputs. Retrain the model from scratch. Evaluate on the unchanged validation set. Compare against the metric-specific null baseline, and repeat if variance is high. If the model still achieves non-trivial performance, the pipeline is broken: it is learning from data artifacts (leaky features, duplicate rows, or preprocessing that encodes the target) rather than genuine signal. A properly constructed pipeline should fall back to the weak baseline implied by the metric and class balance, not retain meaningful predictive power.
 \end{warningbox}
 
 \section{When Good Numbers Still Support Weak Claims}
 
-By this point in the chapter, the reader has seen that no single number settles evaluation. It helps to make that lesson explicit through a small gallery of common metric traps. A correct metric can still be the wrong summary if it leaves the operational question untouched.
+By now the reader has seen that no single number settles evaluation. It helps to make that lesson explicit through a small gallery of common metric traps. A correct metric can still be the wrong summary if it leaves the operational question untouched.
 
 \begin{table}[t]
 \centering
@@ -331,26 +339,26 @@ Lower loss or better log loss & Average prediction quality improved & The action
 \end{table}
 
 \begin{example}[High Accuracy, No Useful Screening]
-A screening model evaluated on a heavily imbalanced dataset may report very high accuracy by predicting the majority class almost all the time. The metric is not numerically wrong. It is simply answering the wrong practical question.
+A screening model on a heavily imbalanced dataset may report very high accuracy by predicting the majority class almost all the time. The metric is not numerically wrong. It is answering the wrong practical question.
 \end{example}
 
 \begin{example}[Strong Ranking, Weak Top-of-Queue Policy]
-A triage model can achieve a strong ranking score overall and still place too few true urgent cases in the top twenty reviewed items if prevalence is low or the score distribution is compressed near the operational cutoff. In that setting, the aggregate ranking summary is not enough. The top-of-queue behavior is the real test.
+A triage model can achieve a strong ranking score overall yet still place too few urgent cases in the top twenty reviewed items, especially when prevalence is low or the score distribution is compressed near the operational cutoff. The aggregate ranking summary is not enough. Top-of-queue behavior is the real test.
 \end{example}
 
 \begin{example}[Better Loss, Worse Operational Region]
-A probability model may reduce average log loss while becoming slightly worse calibrated exactly in the score range that triggers human escalation. If decisions are made in that region, the lower loss does not automatically imply a better system.
+A probability model may reduce average log loss while becoming slightly worse calibrated in exactly the score range that triggers human escalation. If decisions are made in that region, the lower loss does not imply a better system.
 \end{example}
 
-The lesson is not that metrics are untrustworthy. The lesson is that every metric answers a narrower question than students first assume. Good evaluation therefore asks not only ``what is the score?'' but also ``what behavior is this score summarizing, and what important behavior is still outside it?''
+The lesson is not that metrics are untrustworthy. Every metric answers a narrower question than students first assume. Good evaluation asks not only ``what is the score?'' but also ``what behavior is this score summarizing, and what important behavior is still outside it?''
 
 \begin{thinkingtool}
-\textbf{Claim failure gallery.} Whenever a headline number looks persuasive, name one failure mode it cannot rule out. If no such failure mode comes to mind, the evaluation may still be too shallowly understood.
+\textbf{Claim failure gallery.} Whenever a headline number looks persuasive, name one failure mode it cannot rule out. If no such failure mode comes to mind, the evaluation is still shallowly understood.
 \end{thinkingtool}
 
 \section{Chapter Artifact: A Minimal Evaluation Plan}
 
-By the end of Chapter 3, the reader should be able to write a short evaluation plan before reporting any result. The goal is not paperwork. The goal is to make the claim explicit enough that weak evidence and procedural mistakes become visible early. This is the point where decision context, threshold as policy, leakage control, and the baseline ladder become one reusable document. Chapter 2 said what good behavior would look like; Chapter 3 says what workflow and evidence would justify believing that behavior is real.
+By the end of this chapter, the reader should be able to write a short evaluation plan before reporting any result. The goal is not paperwork. The goal is to state the claim explicitly enough that weak evidence and procedural mistakes become visible early. This is where decision context, threshold as policy, leakage control, and the baseline ladder come together as one reusable document. Chapter~\ref{ch:prediction-loss-decision} said what good behavior would look like; this chapter says what workflow and evidence would justify believing that behavior is real.
 
 \begin{table}[t]
 \centering
@@ -397,15 +405,15 @@ For the student-support framing from Chapter~\ref{ch:framing-learning-problems},
 
 \section{Common Mistakes in Evaluation}
 
-Several evaluation mistakes recur often enough to name directly. The first is optimizing one quantity and quietly reporting another, as if improvement in training loss automatically settled the deployment question. The second is letting the test set become a teacher: once test results influence model choice, the final number stops functioning as external evidence. A third is reporting one clean metric and letting it hide tradeoffs in calibration, rare-case performance, or operational thresholding. Finally, weak baselines and uninspected leakage can make an apparently strong result much easier to achieve than the report suggests.
+Several evaluation mistakes recur often enough to name directly. The first is optimizing one quantity and quietly reporting another, as if an improvement in training loss settled the deployment question. The second is letting the test set become a teacher: once test results influence model choice, the final number stops functioning as external evidence. The third is reporting one clean metric and letting it hide tradeoffs in calibration, rare-case performance, or operational thresholding. Finally, weak baselines and uninspected leakage can make an apparently strong result much easier to achieve than the report suggests.
 
 \section{Looking Ahead}
 
-This chapter made evaluation discipline explicit: generalization, protected evidence, leakage control, baselines, and claim design. With the claim now protected, the next question is modeling economy: what is the simplest serious model that deserves to make that claim?
+This chapter made evaluation discipline explicit: generalization, protected evidence, leakage control, baselines, and claim design. With the claim now protected, the next question is modeling economy. What is the simplest serious model that deserves to make that claim?
 
 \section*{Chapter Summary}
 
-Chapter 3 shifts the focus from judging model behavior to judging the evidence for that judgment. Training fit is not enough; the real standard is generalization, which is why train, validation, and test roles must remain protected and why leakage, weak baselines, and repeated test-set tuning are so damaging. The chapter also treats sanity checks and simple baselines as part of interpretation rather than as optional extras. Its endpoint is a minimal evaluation plan that makes the claim, the split protocol, the leakage controls, and the comparison standard explicit before any result is presented.
+This chapter shifts the focus from judging model behavior to judging the evidence for that judgment. Training fit is not enough; the real standard is generalization. That is why train, validation, and test roles must remain protected and why leakage, weak baselines, and repeated test-set tuning are so damaging. Sanity checks and simple baselines are part of interpretation, not optional extras. The chapter ends with a minimal evaluation plan that makes the claim, the split protocol, the leakage controls, and the comparison standard explicit before any result is presented.
 
 \begin{studyquestions}
 \item Why is generalization a better judgment question than training loss alone?
@@ -418,11 +426,12 @@ Chapter 3 shifts the focus from judging model behavior to judging the evidence f
 
 \begin{exercises}
 \item \exercisetag{Design}{Intermediate}Design a train-validation-test workflow for a small tabular dataset. State clearly which choices may use the validation set and which choices must not use the test set.
-\item \exercisetag{Diagnosis}{Advanced}A researcher scales all input features using the mean and variance of the entire dataset before creating train and test splits. Explain why this is leakage.
+\item \exercisetag{Diagnosis}{Advanced}A researcher scales all input features using the mean and variance of the entire dataset before creating train and test splits. Explain why this is leakage and what it conceals about the test result.
 \item \exercisetag{Concept}{Core}Give one example of a weak baseline and one example of a serious baseline for the same task. Explain what each one would and would not tell you.
 \item \exercisetag{Design}{Intermediate}Propose two sanity checks for a model-development workflow in a domain of your choice, and explain what failure on each check would mean.
 \item \exercisetag{Diagnosis}{Intermediate}Use a public task such as sports-shot prediction or news topic classification and state one sensible primary metric, one possible secondary metric, and one failure mode the headline metric cannot rule out.
 \item \exercisetag{Design}{Intermediate}Write a one-page evaluation plan using Table~\ref{tab:evaluation-plan} for either spam filtering, course support, or another application of your choice. If you are carrying one case through the book, write this for the same case as your framing memo and metric-and-action worksheet so the three documents can be read together.
+\item \exercisetag{Implementation}{Core}Build a leakage canary you can rerun on any new pipeline. On a small public tabular dataset (e.g., \texttt{sklearn.datasets.load\_breast\_cancer}), write a function \verb|shuffled_label_score(X, y, model)| that randomly permutes \verb|y| inside each cross-validation fold, fits the model, and returns the mean validation accuracy. Run it 20 times and plot the histogram of returned scores. Verify that the distribution is centered near the chance rate (here $\approx 0.63$ since the classes are imbalanced) rather than near the unshuffled accuracy; explain in two sentences what a non-chance result would have indicated about your evaluation harness.
 \end{exercises}
 
 \begin{challengeexercises}

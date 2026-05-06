@@ -1,19 +1,19 @@
 \chapter*{Mathematical Bridge II: Probability, Risk, and Learning Signals}
 \addcontentsline{toc}{chapter}{Mathematical Bridge II: Probability, Risk, and Learning Signals}
 
-This bridge gives the probability and optimization vocabulary that later training objectives will assume. By the end, the reader should be able to distinguish clearly between a score, a probability, a decision rule, a pointwise loss, and a dataset-level training objective; read conditional probability and expectation in plain language before manipulating formulas; explain why logarithms, exponentials, sigmoid-style transformations, and cross-entropy appear naturally in ML; interpret empirical risk as the average training signal over a dataset rather than as an abstract formula to memorize; and read gradients and the chain rule as credit-assignment tools for reducing training loss. The functional view of predictors and risks, and the contrast between generative and discriminative models with priors and MAP as preview vocabulary, are second-pass material---useful for later chapters but not required before continuing.
+This bridge gives the probability and optimization vocabulary that later training objectives assume. By the end, the reader should be able to distinguish a score, a probability, a decision rule, a pointwise loss, and a dataset-level training objective; read conditional probability and expectation in plain language before touching formulas; explain why logarithms, exponentials, sigmoid-style transformations, and cross-entropy appear naturally in ML; treat empirical risk as the average training signal over a dataset rather than an abstract formula to memorize; and read gradients and the chain rule as credit-assignment tools for reducing training loss. The functional view of predictors and risks, along with the generative/discriminative contrast and priors and MAP as preview vocabulary, is second-pass material. It is useful for later chapters but not required before continuing.
 
 \begin{prereqbridge}
-Use this chapter as just-in-time review: read it now if probability or training-signal notation feels thin, or return when later chapters start leaning on loss, calibration, and gradients. This chapter assumes comfort with fractions, ratios, and the idea of an average. Familiarity with logarithms is helpful; they are introduced with worked examples. Calculus (derivatives) appears only in a few short derivations, especially the gradient section, and is explained from scratch when it appears. Students who have taken probability theory before should read the chapter anyway: the AI-specific vocabulary (loss, empirical risk, gradient as credit signal) differs from the standard probability course framing.
+Use this chapter as just-in-time review. Read it now if probability or training-signal notation feels thin, or return when later chapters start leaning on loss, calibration, and gradients. The chapter assumes comfort with fractions, ratios, and the idea of an average. Familiarity with logarithms helps; we introduce them with worked examples. Calculus (derivatives) appears only in a few short derivations, especially the gradient section, and we explain it from scratch when it appears. Students who have already taken probability should still read the chapter. The AI-specific vocabulary---loss, empirical risk, gradient as credit signal---differs from the standard probability course framing.
 \end{prereqbridge}
 
 \begin{practicalnote}
-\textbf{Core path.} For a first pass, focus on scores, probabilities, decisions, losses, empirical risk, and gradients as training signals. The functional viewpoint, generative/discriminative contrast, priors, and MAP are orientation material for later chapters; they can be skimmed until those later chapters need them.
+\textbf{Core path.} On a first pass, focus on scores, probabilities, decisions, losses, empirical risk, and gradients as training signals. The functional viewpoint, the generative/discriminative contrast, priors, and MAP are orientation material---skim them until later chapters need them.
 \end{practicalnote}
 
-Many students meet probability and optimization in fragments. One course teaches conditional probability. Another introduces derivatives. A machine-learning lecture suddenly writes down log loss, empirical risk, and gradient descent as if the connection were obvious. This chapter slows that chain down.
+Most students meet probability and optimization in fragments. One course teaches conditional probability. Another introduces derivatives. Then a machine-learning lecture writes down log loss, empirical risk, and gradient descent as if the connection were obvious. This chapter slows that chain down.
 
-The goal is not to flood the reader with formalism. The goal is to make later training objectives readable. When a later chapter writes down a loss, a score, a calibration curve, or a gradient update, the student should be able to answer three questions immediately:
+The goal is not to flood the reader with formalism. It is to make later training objectives readable. When a later chapter writes down a loss, a score, a calibration curve, or a gradient update, the student should be able to answer three questions immediately:
 
 \begin{itemize}[leftmargin=*]
 \item What uncertain quantity is being modeled?
@@ -22,36 +22,36 @@ The goal is not to flood the reader with formalism. The goal is to make later tr
 \end{itemize}
 
 \begin{problemsolvinglens}
-Separate five objects that students often collapse together: the model score, the probability interpretation of that score, the decision rule that acts on it, the pointwise loss on one example, and the dataset-level objective minimized during training.
+Separate five objects that students collapse together: the model score, the probability interpretation of that score, the decision rule that acts on it, the pointwise loss on one example, and the dataset-level objective minimized during training.
 \end{problemsolvinglens}
 
 \begin{thinkingtool}
-\textbf{Loss as learning signal.} A loss is not the final judgment of the system. It is the message training uses to say, ``this prediction behaved well'' or ``this prediction behaved badly.'' The message should be interpreted before it is optimized.
+\textbf{Loss as learning signal.} A loss is not the final judgment of the system. It is the message training uses to say ``this prediction behaved well'' or ``this prediction behaved badly.'' Interpret the message before optimizing it.
 \end{thinkingtool}
 
-Keep the chapter artifact in view from the start. As later sections separate score, probability, decision rule, pointwise loss, and dataset objective, the goal is to fill a \emph{learning-signal card} rather than to memorize disconnected formulas.
+Keep the chapter artifact in view from the start. As later sections separate score, probability, decision rule, pointwise loss, and dataset objective, the goal is to fill a \emph{learning-signal card}---not to memorize disconnected formulas.
 
 \section*{Opening Question: What Does A Score Like 0.8 Mean?}
 
 Suppose a model outputs \(0.8\) for a student, an email, or a medical case. That number could mean several different things.
 
 \begin{itemize}[leftmargin=*]
-\item It could be an uncalibrated score: larger means riskier, but the number is not yet an honest probability.
-\item It could be a probability estimate: about \(80\%\) of comparable cases are expected to be positive.
-\item It could be the input to a decision rule: act if the number is above some threshold.
+\item An uncalibrated score: larger means riskier, but the number is not yet an honest probability.
+\item A probability estimate: about \(80\%\) of comparable cases are expected to be positive.
+\item Input to a decision rule: act when the number is above some threshold.
 \end{itemize}
 
-Those are three different interpretations. Later modeling mistakes often begin when they are treated as the same thing.
+Three different interpretations. Many modeling mistakes begin when they get treated as the same thing.
 
 This bridge chapter therefore starts with language. A model output is not automatically a trustworthy probability, and a probability is not automatically a decision.
 
 \section*{Conditional Probability In Plain Language}
 
-Machine-learning prediction usually asks about uncertainty \emph{given} observed information. The notation
+Machine-learning prediction asks about uncertainty \emph{given} observed information. The notation
 \[
 P(y=1 \mid x)
 \]
-is read as ``the probability that the target is positive given the observed input \(x\).''
+reads as ``the probability that the target is positive given the observed input \(x\).''
 
 The vertical bar means ``given.'' That is the central operational idea.
 
@@ -64,12 +64,12 @@ The vertical bar means ``given.'' That is the central operational idea.
 Conditional probability matters because AI systems do not predict labels in a vacuum. They predict them given whatever evidence the representation makes available.
 
 \begin{prereqbridge}
-If the notation feels dense, translate it immediately into a sentence: ``given the evidence we observed, how plausible is the target event?'' That plain sentence is the main idea. The notation is only the compact version.
+If the notation feels dense, translate it into a sentence: ``given the evidence we observed, how plausible is the target event?'' That sentence is the main idea. The notation is just the compact version.
 \end{prereqbridge}
 
 \section*{Expectation As Average Consequence}
 
-Expectation is the language of average consequence. If a quantity can vary, its expectation summarizes the average value we would expect across repeated comparable cases.
+Expectation is the language of average consequence. When a quantity varies, its expectation summarizes the average value across repeated comparable cases.
 
 This idea appears constantly in AI:
 
@@ -80,41 +80,41 @@ This idea appears constantly in AI:
 \item average outcome under a probabilistic forecast.
 \end{itemize}
 
-Suppose a support team can contact one student. Contacting a truly struggling student creates \(+5\) units of benefit, while contacting a student who did not need help costs \(-1\) unit of attention. If a model estimates a \(0.8\) chance that the student truly needs help, then the expected value of contacting is
+Suppose a support team can contact one student. Contacting a truly struggling student creates \(+5\) units of benefit; contacting a student who did not need help costs \(-1\) unit of attention. If a model estimates a \(0.8\) chance that the student truly needs help, the expected value of contacting is
 \[
 0.8(5) + 0.2(-1) = 4 - 0.2 = 3.8.
 \]
 
-The purpose of this calculation is not to claim that life has units called \(3.8\). The purpose is to show how uncertain outcomes become decision-relevant through expected consequence.
+This calculation does not claim that life has units called \(3.8\). It shows how uncertain outcomes become decision-relevant through expected consequence.
 
 \section*{Base Rates, Bayes Decisions, and Cost-Sensitive Action}
 
-Probability and action are different things. A model may produce a well-calibrated probability estimate, yet the right action can still differ across teams, deployments, and time periods, even when the probability stays the same.
+Probability and action are different things. A model can produce a well-calibrated probability estimate, yet the right action can still differ across teams, deployments, and time periods, even when the probability stays the same.
 
-The bridge from probability to action goes through three factors: the estimated probability, the costs of the available actions, and the prevalence and workload context of deployment.
+The bridge from probability to action runs through three factors: the estimated probability, the costs of the available actions, and the prevalence and workload context of deployment.
 
-Consider the student-support example. Suppose the model assigns a probability of $0.35$ to the event that a student will disengage. Is that high enough to trigger an outreach call?
+Consider the student-support example. Suppose the model assigns probability $0.35$ to a student disengaging. Is that high enough to trigger an outreach call?
 
-That question cannot be answered from the probability alone. It depends on:
+The probability alone cannot answer the question. The answer depends on:
 \begin{itemize}[leftmargin=*]
-\item the benefit of a correct intervention: if it prevents serious academic harm, the benefit is large,
-\item the cost of a false alarm: staff time and student inconvenience,
-\item the prevalence and workload context: if $30\%$ of students routinely score near $0.35$, routine outreach may be sustainable; if only $2\%$ ever reach that level, the same policy creates a very different workload.
+\item the benefit of a correct intervention---large if it prevents serious academic harm,
+\item the cost of a false alarm---staff time and student inconvenience,
+\item the prevalence and workload context. If $30\%$ of students routinely score near $0.35$, routine outreach may be sustainable. If only $2\%$ ever reach that level, the same policy creates a very different workload.
 \end{itemize}
 
 \begin{example}[Same Probability, Different Action]
-A medical triage team and a marketing team both receive a model score of $0.35$. The medical team decides to escalate because missing a true case has a severe consequence and resources are available. The marketing team decides not to act because their cost-per-contact is high relative to the expected value of conversion at $35\%$ likelihood. Same probability, different correct action. The model output did not contain the action. The action required a cost structure on top of the probability.
+A medical triage team and a marketing team both receive a model score of $0.35$. The medical team escalates because missing a true case has severe consequences and resources are available. The marketing team does not act because their cost-per-contact is high relative to the expected value of conversion at $35\%$ likelihood. Same probability, different correct action. The model output did not contain the action. The action required a cost structure on top of the probability.
 \end{example}
 
-Bayes-optimal decisions formalize this idea. In the simplest binary setup, suppose the model score is already the calibrated posterior probability of the positive class, correct decisions carry no extra utility beyond avoiding mistakes, and the relevant costs are $C_{FP}$ (cost of a false positive) and $C_{FN}$ (cost of a false negative). Then the optimal threshold $\tau$ satisfies
+Bayes-optimal decisions formalize this idea. In the simplest binary setup, assume the model score is already the calibrated posterior probability of the positive class, correct decisions carry no extra utility beyond avoiding mistakes, and the relevant costs are $C_{FP}$ (false positive) and $C_{FN}$ (false negative). The optimal threshold $\tau$ then satisfies
 \[
 \tau = \frac{C_{FP}}{C_{FP} + C_{FN}}.
 \]
-The derivation is only an expected-cost comparison. If the posterior probability of the positive class is \(p\), predicting positive has expected mistake cost \((1-p)C_{FP}\), while predicting negative has expected mistake cost \(pC_{FN}\). Predict positive when
+The derivation is just an expected-cost comparison. If the posterior probability of the positive class is \(p\), predicting positive has expected mistake cost \((1-p)C_{FP}\), and predicting negative has expected mistake cost \(pC_{FN}\). Predict positive when
 \[
 (1-p)C_{FP} < pC_{FN}.
 \]
-Solving this inequality gives the threshold above. If false negatives are nine times more costly than false positives, the optimal threshold is \(1/(1+9)=0.1\), not \(0.5\). The default threshold of \(0.5\) therefore encodes an implicit equal-cost assumption that is often wrong in practice. Base-rate changes still matter, but they matter through the calibrated posterior probabilities the threshold is applied to.
+Solving this inequality gives the threshold above. If false negatives cost nine times more than false positives, the optimal threshold is \(1/(1+9)=0.1\), not \(0.5\). The default threshold of \(0.5\) therefore encodes an implicit equal-cost assumption that is often wrong in practice. Base-rate changes still matter, but they enter through the calibrated posterior probabilities the threshold is applied to.
 
 \begin{example}[A Small Bayes Calculation]
 Suppose only \(10\%\) of messages in a course-support queue are truly urgent. A keyword such as ``deadline'' appears in \(60\%\) of urgent messages and \(20\%\) of non-urgent messages. If a new message contains that keyword, Bayes' rule gives
@@ -123,29 +123,29 @@ P(\text{urgent}\mid\text{keyword}) =
 \frac{0.60 \cdot 0.10}{0.60 \cdot 0.10 + 0.20 \cdot 0.90}
 = \frac{0.06}{0.24}=0.25.
 \]
-The keyword raised the probability from \(0.10\) to \(0.25\), but the action still depends on cost and capacity. If urgent misses are very costly, \(0.25\) may justify review. If review slots are scarce and the keyword is common, the same probability may be too low for automatic escalation.
+The keyword raised the probability from \(0.10\) to \(0.25\), but the action still depends on cost and capacity. If urgent misses are very costly, \(0.25\) may justify review. If review slots are scarce and the keyword is common, the same probability may be too low to trigger automatic escalation.
 \end{example}
 
 \begin{practicalnote}
-\textbf{Learning-signal card checkpoint.} At this point the card should already distinguish the model output from the decision rule. A probability such as \(0.25\) belongs in the model-output row; the outreach threshold belongs in the decision-rule row.
+\textbf{Learning-signal card checkpoint.} The card should already distinguish the model output from the decision rule. A probability such as \(0.25\) belongs in the model-output row; the outreach threshold belongs in the decision-rule row.
 \end{practicalnote}
 
 \begin{thinkingtool}
-\textbf{Separate three questions.} Does the model output an honest probability? What are the costs of each kind of mistake? What is the current prevalence and score distribution in deployment? Only when all three are answered does it make sense to ask what the action should be.
+\textbf{Separate three questions.} Does the model output an honest probability? What are the costs of each kind of mistake? What is the current prevalence and score distribution in deployment? Only after all three are answered does it make sense to ask what the action should be.
 \end{thinkingtool}
 
-A common undergraduate mistake is to assume that the best classifier, the best probability forecaster, and the best decision policy are automatically the same object. They are not. A model with strong ranking quality may still produce poorly calibrated probabilities. A well-calibrated model may still imply a different threshold in a high-stakes setting than in a low-stakes one. And both of those may be further adjusted when prevalence or the score distribution changes seasonally, demographically, or across deployment contexts.
+A common undergraduate mistake is to assume that the best classifier, the best probability forecaster, and the best decision policy are the same object. They are not. A model with strong ranking quality can still produce poorly calibrated probabilities. A well-calibrated model can still imply different thresholds in high-stakes versus low-stakes settings. And both may need further adjustment when prevalence or score distribution shifts---seasonally, demographically, or across deployment contexts.
 
 \section*{Logarithms, Exponentials, and Why They Keep Appearing}
 
-Probabilities often multiply. If a sequence of events or labels is modeled jointly, the full likelihood can become a product of many factors. Logarithms are useful because they turn products into sums:
+Probabilities multiply. When a sequence of events or labels is modeled jointly, the full likelihood becomes a product of many factors. Logarithms turn products into sums:
 \[
 \log(ab) = \log a + \log b.
 \]
 
 That simple identity is one reason log loss and log-likelihood show up throughout ML. Sums are easier to analyze and optimize than long products.
 
-Exponentials matter for the reverse reason. They turn linear or affine scores into positive quantities that can then be normalized into probabilities. The sigmoid function
+Exponentials matter for the reverse reason. They turn linear or affine scores into positive quantities that can be normalized into probabilities. The sigmoid function
 \[
 \sigma(z) = \frac{1}{1+e^{-z}}
 \]
@@ -156,23 +156,23 @@ If \(p\) is the probability of class \(1\), then the odds are \(p/(1-p)\). Takin
 \end{mathlens}
 
 \begin{practicalnote}
-Why does the sigmoid appear so often? We need a function that maps any real-valued score to the interval $[0, 1]$, producing something that behaves like a probability. The sigmoid is a smooth S-curve that does exactly this: very negative scores map close to 0, very positive scores map close to 1, and the transition is gradual. The logistic function $\sigma(z) = 1/(1 + e^{-z})$ is the simplest such curve, and it arises naturally as the inverse of the log-odds transformation.
+Why does the sigmoid appear so often? We need a function that maps any real-valued score to $[0, 1]$, producing something that behaves like a probability. The sigmoid is a smooth S-curve that does exactly this: very negative scores map close to 0, very positive scores map close to 1, and the transition is gradual. The logistic function $\sigma(z) = 1/(1 + e^{-z})$ is the simplest such curve, and it arises naturally as the inverse of the log-odds transformation.
 \end{practicalnote}
 
-Students do not need to memorize this only as a formula. They should read it as a translation rule:
+Students should not memorize this only as a formula. Read it as a translation rule:
 
 \begin{quote}
 a linear score can be turned into a number between \(0\) and \(1\) through a smooth nonlinear map
 \end{quote}
 
-In simple binary classifiers, that number is often read as an estimated class probability. That reading is useful, but it is not magic. It depends on how the model was trained and on whether its outputs are later checked for calibration.
+In simple binary classifiers, that number often reads as an estimated class probability. That reading is useful, but not magic. It depends on how the model was trained and whether its outputs are later checked for calibration.
 
 \section*{Loss Functions As Learning Signals}
 
-A loss function is a penalty on one prediction. It says how bad the current output was on one example. Three common losses are worth reading carefully.
+A loss function is a penalty on one prediction. It measures how bad the current output was on one example. Three common losses are worth reading carefully.
 
 \begin{practicalnote}
-Throughout this book, \(\ell(y, \hat{y})\) denotes a loss comparing a true label \(y\) to a generic prediction \(\hat{y}\). When the prediction is specifically a probability, we write \(\ell(y, p)\) to emphasize that \(p \in [0,1]\). The distinction matters because some losses (such as log loss) require a valid probability, not just a raw score.
+Throughout this book, \(\ell(y, \hat{y})\) denotes a loss comparing a true label \(y\) to a generic prediction \(\hat{y}\). When the prediction is specifically a probability, we write \(\ell(y, p)\) to emphasize that \(p \in [0,1]\). The distinction matters: some losses (such as log loss) require a valid probability, not just a raw score.
 \end{practicalnote}
 
 \begin{itemize}[leftmargin=*]
@@ -185,7 +185,7 @@ For binary classification with label \(y \in \{0,1\}\) and predicted probability
 \[
 \ell(y,p) = -\bigl[y\log p + (1-y)\log(1-p)\bigr].
 \]
-If the true label is \(1\), this becomes \(-\log p\). If the model says \(p=0.99\), the penalty is tiny; if it says \(p=0.01\), the penalty is severe. This is why log loss is the standard teaching example for ``confident mistakes are expensive.''
+If the true label is \(1\), this becomes \(-\log p\). When the model says \(p=0.99\), the penalty is tiny. When it says \(p=0.01\), the penalty is severe. That is why log loss is the standard teaching example for ``confident mistakes are expensive.''
 
 \begin{example}[Computing Cross-Entropy Loss by Hand]
 Two models predict the probability that a student is at risk. The true label is \(y=1\) (the student genuinely is at risk).
@@ -204,16 +204,16 @@ L_B = -\log(0.3) \approx 1.20.
 
 Model A is penalized far less because it was more confident in the correct direction. Model B assigned low probability to what actually happened, so its penalty is steep.
 
-The log makes the penalty grow sharply when the model is confidently wrong. A model that predicts \(p = 0.01\) for a true positive case suffers a loss of \(-\log(0.01) \approx 4.61\)---more than twenty times the penalty of Model A above. This asymmetry is exactly the behavior that makes log loss the standard choice when calibrated probability estimates matter.
+The log makes the penalty grow sharply when the model is confidently wrong. A model that predicts \(p = 0.01\) for a true positive case suffers a loss of \(-\log(0.01) \approx 4.61\)---more than twenty times Model A's penalty. This asymmetry is what makes log loss the standard choice when calibrated probability estimates matter.
 \end{example}
 
-The right question is never just ``which loss is standard?'' The better question is:
+The right question is never ``which loss is standard?'' The better question is:
 
 \begin{quote}
-What kind of wrong behavior does this loss care about, and what kind might it still permit?
+What kind of wrong behavior does this loss care about, and what kind does it still permit?
 \end{quote}
 
-For example, squared error reacts strongly to outliers. Absolute error is less sensitive. Log loss cares a great deal about confidence. A model that says \(0.99\) and is wrong is punished much more harshly than a model that says \(0.60\) and is wrong.
+Squared error reacts strongly to outliers. Absolute error is less sensitive. Log loss cares about confidence. A model that says \(0.99\) and is wrong is punished much more harshly than a model that says \(0.60\) and is wrong.
 
 \begin{center}
 \small
@@ -229,34 +229,34 @@ Log loss & Probability assigned to the truth & Confident mistakes are especially
 \end{center}
 
 \begin{practicalnote}
-The formulas above apply to binary classification with $y \in \{0,1\}$. Many tasks have more than two classes. Chapter~\ref{ch:prediction-loss-decision} extends the evaluation story to multiclass confusion matrices and macro versus micro averaging, while Chapter~\ref{ch:optimization-neural-networks} introduces the standard logit-and-softmax output layer for multiclass prediction. The binary version here is worth internalizing first because it makes every idea---confident mistakes, proper scoring, calibration---visible with the fewest symbols.
+The formulas above apply to binary classification with $y \in \{0,1\}$. Many tasks have more than two classes. Chapter~\ref{ch:prediction-loss-decision} extends the evaluation story to multiclass confusion matrices and macro versus micro averaging. Chapter~\ref{ch:optimization-neural-networks} introduces the standard logit-and-softmax output layer for multiclass prediction. Internalize the binary version first---it makes every idea (confident mistakes, proper scoring, calibration) visible with the fewest symbols.
 \end{practicalnote}
 
 \section*{Proper Scoring Rules and Honest Probability Forecasts}
 
-Not every loss encourages a model to report its true beliefs. A \emph{proper scoring rule} is one that makes honest forecasting the safest strategy: if a model genuinely believes the probability of an event is $p$, then the loss is minimized in expectation by reporting exactly $p$ rather than some distorted value.
+Not every loss encourages a model to report its true beliefs. A \emph{proper scoring rule} makes honest forecasting the safest strategy: if a model genuinely believes the probability of an event is $p$, the expected loss is minimized by reporting exactly $p$ rather than some distorted value.
 
 Log loss is the classic example. Suppose the true probability of a positive outcome is $p^* = 0.7$. A model that reports $\hat{p}$ incurs expected log loss
 \[
 \mathbb{E}[\ell] = -p^* \log \hat{p} - (1-p^*) \log(1-\hat{p}).
 \]
-Taking the derivative with respect to $\hat{p}$ and setting it to zero gives $\hat{p} = p^*$. Reporting the true probability minimizes expected log loss. Shading the report in either direction increases expected loss.
+Taking the derivative with respect to $\hat{p}$ and setting it to zero gives $\hat{p} = p^*$. Reporting the true probability minimizes expected log loss. Shading the report in either direction makes things worse.
 
-Accuracy, by contrast, is not a proper scoring rule for probabilities. Under accuracy, any probability above $0.5$ produces the same binary prediction of class 1. A model is not penalized for being overconfident at $0.95$ when the true probability is $0.7$; both produce the same prediction. So accuracy gives no incentive to calibrate.
+Accuracy, by contrast, is not a proper scoring rule for probabilities. Under accuracy, any probability above $0.5$ produces the same binary prediction of class 1. A model is not penalized for being overconfident at $0.95$ when the true probability is $0.7$; both produce the same prediction. Accuracy gives no incentive to calibrate.
 
 \begin{mathlens}
 A scoring rule $S(\hat{p}, y)$ is \emph{proper} if $\mathbb{E}_{y \sim p^*}[S(p^*, y)] \leq \mathbb{E}_{y \sim p^*}[S(\hat{p}, y)]$ for all $\hat{p}$, with equality only when $\hat{p} = p^*$ in the strictly proper case. Log loss and Brier score are proper. Accuracy-based rewards are not. Proper rules are the right losses to use when calibrated probabilities matter for downstream decisions.
 \end{mathlens}
 
-Why does this matter for AI practice? When a model output drives a threshold decision, the calibration of that output determines whether the threshold can be set reliably from a stated probability. A model that outputs $0.82$ for cases whose empirical event rate is much lower will, under a threshold-as-policy interpretation, flag many cases that a properly calibrated model would not flag. The team may then tighten the threshold empirically, but without understanding that the underlying model probabilities are systematically distorted, they cannot trust that the threshold will transfer to a new semester, a new patient cohort, or a new deployment context.
+Why does this matter for AI practice? When a model output drives a threshold decision, the calibration of that output determines whether the threshold can be set reliably from a stated probability. Consider a model that outputs $0.82$ for cases whose empirical event rate is much lower. Under a threshold-as-policy interpretation, it will flag many cases that a properly calibrated model would not. The team can tighten the threshold empirically, but without recognizing that the underlying probabilities are systematically distorted, they cannot trust the threshold to transfer to a new semester, a new patient cohort, or a new deployment context.
 
 \begin{practicalnote}
-When selecting a training loss, ask whether the loss rewards honest probability forecasts or merely correct binary predictions. For any application where the probability score will drive a downstream decision, prefer log loss or Brier score over accuracy as the training signal.
+When selecting a training loss, ask whether it rewards honest probability forecasts or merely correct binary predictions. For any application where the probability score will drive a downstream decision, prefer log loss or Brier score over accuracy as the training signal.
 \end{practicalnote}
 
 \section*{From One Example To Many: Empirical Risk}
 
-The ideal quantity we would like to minimize is future expected loss on the population of cases the system will actually face. We almost never know that quantity directly. What training can compute is the average loss on the sample in hand, used as a practical stand-in for the unknown population risk.
+What we would ideally minimize is future expected loss on the population of cases the system will actually face. We almost never know that quantity directly. What training can compute is the average loss on the sample in hand---a practical stand-in for the unknown population risk.
 
 \begin{mathlens}
 If \(f\) is a predictor and \(\mathcal{D}\) is the data-generating process, then the population risk is
@@ -267,10 +267,10 @@ while the empirical risk on a sample \((x_i,y_i)_{i=1}^n\) is
 \[
 \hat{R}_n(f) = \frac{1}{n}\sum_{i=1}^n \ell\bigl(y_i,f(x_i)\bigr).
 \]
-The sample average is the stand-in because it is the quantity we can compute now, and if the sample is representative it estimates the future loss we care about.
+The sample average is the stand-in because we can compute it now, and if the sample is representative it estimates the future loss we care about.
 \end{mathlens}
 
-Training does not optimize one example at a time forever. It optimizes an objective over a dataset. If the model is \(f_\theta\), the pointwise loss is \(\ell\), and the dataset is \((x_i, y_i)_{i=1}^n\), then a standard training objective is
+Training does not optimize one example at a time forever. It optimizes an objective over a dataset. If the model is \(f_\theta\), the pointwise loss is \(\ell\), and the dataset is \((x_i, y_i)_{i=1}^n\), a standard training objective is
 \[
 \mathcal{L}_{\text{train}}(\theta)
 =
@@ -298,40 +298,40 @@ Training computes one quantity. The quantity we actually care about is different
 
 The \emph{empirical risk} is the average loss over the examples in hand. We can compute it. It changes as we update the parameters, and we minimize it during training.
 
-The \emph{population risk} is the expected loss over all the cases the system will face in deployment: future students, future emails, future images from a new camera. We cannot compute it directly. We have only a sample of those cases, and even that sample may not perfectly represent the future.
+The \emph{population risk} is the expected loss over all the cases the system will face in deployment: future students, future emails, future images from a new camera. We cannot compute it directly. We have only a sample, and even that sample may not perfectly represent the future.
 
 This gap is one of the deepest ideas in the book. Its consequences reach every chapter:
 \begin{itemize}[leftmargin=*]
-\item a model that achieves very low training loss may still have high population risk if it has memorized accidents of the training sample,
-\item a model that generalizes well has low population risk even if its training loss is not minimal,
-\item validation and test sets are our only window onto population risk, which is why contaminating them with training decisions is so damaging.
+\item A model that achieves very low training loss can still have high population risk if it has memorized accidents of the training sample.
+\item A model that generalizes well has low population risk even when its training loss is not minimal.
+\item Validation and test sets are our only window onto population risk---which is why contaminating them with training decisions is so damaging.
 \end{itemize}
 
 \begin{example}[Why Low Training Loss Is Not Yet Evidence]
-Suppose a model memorizes every training example perfectly: for each student in the training set it has learned an exact rule that reproduces the label. Its training error is zero, and under some losses its training loss may be near zero. But when the model meets a new student---one it has never seen---it has no generalizable rule to fall back on. Its population risk may be high. The perfect training result was a mirage: it said something about the sample but nothing about the distribution.
+Suppose a model memorizes every training example perfectly: for each student in the training set it has learned an exact rule that reproduces the label. Its training error is zero, and under some losses its training loss may be near zero. But when the model meets a new student---one it has never seen---it has no generalizable rule to fall back on. Its population risk may be high. The perfect training result was a mirage. It said something about the sample but nothing about the distribution.
 \end{example}
 
-The correct mental discipline is to treat training loss as a signal about optimization and population risk as the actual goal. Every time someone says ``the model improved,'' they should mean population risk improved, as estimated by held-out performance. Saying ``training loss went down'' without that translation is not yet evidence of learning in the useful sense.
+Treat training loss as a signal about optimization and population risk as the actual goal. When someone says ``the model improved,'' they should mean population risk improved, as estimated by held-out performance. Saying ``training loss went down'' without that translation is not yet evidence of learning in the useful sense.
 
 \begin{thinkingtool}
-\textbf{Population risk discipline.} Whenever training loss is mentioned as evidence of learning, ask: what do the held-out numbers say? If only training loss has been reported, the argument is incomplete.
+\textbf{Population risk discipline.} When training loss is offered as evidence of learning, ask: what do the held-out numbers say? If only training loss has been reported, the argument is incomplete.
 \end{thinkingtool}
 
 \section*{A Gentle Functional View Of Loss Functions}
 
-This next section does not require graduate-level analysis. It asks for one conceptual shift: stop looking only at the coordinates of \(\theta\), and start looking at the whole predictor that training is selecting.
+This section does not require graduate-level analysis. It asks for one conceptual shift: stop looking only at the coordinates of \(\theta\), and start looking at the whole predictor that training is selecting.
 
-This is the right place for one mathematical shift that many students never get stated clearly enough. A model is not only a parameter vector. It is also a function.
+A model is not only a parameter vector. It is also a function. Many students never get this shift stated clearly enough.
 
 \subsection*{A Predictor Is A Function}
 
-When we write \(f_\theta(x)\), the parameter vector \(\theta\) matters, but the real object used at prediction time is the mapping \(x \mapsto f_\theta(x)\). The deployed system receives an input and returns an output. In that sense, the trained model is a predictor function.
+When we write \(f_\theta(x)\), the parameter vector \(\theta\) matters, but the real object used at prediction time is the mapping \(x \mapsto f_\theta(x)\). The deployed system receives an input and returns an output. The trained model is a predictor function.
 
-This viewpoint matters because later questions such as generalization, regularization, and hypothesis-class choice are easier to think about at the function level than at the parameter level.
+This viewpoint matters because later questions---generalization, regularization, hypothesis-class choice---are easier to think about at the function level than at the parameter level.
 
 \subsection*{Pointwise Loss Versus Risk Functional}
 
-The loss \(\ell(y, \hat{y})\) is pointwise. It looks at one target and one prediction. The empirical risk, by contrast, takes the whole predictor and returns one number that summarizes how it behaved across the dataset.
+The loss \(\ell(y, \hat{y})\) is pointwise. It looks at one target and one prediction. Empirical risk, by contrast, takes the whole predictor and returns one number summarizing how it behaved across the dataset.
 
 That is the useful light functional-analysis idea in this book:
 
@@ -339,7 +339,7 @@ That is the useful light functional-analysis idea in this book:
 a risk objective is a rule that assigns one scalar value to a whole predictor
 \end{quote}
 
-Seen this way, the formulas above are not just notation changes. One is the ideal quantity defined by the real world; the other is the computable approximation used during training.
+Seen this way, the formulas above are not mere notation changes. One is the ideal quantity defined by the real world; the other is the computable approximation used during training.
 
 Only after the student understands that sentence does the term \emph{functional} become useful.
 
@@ -354,7 +354,7 @@ Training is not choosing from all imaginable functions. It is choosing from a re
 \item all models produced by a certain pretraining and adaptation pipeline.
 \end{itemize}
 
-This class is the hypothesis class. The class matters because every training objective answers the question, ``which predictor in this allowed family looks best under the chosen risk?''
+This is the hypothesis class. It matters because every training objective answers the question: which predictor in this allowed family looks best under the chosen risk?
 
 \subsection*{Norms, Complexity, and Regularization}
 
@@ -364,7 +364,7 @@ Regularization becomes easier to interpret once predictors are seen as members o
 among predictors that fit the data similarly well, prefer the less extreme one
 \end{quote}
 
-In linear models this often appears as a penalty on coefficient norms. In broader function-class language, it is a preference for predictors that are simpler, smoother, or less sensitive according to a chosen measure of size.
+In linear models this appears as a penalty on coefficient norms. In broader function-class language, it expresses a preference for predictors that are simpler, smoother, or less sensitive according to a chosen measure of size.
 
 \begin{mathlens}
 When a norm penalty is added to the training objective, the combined loss becomes
@@ -376,19 +376,19 @@ where $\lambda > 0$ controls how strongly large weights are discouraged. This si
 
 \subsection*{Projection Intuition For Least Squares}
 
-Least squares can be read as a projection idea. The target outputs may not be matched perfectly by any predictor in the allowed linear class. Training then finds the closest allowed predictor under squared error.
+Least squares can be read as a projection. No predictor in the allowed linear class may match the target outputs perfectly. Training finds the closest allowed predictor under squared error.
 
 That is a deeper way to read regression. The model is not recovering every detail of the world. It is finding the best approximation available inside the chosen family.
 
 \begin{advancednote}
-This section does \emph{not} need graduate functional analysis. The useful undergraduate level for this book is enough: predictor as function, risk as a rule on predictors, norm as size or complexity measure, and projection as fitting intuition. This book does not need Hahn--Banach, compactness theorems, or an abstract study of Banach spaces to make loss functions readable.
+This section does \emph{not} need graduate functional analysis. The undergraduate level is enough: predictor as function, risk as a rule on predictors, norm as size or complexity measure, projection as fitting intuition. We do not need Hahn--Banach, compactness theorems, or abstract Banach spaces to make loss functions readable.
 \end{advancednote}
 
 \section*{Gradients And Optimization}
 
 Once the training objective is defined, optimization asks how to reduce it. A derivative tells how one quantity changes when another changes slightly. A gradient collects those directional sensitivities across many parameters.
 
-If the loss is \(\mathcal{L}(\theta)\), then the gradient
+If the loss is \(\mathcal{L}(\theta)\), the gradient
 \[
 \nabla_\theta \mathcal{L}
 \]
@@ -398,7 +398,7 @@ points in the direction of increasing loss. To reduce the loss, gradient descent
 \]
 where \(\eta\) is the learning rate.
 
-The right mental model is simple:
+The mental model is simple:
 
 \begin{itemize}[leftmargin=*]
 \item change a parameter slightly,
@@ -417,11 +417,11 @@ for step in range(num_steps):
 The pseudocode is short because the mechanism is short.
 
 \begin{practicalnote}
-In practice, gradients are almost never computed on the full dataset. Instead, the training set is split into small \emph{mini-batches}, and each update uses the gradient estimated from one batch. This variant, called \emph{stochastic gradient descent} (SGD), is noisier per step but far cheaper, and the noise can even help escape poor local minima. The underlying principle---step opposite to the gradient---remains exactly the same.
+In practice, gradients are almost never computed on the full dataset. The training set is split into small \emph{mini-batches}, and each update uses the gradient estimated from one batch. This variant, \emph{stochastic gradient descent} (SGD), is noisier per step but far cheaper, and the noise can even help escape poor local minima. The principle---step opposite to the gradient---stays the same.
 \end{practicalnote}
 
 \begin{example}[One Gradient Descent Step by Hand]
-Let the loss function be \(L(w) = (w - 3)^2\), a simple parabola with minimum at \(w = 3\). Start at \(w = 1\) with learning rate \(\eta = 0.4\).
+Let the loss function be \(L(w) = (w - 3)^2\), a parabola with minimum at \(w = 3\). Start at \(w = 1\) with learning rate \(\eta = 0.4\).
 
 \textbf{Step 1: Compute the gradient.}
 \[
@@ -433,7 +433,7 @@ Let the loss function be \(L(w) = (w - 3)^2\), a simple parabola with minimum at
 w_{\text{new}} = w - \eta \cdot \frac{dL}{dw} = 1 - 0.4 \times (-4) = 1 + 1.6 = 2.6.
 \]
 
-The weight moved from \(1\) toward \(3\) (the minimum). At \(w=1\), the gradient points uphill in the negative direction; subtracting it moves \(w\) downhill toward the minimum, closing the gap to the optimum.
+The weight moved from \(1\) toward \(3\), the minimum. At \(w=1\), the gradient points uphill in the negative direction; subtracting it moves \(w\) downhill toward the minimum, closing the gap.
 
 \begin{center}
 \begin{tikzpicture}[font=\small, x=1.6cm, y=1.3cm]
@@ -460,8 +460,10 @@ The weight moved from \(1\) toward \(3\) (the minimum). At \(w=1\), the gradient
 \end{tikzpicture}
 \end{center}
 
-The open circle marks the starting point \(w=1\); the filled circles mark the updated weight \(w=2.6\) and the minimum \(w=3\). One gradient step more than halved the distance to the optimum. With a smaller learning rate the step would be shorter; with a larger one it might overshoot.
-\end{example} Most of the practical difficulty in training comes from scale, instability, architecture choice, and noisy data, not from the basic update rule itself.
+The open circle marks the starting point \(w=1\); the filled circles mark the updated weight \(w=2.6\) and the minimum \(w=3\). One gradient step more than halved the distance to the optimum. A smaller learning rate would shorten the step; a larger one might overshoot.
+\end{example}
+
+Most of the practical difficulty in training comes from scale, instability, architecture choice, and noisy data---not from the basic update rule itself.
 
 \section*{Chain Rule As Credit Assignment}
 
@@ -473,7 +475,7 @@ z = c x,
 \qquad
 \mathcal{L} = (u-y)^2,
 \]
-then the loss depends on \(c\) indirectly through \(z\) and \(u\). The chain rule lets the model pass responsibility backward through the computation.
+the loss depends on \(c\) indirectly through \(z\) and \(u\). The chain rule lets the model pass responsibility backward through the computation.
 
 \begin{mathlens}
 The derivative with respect to the early parameter \(c\) is
@@ -486,45 +488,45 @@ The derivative with respect to the early parameter \(c\) is
 =
 2(u-y)\cdot a \cdot x.
 \]
-So if \(a=2\), \(x=3\), and \(u-y=1\), then the gradient is \(12\): a small change in \(c\) has a clear local effect on the loss.
+So if \(a=2\), \(x=3\), and \(u-y=1\), the gradient is \(12\): a small change in \(c\) has a clear local effect on the loss.
 \end{mathlens}
 
-This is the useful reading:
+The useful reading:
 
 \begin{quote}
-how much did an earlier quantity contribute to the final error, and therefore how much credit or blame should move backward?
+how much did an earlier quantity contribute to the final error, and how much credit or blame should move backward?
 \end{quote}
 
-That is why backpropagation is not just calculus drill. It is structured credit assignment through a composed function.
+This is why backpropagation is not calculus drill. It is structured credit assignment through a composed function.
 
 \section*{Generative vs.\ Discriminative: Two Ways to Use Probability}
 
-All the models discussed so far learn to predict a label from an input: $P(Y \mid X)$. This is the \emph{discriminative} approach---the model discriminates between classes based on the observed features. Logistic regression, neural networks, and decision trees are all discriminative models.
+All the models discussed so far learn to predict a label from an input: $P(Y \mid X)$. This is the \emph{discriminative} approach---the model discriminates between classes based on the observed features. Logistic regression, neural networks, and decision trees are all discriminative.
 
-But there is a fundamentally different approach. A \emph{generative} model learns how the data is produced: it models $P(X \mid Y)$ (what does a typical input look like, given the class?) and $P(Y)$ (how common is each class?). To classify a new input, Bayes' theorem combines these:
+A \emph{generative} model takes a fundamentally different approach. It learns how the data is produced: $P(X \mid Y)$ (what does a typical input look like, given the class?) and $P(Y)$ (how common is each class?). To classify a new input, Bayes' theorem combines these:
 \[
 P(Y \mid X) = \frac{P(X \mid Y) \, P(Y)}{P(X)}
 \]
 
-The numerator is easy: multiply the class-conditional likelihood by the prior. The denominator $P(X)$ is the same for all classes, so for classification it can be ignored---we just pick the class that maximizes $P(X \mid Y) \, P(Y)$.
+The numerator is easy: multiply the class-conditional likelihood by the prior. The denominator $P(X)$ is the same for all classes, so for classification we can ignore it---just pick the class that maximizes $P(X \mid Y) \, P(Y)$.
 
 \textbf{Why does this distinction matter?} It changes what the model learns and what it can do:
 
 \begin{itemize}[leftmargin=*]
-\item A discriminative model focuses all its capacity on the decision boundary. It is often more accurate for classification, but it does not model the data distribution directly, so it has no built-in density for outlier detection or sampling new data.
-\item A generative model learns the structure of the data itself. It can detect inputs that are unlike anything it has seen (outlier detection), handle missing features by marginalizing over them, and generate new examples. But it requires stronger assumptions about the data distribution.
+\item A discriminative model focuses all its capacity on the decision boundary. It is often more accurate for classification, but it does not model the data distribution, so it has no built-in density for outlier detection or sampling new data.
+\item A generative model learns the structure of the data itself. It can detect inputs unlike anything it has seen (outlier detection), handle missing features by marginalizing over them, and generate new examples. The cost is stronger assumptions about the data distribution.
 \end{itemize}
 
 \begin{example}[Generative Thinking for Spam]
-A discriminative spam filter learns: given these word frequencies, is this message spam? A generative spam filter learns: what do spam messages look like, and what do legitimate messages look like? The generative model can flag an email written in a language it has never seen---it is unlikely under \emph{both} models, suggesting it is out-of-distribution. A plain closed-set discriminative classifier has no built-in mechanism for this; it needs an added rejection rule, uncertainty check, or out-of-distribution detector.
+A discriminative spam filter asks: given these word frequencies, is this message spam? A generative spam filter asks: what do spam messages look like, and what do legitimate messages look like? The generative model can flag an email written in a language it has never seen---it is unlikely under \emph{both} models, so it looks out-of-distribution. A plain closed-set discriminative classifier has no built-in mechanism for this; it needs an added rejection rule, uncertainty check, or out-of-distribution detector.
 \end{example}
 
-\textbf{Priors, posteriors, and MAP.} In Bayesian vocabulary, $P(Y)$ is the \emph{prior}---your belief about class probabilities before seeing the data. $P(Y \mid X)$ is the \emph{posterior}---your updated belief after seeing the input. The same logic applies to model parameters: a \emph{prior} on parameters $P(\theta)$ expresses which parameter values you believe are plausible before training. \emph{Maximum a posteriori} (MAP) estimation finds the parameters that maximize $P(\theta \mid \text{data}) \propto P(\text{data} \mid \theta) \, P(\theta)$. This gives one principled interpretation of many regularizers: in penalized likelihood, an $L_2$ penalty corresponds to a Gaussian prior and an $L_1$ penalty corresponds to a Laplace prior. What looked like an ad hoc penalty can be read as a prior belief when the modeling assumptions match.
+\textbf{Priors, posteriors, and MAP.} In Bayesian vocabulary, $P(Y)$ is the \emph{prior}---your belief about class probabilities before seeing the data. $P(Y \mid X)$ is the \emph{posterior}---your updated belief after seeing the input. The same logic applies to model parameters: a \emph{prior} on parameters $P(\theta)$ expresses which parameter values you believe are plausible before training. \emph{Maximum a posteriori} (MAP) estimation finds the parameters maximizing $P(\theta \mid \text{data}) \propto P(\text{data} \mid \theta) \, P(\theta)$. This gives a principled interpretation of many regularizers: in penalized likelihood, an $L_2$ penalty corresponds to a Gaussian prior, and an $L_1$ penalty to a Laplace prior. What looked like an ad hoc penalty reads as a prior belief when the modeling assumptions match.
 
-These ideas---generative models, priors, posteriors, MAP---return in full force in Chapter~\ref{ch:probabilistic-models} (probabilistic models), Chapter~\ref{ch:structure-beyond-linearity} (Naive Bayes), and Chapter~\ref{ch:generative-representations} (generative representations). This bridge section provides just enough vocabulary to make those chapters readable.
+These ideas---generative models, priors, posteriors, MAP---return in full force in Chapter~\ref{ch:probabilistic-models} (probabilistic models), Chapter~\ref{ch:structure-beyond-linearity} (Naive Bayes), and Chapter~\ref{ch:generative-representations} (generative representations). This bridge gives just enough vocabulary to make those chapters readable.
 
 \begin{thinkingtool}
-\textbf{Discriminative or generative?} When designing a system, ask: do I only need to classify, or do I also need to detect the unfamiliar, handle missing information, or generate new examples? The answer determines whether a discriminative model suffices or whether a generative perspective is needed.
+\textbf{Discriminative or generative?} When designing a system, ask: do I only need to classify, or do I also need to detect the unfamiliar, handle missing information, or generate new examples? The answer decides whether a discriminative model suffices or whether a generative perspective is needed.
 \end{thinkingtool}
 
 \section*{Chapter Artifact: Learning-Signal Card}
@@ -547,24 +549,24 @@ Main mismatch risk & What the loss may optimize that the deployment goal does no
 \end{tabular}
 \end{quote}
 
-This card should make it hard to say ``the model improved'' without stating what improved, under which loss, and in service of which decision.
+This card should make it hard to say ``the model improved'' without saying what improved, under which loss, and in service of which decision.
 
 \section*{Common Mistakes}
 
 \begin{mistakebox}
-\item \textbf{Treating a score as a calibrated probability.} Check what the number really means before interpreting it as a probability.
+\item \textbf{Treating a score as a calibrated probability.} Check what the number means before interpreting it as a probability.
 \item \textbf{Treating lower training loss as deployment success.} The training objective can improve while the real task stays the same or gets worse.
-\item \textbf{Choosing a loss without asking what wrong behavior it still permits.} Loss choice is part of the task design, not a cosmetic detail.
+\item \textbf{Choosing a loss without asking what wrong behavior it permits.} Loss choice is part of task design, not a cosmetic detail.
 \item \textbf{Forgetting that a model is a function used on inputs.} The predictor lives on examples, not only as a parameter vector stored in memory.
-\item \textbf{Treating gradients as mysterious symbols instead of local direction information.} Gradients tell us how to move parameters to reduce loss.
+\item \textbf{Treating gradients as mysterious symbols instead of local direction information.} Gradients say how to move parameters to reduce loss.
 \end{mistakebox}
 
 \section*{Looking Ahead}
 
-The two bridge chapters were not meant as isolated mathematics review. Their job was to make later modeling language readable: representation in the first bridge, and score, probability, decision rule, loss, and update signal in this one. Chapter 1 now begins the main argument of the book by asking what decision, proxy target, data source, and held-out evidence make a learning problem worth modeling at all.
+The two bridge chapters were not meant as isolated mathematics review. Their job was to make later modeling language readable: representation in the first bridge; score, probability, decision rule, loss, and update signal in this one. Chapter 1 now begins the main argument of the book by asking what decision, proxy target, data source, and held-out evidence make a learning problem worth modeling at all.
 
 \begin{example}[Joint Artifact: Representation and Learning Signal Together]
-For a spam-filtering task, the two bridge artifacts work together. The \emph{representation card} (Bridge~I) names the features: word frequencies, sender score, and link count, each stored as a coordinate in $\mathbb{R}^{50}$. The \emph{learning-signal card} (Bridge~II) specifies the loss (log loss), the decision threshold ($\tau = 0.3$ because false negatives are costly), and the baseline (predict the majority class). Together, the two cards define what the model sees and how it learns---before any algorithm is chosen.
+For a spam-filtering task, the two bridge artifacts work together. The \emph{representation card} (Bridge~I) names the features: word frequencies, sender score, and link count, each stored as a coordinate in $\mathbb{R}^{50}$. The \emph{learning-signal card} (Bridge~II) specifies the loss (log loss), the decision threshold ($\tau = 0.3$ because false negatives are costly), and the baseline (predict the majority class). The two cards define what the model sees and how it learns---before any algorithm is chosen.
 \end{example}
 
 \begin{chaptersummary}
@@ -572,9 +574,9 @@ For a spam-filtering task, the two bridge artifacts work together. The \emph{rep
 \item Conditional probability expresses uncertainty given observed evidence.
 \item Expectation is the language of average consequence.
 \item Logarithms and exponentials appear because they make probability-based modeling and optimization easier to express.
-\item A predictor can be viewed as a function, while empirical risk is a rule that assigns one number to the whole predictor.
+\item A predictor is a function, and empirical risk is a rule that assigns one number to the whole predictor.
 \item Gradients and the chain rule turn a loss into a usable update signal.
-\item The main deliverable of the chapter is a learning-signal card written before claiming that a training objective and a deployment goal are aligned.
+\item The chapter's main deliverable is a learning-signal card, written before claiming that a training objective and a deployment goal are aligned.
 \item Generative models learn $P(X \mid Y)$ and can detect outliers and generate data; discriminative models learn $P(Y \mid X)$ and focus on the decision boundary.
 \item MAP estimation connects regularization to Bayesian prior beliefs about parameter values.
 \end{chaptersummary}
@@ -600,7 +602,7 @@ Generative vs.\ discriminative, priors, MAP & Chapters~\ref{ch:structure-beyond-
 \begin{studyquestions}
 \item Why is a model score not automatically the same thing as a probability?
 \item What is the practical difference between a pointwise loss and empirical risk?
-\item In plain language, what is the functional-analysis viewpoint on a loss function that this book actually needs?
+\item In plain language, what is the functional-analysis viewpoint on a loss function that this book needs?
 \item Why is the chain rule better understood as credit assignment than as symbol pushing?
 \item What can a generative model do that a discriminative model cannot, and why does this come at a cost?
 \end{studyquestions}

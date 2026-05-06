@@ -1,28 +1,28 @@
 \chapter{Optimization and Neural Networks}
 \label{ch:optimization-neural-networks}
 
-Chapter~\ref{ch:structure-beyond-linearity} broadened the idea of structure by adding branches, margins, neighborhoods, and unsupervised organization. Neural networks take a different step. Instead of asking only which rule to place on top of a representation, they allow part of the representation itself to be learned from data. That added flexibility is useful only when it is disciplined by optimization, regularization, and careful evaluation.
+Chapter~\ref{ch:structure-beyond-linearity} broadened the idea of structure by adding branches, margins, neighborhoods, and unsupervised organization. Neural networks take a different step. Instead of asking only which rule to place on top of a representation, they let part of the representation itself be learned from data. That added flexibility is useful only when disciplined by optimization, regularization, and careful evaluation.
 
-This chapter explains that learning process without mystifying it. It moves from learned feature pipelines to forward passes, losses, optimization, debugging, and generalization, and it ends with a minimum credible neural training report. The goal is not only to show how neural networks work, but to show what evidence makes a neural result worth trusting.
+This chapter explains the learning process without mystifying it. It moves from learned feature pipelines to forward passes, losses, optimization, debugging, and generalization, and ends with a minimum credible neural training report. The goal is not only to show how neural networks work but to show what evidence makes a neural result worth trusting.
 
 \section{Opening Dilemma: When Engineered Structure Stops Being Enough}
 
-The earlier modeling chapters already established a core logic. We frame a task, design an evaluation plan, try a serious baseline, and inspect what kind of structure that baseline is missing. Sometimes the answer is still manageable with trees, engineered interactions, or geometry-based methods. Sometimes it is not.
+Earlier modeling chapters established a core logic. Frame a task, design an evaluation plan, try a serious baseline, and inspect what structure that baseline is missing. Sometimes the answer is manageable with trees, engineered interactions, or geometry-based methods. Sometimes it is not.
 
-Images, language, and audio often contain structure that is difficult to specify manually at the right level of abstraction. Even in smaller problems, the useful intermediate signals may not be obvious in advance. In such cases, the main challenge is not only drawing the final decision boundary. It is discovering the space in which that boundary should be drawn.
+Images, language, and audio often contain structure that is hard to specify manually at the right level of abstraction. Even in smaller problems, the useful intermediate signals may not be obvious in advance. The main challenge in such cases is not just drawing the final decision boundary; it is discovering the space in which that boundary should be drawn.
 
-That is when learned structure becomes the right move. The issue is not merely that deep learning is powerful. The issue is that the representation itself is part of what must be learned.
+That is when learned structure becomes the right move. The issue is not that deep learning is powerful. It is that the representation itself is part of what must be learned.
 
-This does not mean neural networks are always the best choice. On small tabular datasets, a linear model or tree ensemble may still be stronger, easier to debug, and easier to justify. The important shift is conceptual: neural networks are most valuable when the main modeling problem is that the useful internal features are unknown.
+Neural networks are not always the best choice. On small tabular datasets, a linear model or tree ensemble may be stronger, easier to debug, and easier to justify. The important shift is conceptual: neural networks earn their place when the main modeling problem is that the useful internal features are unknown.
 
-The practical workflow is equally simple to state in prose. Start with the strongest simple baseline, decide what structure it is missing, build the smallest network that could plausibly learn that structure, train with a validation split while watching for optimization versus generalization failure, and then report the result in a minimum credible training report.
+The practical workflow is short. Start with the strongest simple baseline. Decide what structure it is missing. Build the smallest network that could plausibly learn that structure. Train with a validation split while watching for optimization versus generalization failure. Report the result in a minimum credible training report.
 
-Chapter~\ref{ch:structure-beyond-linearity} asked which kind of structure should be added next. This chapter asks what happens when the structure itself is not fully specified in advance and must instead be learned during training.
+Chapter~\ref{ch:structure-beyond-linearity} asked which kind of structure to add next. This chapter asks what happens when the structure itself is not fully specified in advance and must be learned during training.
 
 \section{A Neural Network as a Learned Feature Pipeline}
 
 \begin{practicalnote}
-\textbf{Terminology shift.} In earlier chapters, ``features'' meant attributes designed by the practitioner---one-hot encodings, polynomial terms, bag-of-words counts. From this chapter onward, ``features'' will also refer to the \emph{learned} intermediate representations that a neural network discovers during training. Where the distinction matters, this chapter says ``hand-designed features'' for the earlier sense and ``learned features'' or ``internal features'' for the new one.
+\textbf{Terminology shift.} In earlier chapters, ``features'' meant attributes designed by the practitioner---one-hot encodings, polynomial terms, bag-of-words counts. From this chapter on, ``features'' also refers to the \emph{learned} intermediate representations a neural network discovers during training. Where the distinction matters, the chapter uses ``hand-designed features'' for the earlier sense and ``learned features'' or ``internal features'' for the new one.
 \end{practicalnote}
 
 The conceptual heart of the chapter is simple:
@@ -31,7 +31,7 @@ The conceptual heart of the chapter is simple:
 \emph{raw input $\rightarrow$ learned intermediate features $\rightarrow$ final score or probability}
 \end{center}
 
-A hidden layer is not extra decoration. It is a learned representation stage. Everything else in the chapter explains how that pipeline is computed, corrected, stabilized, and judged.
+A hidden layer is not extra decoration. It is a learned representation stage. The rest of the chapter explains how that pipeline is computed, corrected, stabilized, and judged.
 
 \begin{figure}[t]
 \centering
@@ -90,12 +90,12 @@ At the level of one unit, the calculation still looks familiar:
 \[
 z = w^\top x + b, \qquad a = \phi(z).
 \]
-Here $x$ is the input vector, $w$ is a vector of weights, $b$ is a bias term, $z$ is the raw weighted sum before the activation function is applied, called the \emph{pre-activation}, and $\phi$ is the activation function. The output $a$ is the transformed value after the nonlinearity and then becomes part of the input to the next layer.
+Here $x$ is the input vector, $w$ a vector of weights, and $b$ a bias term. The raw weighted sum $z$, called the \emph{pre-activation}, feeds into the activation function $\phi$. The output $a$ is the transformed value after the nonlinearity, and it becomes part of the input to the next layer.
 
-This should look like an extension of Chapter~\ref{ch:linear-models} rather than a complete break from it. The affine part $w^\top x + b$ is still a weighted sum plus bias. What changes is that the network repeats this process across layers and applies a nonlinear activation function to the output of each affine transformation. Those nonlinearities allow the model to reshape the representation itself.
+This should look like an extension of Chapter~\ref{ch:linear-models}, not a clean break from it. The affine part $w^\top x + b$ is still a weighted sum plus bias. What changes is that the network repeats the process across layers and applies a nonlinear activation function to the output of each affine transformation. Those nonlinearities let the model reshape the representation itself.
 
 \begin{prereqbridge}
-An affine transformation is a linear transformation followed by a shift. In practice, students can think of $w^\top x + b$ as ``score the input, then move the score up or down with a bias.''
+An affine transformation is a linear transformation followed by a shift. Think of $w^\top x + b$ as ``score the input, then move the score up or down with a bias.''
 \end{prereqbridge}
 
 \begin{figure}[t]
@@ -123,7 +123,7 @@ An affine transformation is a linear transformation followed by a shift. In prac
 
 \section{Why Nonlinearity Matters}
 
-Students do not need a long catalog of activation functions at this stage. They need one main idea: nonlinearity is what allows the learned feature space to bend at all.
+A long catalog of activation functions is not needed yet. One idea matters most: nonlinearity is what lets the learned feature space bend.
 
 Suppose a network had two layers but no activation function:
 \[
@@ -133,7 +133,7 @@ Substituting the first expression into the second gives
 \[
 y = W_2 W_1 x + (W_2 b_1 + b_2).
 \]
-This is still just another affine transformation of $x$. No matter how many such layers are stacked, without nonlinearity the whole network is equivalent to one larger affine model.
+This is still an affine transformation of $x$. No matter how many such layers are stacked, the whole network without nonlinearity is equivalent to one larger affine model.
 
 \begin{figure}[t]
 \centering
@@ -168,7 +168,7 @@ This is still just another affine transformation of $x$. No matter how many such
 \label{fig:no-activation-still-linear}
 \end{figure}
 
-This is why activation functions matter pedagogically. Their job is to make it possible for layered networks to learn nonlinear representations. Without activation functions, stacking multiple layers collapses to a single affine map, so depth would add no expressive power.
+This is why activation functions matter. Their job is to let layered networks learn nonlinear representations. Without them, stacking layers collapses to a single affine map and depth adds no expressive power.
 
 \begin{theorem}[Universal approximation is an existence claim]
 For any continuous function $f$ on the unit hypercube $[0,1]^d$ and any $\varepsilon>0$, there exists a one-hidden-layer network with a continuous sigmoidal activation whose output $g$ satisfies
@@ -178,7 +178,7 @@ For any continuous function $f$ on the unit hypercube $[0,1]^d$ and any $\vareps
 \citep{cybenko1989}. Related work later broadened these approximation results for multilayer feedforward networks \citep{hornik1989}.
 \end{theorem}
 
-This theorem is worth reading carefully for what it does and does not say. It is an existence result about expressive power. It does \emph{not} say that gradient descent will easily find the approximating network, that the network will be small, or that a flexible network will generalize well on finite data.
+Read this theorem carefully for what it does and does not say. It is an existence result about expressive power. It does \emph{not} say that gradient descent will easily find the approximating network, that the network will be small, or that a flexible network will generalize well on finite data.
 
 \begin{figure}[t]
 \centering
@@ -212,17 +212,17 @@ This theorem is worth reading carefully for what it does and does not say. It is
 \end{scope}
 \end{tikzpicture}%
 }
-\caption{Students should notice three different behaviors immediately: sigmoid squashes into $(0,1)$, $\tanh$ is zero-centered, and ReLU is piecewise linear with a flat region for negative inputs.}
+\caption{Three different behaviors stand out immediately: sigmoid squashes into $(0,1)$, $\tanh$ is zero-centered, and ReLU is piecewise linear with a flat region for negative inputs.}
 \label{fig:activation-functions}
 \end{figure}
 
 \begin{warningbox}
-Older saturating activations can produce very small gradients when their outputs are near the flat ends of the curve. ReLU avoids that kind of saturation for positive inputs, but it can create a different failure mode: if a unit stays in the negative region, it may output zero repeatedly and stop updating in a useful way. This is the intuition behind ``dead ReLUs.''
+Older saturating activations produce very small gradients when their outputs sit near the flat ends of the curve. ReLU avoids that kind of saturation for positive inputs, but it creates a different failure mode: a unit stuck in the negative region may output zero repeatedly and stop updating usefully. This is the intuition behind ``dead ReLUs.''
 \end{warningbox}
 
 \section{Worked Anchor Example: One Forward Pass, Fully Legible}
 
-Keep one small network in view long enough that the rest of the chapter feels like one story rather than a collection of topics. Consider a tiny network for predicting whether an email message is likely to be spam. Let the input features be:
+Keep one small network in view long enough that the rest of the chapter reads as one story rather than a collection of topics. Consider a tiny network for predicting whether an email is likely to be spam. The input features are:
 \begin{itemize}[leftmargin=*]
 \item $x_1=$ suspicious-link signal
 \item $x_2=$ urgent-language signal
@@ -377,12 +377,12 @@ p = 1.0 / (1.0 + math.exp(-s))   # sigmoid probability for class 1
 print("predicted probability:      ", round(p, 4))
 \end{codeexample}
 
-Every library that trains a neural network executes exactly this sequence of multiplications, additions, and activation calls. Seeing the numbers makes the pipeline concrete: the hidden units are not magic---they are weighted sums with a nonlinearity applied, and their outputs become the inputs to the next layer.
+Every library that trains a neural network runs exactly this sequence of multiplications, additions, and activation calls. Seeing the numbers makes the pipeline concrete: the hidden units are not magic. They are weighted sums with a nonlinearity applied, and their outputs become inputs to the next layer.
 
-This small example already shows the logic of a network. The hidden units do not directly output the final prediction. They create intermediate signals. One hidden unit responds more strongly to suspicious-link evidence; the other responds more strongly to urgent-language evidence. The output layer then combines those intermediate signals into a final decision.
+This small example already shows the logic of a network. The hidden units do not produce the final prediction directly; they create intermediate signals. One responds more strongly to suspicious-link evidence; the other to urgent-language evidence. The output layer then combines those signals into a final decision.
 
 \begin{example}[What the Hidden Layer Is Doing]
-In a linear model, the final score would be computed directly from $x_1$ and $x_2$. In this network, the model first builds two internal features, $h_1$ and $h_2$. Those features are not handed to the model by the user. They are learned during training. This is the conceptual heart of neural networks.
+In a linear model, the final score is computed directly from $x_1$ and $x_2$. In this network, the model first builds two internal features, $h_1$ and $h_2$. The user does not hand those features to the model; they are learned during training. This is the conceptual heart of neural networks.
 \end{example}
 
 Now change the message slightly and let $x=(0.2,0.7)$. Then
@@ -393,17 +393,17 @@ while
 \[
 h_2 = \mathrm{ReLU}(0.5(0.2) + 1.5(0.7) - 1.0) = \mathrm{ReLU}(0.15)=0.15.
 \]
-One hidden unit is now shut off entirely. This will matter again when we discuss backpropagation. Keeping one small network alive across several sections is deliberate: the goal is to make the later training story feel like continuation, not topic-switching.
+One hidden unit is now shut off entirely. This will matter again during backpropagation. Keeping one small network alive across several sections is deliberate: the later training story should feel like continuation, not topic-switching.
 
 \section{Loss as the Teaching Signal}
 
-Once the forward pass is fully legible, the next question is what tells the model that this output was good or bad. That role belongs to the loss. The same worked network now stops being only a predictor and becomes an object that can be corrected.
+Once the forward pass is fully legible, the next question is what tells the model whether that output was good or bad. That role belongs to the loss. The same worked network stops being only a predictor and becomes an object that can be corrected.
 
 \begin{thinkingtool}
 \textbf{Metrics judge; losses teach.} Evaluation metrics tell us what claim we can make. Training losses tell the optimizer how to correct the model.
 \end{thinkingtool}
 
-Recall the loss function $\ell(y,\hat{y})$ introduced in Chapter~\ref{ch:prediction-loss-decision}: a per-example score where smaller values mean a better prediction and zero usually means a perfect one. Training seeks parameter values that make the average per-example loss $\mathcal{L}_{\text{train}}(\theta) = \tfrac{1}{n}\sum_{i=1}^{n}\ell(y_i,\hat{y}_i)$ small.
+Recall the loss function $\ell(y,\hat{y})$ from Chapter~\ref{ch:prediction-loss-decision}: a per-example score where smaller values mean a better prediction and zero usually means a perfect one. Training seeks parameter values that make the average per-example loss $\mathcal{L}_{\text{train}}(\theta) = \tfrac{1}{n}\sum_{i=1}^{n}\ell(y_i,\hat{y}_i)$ small.
 
 For regression, a standard choice is mean squared error:
 \[
@@ -415,7 +415,7 @@ For binary classification, a common choice is binary cross-entropy:
 \]
 
 \begin{example}[The Direction of the Correction]
-Before differentiating, read the desired training signal qualitatively. If the true label is \(y=1\) and the model predicts \(\hat p=0.20\), the correction should push the score upward. The quantity \(\hat p-y=-0.80\) has that sign. If the model predicts \(\hat p=0.95\), the quantity \(\hat p-y=-0.05\) still pushes upward, but only gently. If the true label is \(y=0\) and the model predicts \(\hat p=0.90\), then \(\hat p-y=0.90\), so gradient descent pushes the score downward. The theorem below explains why sigmoid plus cross-entropy gives exactly this clean correction signal.
+Before differentiating, read the desired training signal qualitatively. If the true label is \(y=1\) and the model predicts \(\hat p=0.20\), the correction should push the score upward. The quantity \(\hat p-y=-0.80\) carries that sign. If the model predicts \(\hat p=0.95\), then \(\hat p-y=-0.05\) still pushes upward, but only gently. If the true label is \(y=0\) and the model predicts \(\hat p=0.90\), then \(\hat p-y=0.90\), so gradient descent pushes the score downward. The theorem below explains why sigmoid plus cross-entropy gives this clean correction signal.
 \end{example}
 
 \begin{theorem}[Sigmoid cross-entropy produces the training signal \(\hat{p}-y\) for one example]
@@ -449,17 +449,17 @@ Multiplying and simplifying gives
 \]
 \end{proof}
 
-If the loss is averaged over \(n\) examples as in the definition above, then the derivative with respect to the score of example \(i\) is \((\hat p_i-y_i)/n\). The useful simplification is the same; the batch average just contributes the constant factor \(1/n\).
+If the loss is averaged over \(n\) examples, the derivative with respect to the score of example \(i\) is \((\hat p_i-y_i)/n\). The simplification is the same; the batch average just contributes the constant factor \(1/n\).
 
-This is the error signal for the output layer---the difference between what the model predicted and what the target required. The network is pushed upward when it underpredicts the true class and downward when it overpredicts it.
+This is the error signal for the output layer: the difference between what the model predicted and what the target required. The network is pushed upward when it underpredicts the true class and downward when it overpredicts.
 
-These formulas matter, but the deeper point is that the loss function defines what kinds of mistakes should create the strongest correction pressure during training.
+These formulas matter, but the deeper point is that the loss function defines which kinds of mistakes create the strongest correction pressure during training.
 
 \subsection{Why Not Optimize Accuracy Directly?}
 
-Accuracy is often the evaluation metric students care about first, but it is a poor training objective for gradient-based learning. It changes only when a prediction crosses a threshold. That makes it too coarse for smooth optimization.
+Accuracy is often the evaluation metric people care about first, but it is a poor training objective for gradient-based learning. It changes only when a prediction crosses a threshold, making it too coarse for smooth optimization.
 
-Loss functions such as cross-entropy provide richer feedback. If the true label is $1$, then a predicted probability of $0.51$ and a predicted probability of $0.99$ are both counted as correct by accuracy, but they should not be treated as equally good. Cross-entropy captures that difference:
+Loss functions such as cross-entropy provide richer feedback. If the true label is $1$, both a predicted probability of $0.51$ and one of $0.99$ count as correct under accuracy, but they should not be treated as equally good. Cross-entropy captures the difference:
 \[
 -\log(0.51) \approx 0.673, \qquad -\log(0.99) \approx 0.010.
 \]
@@ -485,7 +485,7 @@ The second prediction is not only correct but confidently correct, so it receive
 
 \subsection{Multiclass Outputs}
 
-Later chapters will repeatedly use multiclass classification, so it is worth seeing the standard pattern now. A multiclass output layer usually produces one raw score per class, called a \emph{logit}, before those scores are normalized into probabilities. In this book, \emph{logit} refers to the raw output of a linear layer before any activation is applied. We sometimes use \emph{score} informally when the distinction does not matter. Softmax converts those logits into probabilities:
+Later chapters will use multiclass classification repeatedly, so it is worth seeing the standard pattern now. A multiclass output layer typically produces one raw score per class, called a \emph{logit}, before those scores are normalized into probabilities. In this book, \emph{logit} refers to the raw output of a linear layer before any activation is applied; we sometimes use \emph{score} informally when the distinction does not matter. Softmax converts logits into probabilities:
 \[
 \mathrm{softmax}(s)_k = \frac{e^{s_k}}{\sum_j e^{s_j}}.
 \]
@@ -502,7 +502,7 @@ Softmax is invariant to adding the same constant to every logit. For any scalar 
 =\frac{e^c e^{s_k}}{e^c\sum_j e^{s_j}} \\
 &=\mathrm{softmax}(s)_k.
 \end{align*}
-So only differences between logits matter, not their absolute level. This is why logits are best read as relative evidence before normalization.
+Only differences between logits matter, not their absolute level. Read logits as relative evidence before normalization.
 \end{mathlens}
 
 \begin{table}[t]
@@ -523,10 +523,10 @@ Class 3 & $-0.7$ & $0.080$ & much larger loss if true \\
 
 \section{Optimization as Repeated Correction}
 
-With the teaching signal now defined, the remaining issue is procedural: how the model uses that signal to improve itself over repeated updates. Training becomes an optimization problem: find parameter values that reduce that loss. Gradient-based optimization works by asking how the loss would change if each parameter were nudged slightly.
+With the teaching signal defined, the remaining issue is procedural: how the model uses that signal to improve itself over repeated updates. Training becomes an optimization problem: find parameter values that reduce the loss. Gradient-based optimization works by asking how the loss would change if each parameter were nudged slightly.
 
 \begin{prereqbridge}
-A derivative measures local slope. If changing a parameter a little causes the loss to rise sharply, the derivative is large. If changing it causes the loss to fall, the derivative has the opposite sign. A gradient is the collection of these slopes across many parameters.
+A derivative measures local slope. If changing a parameter slightly causes the loss to rise sharply, the derivative is large. If the change causes the loss to fall, the derivative has the opposite sign. A gradient collects these slopes across many parameters.
 \end{prereqbridge}
 
 Suppose a one-parameter model predicts $\hat{y}=wx$ and uses squared error:
@@ -545,7 +545,7 @@ Substituting the current values gives
 \[
 \frac{dL}{dw}=2(2-6)(2)=-16.
 \]
-The negative sign says that increasing $w$ will reduce the loss. If the learning rate is $\eta=0.1$, one gradient descent step gives
+The negative sign says that increasing $w$ reduces the loss. With learning rate $\eta=0.1$, one gradient-descent step gives
 \[
 w_{\text{new}} = w - \eta \frac{dL}{dw}
 = 1 - 0.1(-16)
@@ -603,10 +603,10 @@ The operational pipeline of training is then:
 \item check validation behavior.
 \end{itemize}
 
-Every later training detail in the chapter---learning rate, AdamW, mini-batches, batch normalization, and regularization---modifies this loop rather than replacing it.
+Every later training detail---learning rate, AdamW, mini-batches, batch normalization, regularization---modifies this loop rather than replacing it.
 
 \begin{practicalnote}
-\textbf{Core loop first, tools second.} The minimum mental model is forward pass, loss, gradient signal, parameter update, and validation check. Optimizers, normalization layers, residual connections, dropout, augmentation, and schedules are tools for making that loop behave better. Students should be able to explain the loop before trying to remember the tool list.
+\textbf{Core loop first, tools second.} The minimum mental model is forward pass, loss, gradient signal, parameter update, validation check. Optimizers, normalization layers, residual connections, dropout, augmentation, and schedules are tools for making that loop behave better. Be able to explain the loop before trying to remember the tool list.
 \end{practicalnote}
 
 \begin{codeexample}[caption={A generic neural training loop}]
@@ -649,16 +649,16 @@ for epoch in range(num_epochs):
 \node[note] at (6.2,1.35) {repeat across training batches inside one epoch};
 \end{tikzpicture}%
 }
-\caption{The training loop is short, but each stage has a distinct role. Batch updates repeat inside an epoch, and validation is checked after the training batches for that epoch. Students should be able to explain what changes during the forward pass, backward pass, and update step.}
+\caption{The training loop is short, but each stage has a distinct role. Batch updates repeat inside an epoch, and validation runs after the training batches for that epoch. You should be able to explain what changes during the forward pass, backward pass, and update step.}
 \label{fig:training-loop-flow}
 \end{figure}
 
 \subsection{Learning Rate}
 
-The learning rate controls step size. If it is too small, training can become painfully slow. If it is too large, optimization can overshoot good regions and become unstable. This is one reason neural training is partly a modeling problem and partly an optimization problem. The architecture may be sound while the training procedure is poor.
+The learning rate controls step size. Too small, and training becomes painfully slow. Too large, and optimization overshoots good regions and grows unstable. This is one reason neural training is partly a modeling problem and partly an optimization problem: the architecture may be sound while the training procedure is poor.
 
 \begin{practicalnote}
-In practice, the learning rate is rarely held constant. Common schedules include \emph{step decay} (halving the rate every $k$ epochs), \emph{cosine annealing} (smoothly decreasing to near zero), and \emph{warmup} (starting small and ramping up before decaying). The right schedule depends on the problem; the key insight is that the best rate for early training is often too large for fine-tuning near a minimum.
+In practice, the learning rate is rarely held constant. Common schedules include \emph{step decay} (halve the rate every $k$ epochs), \emph{cosine annealing} (smoothly decrease to near zero), and \emph{warmup} (start small, ramp up, then decay). The right schedule depends on the problem; the key insight is that the best rate for early training is often too large for fine-tuning near a minimum.
 \end{practicalnote}
 
 \begin{figure}[t]
@@ -721,22 +721,22 @@ In practice, the learning rate is rarely held constant. Common schedules include
 \end{scope}
 \end{tikzpicture}%
 }
-\caption{Step size is part of the training design. Too small wastes computation, while too large can bounce across good regions instead of settling into them.}
+\caption{Step size is part of the training design. Too small wastes computation; too large bounces across good regions instead of settling into them.}
 \label{fig:learning-rate-cases}
 \end{figure}
 
 \subsection{Adaptive Optimization: Momentum, Adam, and AdamW}
 
-The learning rate tells us how large a step to take, but it does not say how to shape the step when the loss surface is uneven. Adaptive optimizers try to make optimization less brittle by using recent gradient information to smooth motion or scale updates per parameter.
+The learning rate sets step size, but it does not say how to shape the step when the loss surface is uneven. Adaptive optimizers try to make optimization less brittle by using recent gradient information to smooth motion or scale updates per parameter.
 
-\textbf{Momentum} accumulates a running direction of travel. If successive gradients point roughly the same way, momentum keeps the update moving that way instead of restarting from scratch at every batch. If gradients alternate direction, momentum damps the zig-zag. The idea is simple: do not treat the latest gradient as the entire story.
+\textbf{Momentum} accumulates a running direction of travel. If successive gradients point roughly the same way, momentum keeps the update moving that way instead of restarting at every batch. If gradients alternate direction, momentum damps the zig-zag. The idea is simple: do not treat the latest gradient as the entire story.
 
-\textbf{Adam} adds a second idea: keep running statistics of both the gradient and its squared magnitude. The first statistic tracks direction, and the second tracks scale. Parameters with consistently large gradients get smaller effective steps; parameters with consistently small or noisy gradients get more usable steps. In practice, this often makes early training easier and less sensitive to a single global step size.
+\textbf{Adam} adds a second idea: keep running statistics of both the gradient and its squared magnitude. The first tracks direction; the second tracks scale. Parameters with consistently large gradients get smaller effective steps; parameters with consistently small or noisy gradients get more usable steps. In practice, this often makes early training easier and less sensitive to a single global step size.
 
-\textbf{AdamW} is Adam with decoupled weight decay: it keeps the adaptive step logic but separates weight decay from the gradient update itself. That separation matters because weight decay is a regularization choice, not a disguised learning-rate trick. Students should think of AdamW as saying: ``adapt the step, but still regularize the weights in the intended way.''
+\textbf{AdamW} is Adam with decoupled weight decay. It keeps the adaptive step logic but separates weight decay from the gradient update itself. The separation matters because weight decay is a regularization choice, not a disguised learning-rate trick. Read AdamW as saying: ``adapt the step, but still regularize the weights in the intended way.''
 
 \begin{example}[A One-Coordinate Optimizer Intuition]
-Suppose one weight sees successive gradients \(8,7,9\), while another sees \(0.2,0.1,0.3\). Plain gradient descent uses the same global learning rate on both coordinates. Momentum treats the first sequence as persistent downhill evidence and keeps velocity in that direction instead of restarting every step. Adam goes further and rescales the coordinates differently: the large-gradient weight receives a more conservative effective step, while the small-gradient weight is not drowned out entirely by the same global rate. The point is not that Adam knows the right answer. The point is that different coordinates can require different step behavior.
+Suppose one weight sees successive gradients \(8,7,9\), while another sees \(0.2,0.1,0.3\). Plain gradient descent applies the same global learning rate to both. Momentum treats the first sequence as persistent downhill evidence and keeps velocity in that direction instead of restarting every step. Adam goes further by rescaling the coordinates: the large-gradient weight gets a more conservative effective step, while the small-gradient weight is not drowned out by the same global rate. The point is not that Adam knows the right answer; it is that different coordinates can require different step behavior.
 \end{example}
 
 \begin{codeexample}[caption={A compact adaptive-update skeleton}]
@@ -756,20 +756,20 @@ for each minibatch gradient grad:
 \end{codeexample}
 
 \begin{practicalnote}
-Momentum and Adam-like methods help most when optimization is noisy, poorly scaled, or sensitive to a single global step size. They do not fix label noise, leakage, a broken loss-output match, or a model that is simply too weak to represent the task.
+Momentum and Adam-like methods help most when optimization is noisy, poorly scaled, or sensitive to a single global step size. They do not fix label noise, leakage, a broken loss-output match, or a model too weak to represent the task.
 \end{practicalnote}
 
 \begin{example}[When Adam Helps and When It Does Not]
-Suppose a model trains erratically because different parameters receive gradients on very different scales. Adam often stabilizes that situation quickly. But if the labels are wrong or the output layer does not match the task, Adam can still produce a confident failure faster than SGD. A better optimizer is not a substitute for a correct problem formulation.
+Suppose a model trains erratically because different parameters receive gradients on very different scales. Adam often stabilizes that situation quickly. But if the labels are wrong or the output layer does not match the task, Adam can produce a confident failure faster than SGD. A better optimizer is not a substitute for correct problem formulation.
 \end{example}
 
 \subsection{Optimization Failure Versus Generalization Failure}
 
-When a neural network performs poorly, the cause is usually one of two fundamentally different problems. Conflating them leads to wasted effort because the remedies are different.
+When a neural network performs poorly, the cause is usually one of two very different problems. Conflating them wastes effort because the remedies differ.
 
-\textbf{Optimization failure} means the model cannot fit the training signal at all. Training loss stays high, barely decreases, or fluctuates without settling. The model is not learning the mapping the data contains. Common causes include a learning rate that is too large or too small, a weight initialization that puts the network in a poor region, a mismatch between the output layer and the loss function, or label corruption that prevents any consistent rule from forming.
+\textbf{Optimization failure} means the model cannot fit the training signal at all. Training loss stays high, barely decreases, or fluctuates without settling. The model is not learning the mapping the data contains. Common causes: a learning rate too large or too small, a weight initialization that places the network in a poor region, a mismatch between the output layer and the loss function, or label corruption that blocks any consistent rule from forming.
 
-\textbf{Generalization failure} means the model fits the training data well but fails on new examples. Training loss is low; validation loss is high or diverges from training loss as training continues. The model is memorizing rather than learning a pattern that transfers. Common causes include a model with too much capacity relative to the dataset size, insufficient regularization, insufficient data augmentation, or distribution shift between training and deployment.
+\textbf{Generalization failure} means the model fits the training data well but fails on new examples. Training loss is low; validation loss is high or diverges from training loss as training continues. The model memorizes rather than learning a pattern that transfers. Common causes: too much capacity relative to dataset size, insufficient regularization, insufficient data augmentation, or distribution shift between training and deployment.
 
 \begin{table}[t]
 \centering
@@ -784,17 +784,17 @@ Generalization failure & Low & High & Capacity, regularization, data size, augme
 Both & High & High & Fix optimization first, then assess generalization \\
 \bottomrule
 \end{tabular}
-\caption{Diagnosing the failure type before applying remedies saves considerable effort. Regularization does not help when the model cannot fit its training data.}
+\caption{Diagnosing the failure type before applying remedies saves considerable effort. Regularization does not help when the model cannot fit its training data in the first place.}
 \label{tab:opt-vs-gen-failure}
 \end{table}
 
-This distinction is foundational for debugging. Students who do not draw it clearly will add dropout when they should be fixing the output layer, or increase model capacity when they should be adding regularization. Both changes would be reasonable in other contexts, but neither is helpful when applied to the wrong failure type. The first debugging reflex in this chapter should therefore be diagnostic, not architectural.
+This distinction is foundational for debugging. Without it, you may add dropout when you should be fixing the output layer, or increase capacity when you should be adding regularization. Both changes would be reasonable in other contexts; neither helps when applied to the wrong failure type. The first debugging reflex should be diagnostic, not architectural.
 
-The cleanest diagnostic procedure is to first establish whether the model can overfit a very small dataset. Take a batch of ten to twenty training examples and train the model until training loss is very low. If the model cannot overfit even ten examples, the problem is optimization. If it can overfit ten examples but not generalize on the full dataset, the problem is generalization. The separation is not always perfect, but the small-batch overfit test is the fastest way to decide which problem to solve first.
+The cleanest diagnostic is to check whether the model can overfit a very small dataset. Take a batch of ten to twenty training examples and train until the loss is very low. If the model cannot overfit even ten examples, the problem is optimization. If it can overfit ten examples but does not generalize on the full dataset, the problem is generalization. The separation is not always perfect, but the small-batch overfit test is the fastest way to decide which problem to solve first.
 
 \subsection{Mini-Batches, Initialization, and Stability}
 
-In principle, gradients could be computed using the entire training set before every update. In practice, that is often too expensive. Instead, we use mini-batches: small subsets of examples that produce noisy but useful gradient estimates. This gives rise to stochastic gradient descent and its many variants.
+Gradients could in principle be computed on the entire training set before every update. In practice, that is often too expensive. Mini-batches---small subsets of examples that produce noisy but useful gradient estimates---are the standard alternative. They give rise to stochastic gradient descent and its many variants.
 
 \begin{figure}[t]
 \centering
@@ -808,33 +808,33 @@ In principle, gradients could be computed using the entire training set before e
 \node[red] at (5.4,0.74) {mini-batch};
 \end{tikzpicture}%
 }
-\caption{Mini-batch updates usually make optimization noisier than full-batch updates. That noise is often acceptable and sometimes beneficial, but it changes how training curves should be read.}
+\caption{Mini-batch updates make optimization noisier than full-batch updates. The noise is often acceptable and sometimes beneficial, but it changes how training curves should be read.}
 \label{fig:full-batch-vs-minibatch}
 \end{figure}
 
-Training also does not begin from nowhere. Parameters must be initialized, inputs must be scaled sensibly, and layers must receive signals of a manageable size. Bad initialization can produce activations that are too small, too large, or too similar, making optimization slow or unstable from the first step.
+Training also does not begin from nowhere. Parameters must be initialized, inputs scaled sensibly, and layers given signals of a manageable size. Bad initialization can produce activations that are too small, too large, or too similar, making optimization slow or unstable from the first step.
 
 \begin{mathlens}
-If two hidden units start with exactly the same weights and bias, then they compute the same pre-activation on every example, produce the same activation, and receive the same gradient update. Gradient descent preserves that equality, so the two units never specialize; the network learns one feature twice. Random initialization breaks that symmetry by giving each unit a slightly different starting point, which lets different hidden units move toward different useful features.
+If two hidden units start with identical weights and bias, they compute the same pre-activation on every example, produce the same activation, and receive the same gradient update. Gradient descent preserves the equality, so the two units never specialize; the network learns one feature twice. Random initialization breaks the symmetry by giving each unit a slightly different starting point, letting different hidden units move toward different useful features.
 \end{mathlens}
 
 \begin{example}[Three Bad Starts]
-If every hidden unit starts at zero, the layer stays symmetric and learns duplicate features. If the initial weights are extremely small, signals shrink as they pass through many layers and learning becomes sluggish. If the initial weights are extremely large, activations or gradients can explode or saturate. Good initialization is therefore about scale and diversity at the same time. In practice, initialization schemes such as He initialization (for ReLU networks) and Xavier initialization (for sigmoid/tanh networks) have been developed to keep activations and gradients in a reasonable range through early training. Most frameworks apply sensible defaults, but awareness of the issue helps when debugging slow or unstable convergence.
+If every hidden unit starts at zero, the layer stays symmetric and learns duplicate features. If the initial weights are very small, signals shrink as they pass through many layers and learning becomes sluggish. If the initial weights are very large, activations or gradients can explode or saturate. Good initialization is about scale and diversity at the same time. In practice, schemes such as He initialization (for ReLU networks) and Xavier initialization (for sigmoid/tanh networks) keep activations and gradients in a reasonable range through early training. Most frameworks apply sensible defaults, but awareness of the issue helps when debugging slow or unstable convergence.
 \end{example}
 
 \begin{warningbox}
-When students say ``the network did not work,'' the failure may be in the learning rate, initialization, batch setup, or data preprocessing rather than in the idea of the model itself.
+When you say ``the network did not work,'' the failure may live in the learning rate, initialization, batch setup, or data preprocessing rather than in the idea of the model itself.
 \end{warningbox}
 
 \begin{practicalnote}
-If a neural model fails early, check simple stability questions before redesigning the architecture: Were the inputs normalized? Is the learning rate reasonable? Are the initial weights making activations explode or vanish? Is the batch size so small that the gradients are mostly noise?
+When a neural model fails early, check simple stability questions before redesigning the architecture. Were the inputs normalized? Is the learning rate reasonable? Are the initial weights making activations explode or vanish? Is the batch size so small that gradients are mostly noise?
 \end{practicalnote}
 
 \subsection{Batch Normalization as Signal Stabilization}
 
-Batch normalization is another way to make optimization less brittle. It is a training-time rescaling step that normalizes intermediate activations using statistics computed from the current mini-batch, then restores flexibility with learned scale and shift parameters. The intuition is that if the hidden signals stay in a manageable range, the next layers see a more stable training problem.
+Batch normalization is another way to make optimization less brittle. It is a training-time rescaling step that normalizes intermediate activations using statistics from the current mini-batch, then restores flexibility with learned scale and shift parameters. If the hidden signals stay in a manageable range, the next layers see a more stable training problem.
 
-That description is enough for this book. Students do not need to memorize the exact implementation before they understand the purpose: batch normalization reduces internal scale drift, which can make optimization smoother and allow somewhat larger learning rates. It is a training aid, not a cure-all.
+That description is enough for this book. The exact implementation is less important than the purpose: batch normalization reduces internal scale drift, which can make optimization smoother and allow larger learning rates. It is a training aid, not a cure-all.
 
 \begin{mathlens}
 For mini-batch activations \(a_1,\ldots,a_m\), batch normalization computes
@@ -847,7 +847,7 @@ where \(\mu_B\) and \(\sigma_B^2\) are the batch mean and variance, and \(\gamma
 \end{mathlens}
 
 \begin{practicalnote}
-During training, batch normalization uses statistics (mean and variance) computed from the current mini-batch. At inference time, the model instead uses running averages accumulated during training. This asymmetry means that a model can behave differently in training and inference modes---a source of subtle bugs when deploying neural networks. Always verify that your framework is set to evaluation mode before serving predictions.
+During training, batch normalization uses statistics (mean and variance) computed from the current mini-batch. At inference time, the model uses running averages accumulated during training. The asymmetry means a model can behave differently in training and inference modes---a source of subtle bugs at deployment. Always verify that your framework is set to evaluation mode before serving predictions.
 \end{practicalnote}
 
 \begin{figure}[t]
@@ -869,16 +869,16 @@ During training, batch normalization uses statistics (mean and variance) compute
 \end{figure}
 
 \begin{example}[What Batch Normalization Fixes, and What It Does Not]
-If hidden activations are drifting in scale from batch to batch, batch normalization can make training smoother and less sensitive to the exact learning rate. For a mini-batch with activations \(2,4,6\), the layer first recenters them around zero before the learned rescaling step. The next layer therefore reacts to relative variation rather than raw drift in magnitude. But batch normalization still does not fix a wrong objective, a poor label set, or a model that lacks the capacity to learn the task in the first place.
+If hidden activations are drifting in scale from batch to batch, batch normalization can make training smoother and less sensitive to the exact learning rate. For a mini-batch with activations \(2,4,6\), the layer first recenters them around zero before the learned rescaling step. The next layer therefore reacts to relative variation rather than raw drift in magnitude. Batch normalization still does not fix a wrong objective, a poor label set, or a model that lacks the capacity to learn the task in the first place.
 \end{example}
 
 \begin{practicalnote}
-Batch normalization stabilizes the signal within a layer. A complementary technique called a \emph{residual connection} (or skip connection) helps the signal flow between layers. When the shapes match, instead of computing $h = f(x)$, the layer computes $h = f(x) + x$, adding the input directly to the output. When the shapes do not match, architectures typically insert a projection on the skip path before adding. If the transformation $f$ is unhelpful, the gradient can flow through the identity or projected branch, so deep networks become much easier to train. Residual connections are a key design principle behind ResNets in vision and many transformer blocks in language.
+Batch normalization stabilizes the signal within a layer. A complementary technique called a \emph{residual connection} (or skip connection) helps the signal flow between layers. When shapes match, instead of computing $h = f(x)$, the layer computes $h = f(x) + x$, adding the input directly to the output. When shapes do not match, architectures typically insert a projection on the skip path before adding. If the transformation $f$ is unhelpful, the gradient can still flow through the identity or projected branch, making deep networks much easier to train. Residual connections are a key design principle behind ResNets in vision and many transformer blocks in language.
 \end{practicalnote}
 
 \subsection{Debugging a Broken Training Run}
 
-Students often respond to a bad neural result by changing the architecture first. That is usually too early. The more disciplined first question is: what kind of failure are we seeing?
+A common reflex on a bad neural result is to change the architecture first. That is usually too early. The disciplined first question is: what kind of failure are we seeing?
 
 \begin{table}[t]
 \centering
@@ -894,11 +894,11 @@ Loss becomes NaN or oscillates wildly & updates are unstable & lower the learnin
 Training and validation both look strangely strong immediately & leakage or target mismatch may exist & audit splits, labels, duplicated examples, and feature construction before celebrating \\
 \bottomrule
 \end{tabular}
-\caption{Neural debugging improves when students distinguish optimization failure from generalization failure instead of treating every weak result as an architecture problem.}
+\caption{Neural debugging improves when you distinguish optimization failure from generalization failure instead of treating every weak result as an architecture problem.}
 \label{tab:neural-debugging-patterns}
 \end{table}
 
-This distinction is foundational. If the network cannot even reduce the training objective, then there is no point debating whether it overfits. If it fits training well but collapses on validation, then the training loop is not the first suspect. Different failures demand different questions.
+This distinction is foundational. If the network cannot even reduce the training objective, there is no point debating whether it overfits. If it fits training well but collapses on validation, the training loop is not the first suspect. Different failures demand different questions.
 
 \begin{codeexample}[caption={A minimal debugging sequence before redesigning the network}]
 pick one tiny batch of examples
@@ -911,21 +911,21 @@ if this succeeds but validation is weak:
 change one training choice at a time and record the effect
 \end{codeexample}
 
-The tiny-batch test is especially valuable because it removes excuses. A reasonably implemented network with aligned outputs and targets should usually be able to memorize a very small batch. If it cannot, the problem is often in the training setup rather than in the grand modeling idea.
+The tiny-batch test is especially valuable because it removes excuses. A reasonably implemented network with aligned outputs and targets should be able to memorize a very small batch. If it cannot, the problem usually lives in the training setup rather than in the grand modeling idea.
 
 \begin{practicalnote}
 A simple practical remedy for exploding gradients is \emph{gradient clipping}: if the norm of the gradient vector exceeds a threshold, rescale it to that threshold before applying the update. This does not fix the underlying cause, but it prevents catastrophically large steps.
 \end{practicalnote}
 
 \begin{decisionbox}
-Before increasing model depth or width, ask whether the run failed because the model could not fit the training signal at all, or because it fit the training signal and failed to generalize. Those are different problems and should trigger different interventions.
+Before increasing model depth or width, ask whether the run failed because the model could not fit the training signal at all, or because it fit the training signal and failed to generalize. These are different problems and call for different interventions.
 \end{decisionbox}
 
 \begin{thinkingtool}
 \textbf{Tempting mistake $\rightarrow$ corrected reasoning.} Tempting mistake: ``Validation is bad, so the architecture must be wrong.'' Corrected reasoning: ``First separate optimization failure from generalization failure. If the network cannot overfit a tiny batch, debug the training setup. If it can, inspect data quality, split logic, regularization, and evaluation before redesigning the model family.''
 \end{thinkingtool}
 
-Once the training loop behaves sensibly, the remaining conceptual question is how the error signal reaches the earlier layers that created the internal representation in the first place.
+Once the training loop behaves sensibly, the remaining conceptual question is how the error signal reaches the earlier layers that built the internal representation in the first place.
 
 \section{Backpropagation as Credit Assignment}
 
@@ -936,7 +936,7 @@ Backpropagation is the efficient procedure for computing how the loss changes wi
 Conceptually, backpropagation solves one clear problem: when the network makes an error, which earlier computations deserve credit or blame, and by how much?
 
 \begin{practicalnote}
-Backpropagation is efficient because it requires only one forward pass and one backward pass to compute gradients for \emph{every} parameter simultaneously. The naive alternative---perturbing each parameter individually and measuring the change in loss---would require one forward pass per parameter, making it impractical for networks with millions of weights.
+Backpropagation is efficient because it computes gradients for \emph{every} parameter simultaneously with only one forward pass and one backward pass. The naive alternative---perturbing each parameter individually and measuring the change in loss---requires one forward pass per parameter, which is impractical for networks with millions of weights.
 \end{practicalnote}
 
 \begin{figure}[t]
@@ -999,7 +999,7 @@ Backpropagation is efficient because it requires only one forward pass and one b
 
 \subsection{A Small Worked Gradient Example}
 
-The next calculation intentionally switches to a one-hidden-unit squared-error network so that every derivative fits on the page. It is a side example for the mechanics of backpropagation, not a replacement for the running spam classifier. The same reverse-credit idea applies to the sigmoid cross-entropy network above; only the local derivatives change.
+The next calculation switches to a one-hidden-unit squared-error network so every derivative fits on the page. It is a side example for the mechanics of backpropagation, not a replacement for the running spam classifier. The same reverse-credit idea applies to the sigmoid cross-entropy network above; only the local derivatives change.
 
 Consider a network with one ReLU hidden unit:
 \[
@@ -1034,7 +1034,7 @@ Now move backward through the computation. Start with the loss derivative with r
 \[
 \frac{dL}{ds} = s-y = 0.9-1 = -0.1.
 \]
-This says increasing the score slightly would reduce the loss.
+Increasing the score slightly would reduce the loss.
 
 The output weight $v$ multiplies $h$, so
 \[
@@ -1064,9 +1064,9 @@ The output bias behaves similarly:
 \frac{dL}{db_o} = \frac{dL}{ds} = -0.1.
 \]
 
-This is backpropagation in miniature. The error signal begins at the loss, flows backward through the output computation, then through the activation, and finally into the earlier weights and bias.
+This is backpropagation in miniature. The error signal starts at the loss, flows backward through the output computation, through the activation, and finally into the earlier weights and bias.
 
-To make that chain feel like learning rather than bookkeeping, take one gradient-descent step with learning rate \(\eta = 0.05\):
+To make the chain feel like learning rather than bookkeeping, take one gradient-descent step with learning rate \(\eta = 0.05\):
 \[
 w_1' = 0.512, \quad w_2' = 1.006,
 \]
@@ -1085,22 +1085,22 @@ h' &= \mathrm{ReLU}(1.036) = 1.036,
 s' &= 1.205(1.036) - 0.295 \approx 0.953, \\
 L' &= \tfrac{1}{2}(0.953-1)^2 \approx 0.0011.
 \end{align*}
-The loss fell from \(0.005\) to about \(0.0011\) after one step. That does not prove the network will generalize, but it does show the operational meaning of the gradients we just computed: they point toward a local parameter change that improves this example.
+The loss fell from \(0.005\) to about \(0.0011\) in one step. That does not prove the network will generalize, but it shows the operational meaning of the gradients: they point toward a local parameter change that improves this example.
 
 \subsection{What Changes If ReLU Is Off?}
 
-Now imagine the same network but with a hidden pre-activation $z=-0.5$. Then $h=\mathrm{ReLU}(-0.5)=0$, and because $z<0$ the local derivative of ReLU is exactly $0$ at that point. The non-differentiability issue appears at $z=0$, not at negative inputs such as this one. The backward chain therefore gives
+Now imagine the same network with a hidden pre-activation $z=-0.5$. Then $h=\mathrm{ReLU}(-0.5)=0$, and because $z<0$ the local derivative of ReLU is exactly $0$ at that point. The non-differentiability issue lives at $z=0$, not at negative inputs like this one. The backward chain therefore gives
 \[
 \frac{dL}{dz} = \frac{dL}{dh}\cdot 0 = 0.
 \]
-The gradients into the earlier hidden-layer weights also become zero for that example. This is a useful practical fact: whether a ReLU unit is active changes not just the forward value, but whether gradient signal can flow through that pathway on that example.
+The gradients into the earlier hidden-layer weights also become zero for that example. Whether a ReLU unit is active changes not just the forward value but whether any gradient signal flows through that pathway on that example.
 
 \begin{failurebox}
-Backpropagation does not guarantee good learning. It only tells us the local direction of improvement. If the data is weak, the model is badly chosen, the learning rate is poor, or the objective is mismatched to the task, the network can still fail badly while all gradients are computed correctly.
+Backpropagation does not guarantee good learning. It only tells you the local direction of improvement. If the data is weak, the model is badly chosen, the learning rate is poor, or the objective is mismatched to the task, the network can still fail badly while every gradient is computed correctly.
 \end{failurebox}
 
 \begin{advancednote}
-In real implementations, these gradient calculations are handled by automatic differentiation systems. That convenience is useful, but students should still understand the manual logic. Otherwise training becomes a black box: loss goes in, gradients come out, and no one can explain why.
+In real implementations, automatic differentiation systems handle these gradient calculations. The convenience is useful, but understand the manual logic anyway. Otherwise training becomes a black box: loss goes in, gradients come out, and no one can explain why.
 \end{advancednote}
 
 \begin{codeexample}[caption={From scratch: one backpropagation step through the output layer}]
@@ -1201,22 +1201,22 @@ print("updated w11:                ", round(new_w11, 4))
 
 \section{Generalization Returns: Regularization as Bias Toward Stable Patterns}
 
-Neural networks are flexible enough to fit very complicated patterns. That flexibility is powerful and dangerous. A large network can capture real structure, but it can also memorize accidents of the training set.
+Neural networks are flexible enough to fit very complicated patterns. That flexibility is both powerful and dangerous. A large network can capture real structure, but it can also memorize accidents of the training set.
 
-The evaluation-discipline question from Chapter~\ref{ch:evaluation-discipline} returns in sharper form: are we reducing training loss in a way that helps on unseen data, or are we merely fitting noise more effectively?
+The evaluation-discipline question from Chapter~\ref{ch:evaluation-discipline} returns in sharper form: are we reducing training loss in a way that helps on unseen data, or merely fitting noise more effectively?
 
-The best way to understand regularization in this chapter is not as a list of tricks. It is as a bias toward less brittle learned representations. These tools matter after the model can learn; they are not substitutes for fixing a broken optimization setup.
+Read regularization not as a list of tricks but as a bias toward less brittle learned representations. These tools matter after the model can learn; they are not substitutes for fixing a broken optimization setup.
 
 \subsection{Weight Decay, Early Stopping, Dropout, and Augmentation}
 
-Several common tools are used to control overfitting. \textbf{Weight decay} discourages large parameter values by penalizing them during optimization. \textbf{Early stopping} halts training when validation performance stops improving. \textbf{Dropout} randomly suppresses some activations during training so the network does not rely too heavily on any one pathway. \textbf{Data augmentation} expands effective data variety by transforming inputs in label-preserving ways.
+Several common tools control overfitting. \textbf{Weight decay} discourages large parameter values by penalizing them during optimization. \textbf{Early stopping} halts training when validation performance stops improving. \textbf{Dropout} randomly suppresses some activations during training so the network cannot rely too heavily on any one pathway. \textbf{Data augmentation} expands effective data variety by transforming inputs in label-preserving ways.
 
-These techniques are different in mechanism but similar in purpose. They push the network toward patterns that are stable enough to survive outside the training sample.
+The mechanisms differ but the purpose is the same: push the network toward patterns stable enough to survive outside the training sample.
 
-Dropout deserves one extra caution. It is useful because it prevents a network from depending too heavily on one hidden pathway, but it does not magically create information that is absent from the data. If the core representation is wrong, dropout only regularizes a bad model.
+Dropout deserves one caution. It prevents a network from depending too heavily on one hidden pathway, but it does not create information that is absent from the data. If the core representation is wrong, dropout only regularizes a bad model.
 
 \begin{example}[What Dropout Actually Changes]
-Suppose a hidden layer currently produces activations \((1.2, 0.9, 0.0, 1.1)\). With dropout rate \(0.5\), one training step might keep only the first and fourth activations, while another might keep the second and fourth. The next layer therefore cannot rely on one fragile path always being present. Over many updates, the network is pushed to spread evidence across several features. In standard inverted-dropout implementations, the kept activations are rescaled during training, so at inference time all units are available again and the forward pass is unchanged.
+Suppose a hidden layer produces activations \((1.2, 0.9, 0.0, 1.1)\). With dropout rate \(0.5\), one training step might keep only the first and fourth activations, while the next keeps the second and fourth. The next layer cannot rely on one fragile path always being present. Over many updates, the network is pushed to spread evidence across several features. Standard inverted-dropout implementations rescale the kept activations during training, so at inference all units are available again and the forward pass is unchanged.
 \end{example}
 
 \begin{figure}[t]
@@ -1254,23 +1254,23 @@ Suppose a hidden layer currently produces activations \((1.2, 0.9, 0.0, 1.1)\). 
 \node[rbox] at (13.2,0) {early stopping\\{\footnotesize halt before memorization}};
 \end{tikzpicture}%
 }
-\caption{These regularization tools work differently, but they all try to bias learning toward patterns that remain useful outside the training sample.}
+\caption{These regularization tools work differently, but each biases learning toward patterns that remain useful outside the training sample.}
 \label{fig:regularization-toolbox}
 \end{figure}
 
 \begin{example}[A Familiar Tradeoff]
-Suppose an augmented image model scores slightly lower on clean validation images than a non-augmented model, but performs much better on shifted or noisy images. That is not a contradiction. It means the model traded some specialization for robustness. Honest reporting should describe both sides of that tradeoff.
+Suppose an augmented image model scores slightly lower on clean validation images than a non-augmented model but performs much better on shifted or noisy images. That is not a contradiction. The model traded specialization for robustness. Honest reporting describes both sides of that tradeoff.
 \end{example}
 
 \section{Capacity, Data Regime, and Label Noise}
 
-``Use a bigger model'' is not a universal recommendation. Model capacity interacts with dataset size, label quality, and augmentation quality in ways that make the same capacity increase beneficial in one regime and harmful in another.
+``Use a bigger model'' is not universal advice. Model capacity interacts with dataset size, label quality, and augmentation quality in ways that make the same capacity increase beneficial in one regime and harmful in another.
 
-\textbf{Large capacity with sufficient clean data.} When the dataset is large and labels are reliable, a higher-capacity model can find finer structure and use its additional parameters productively. Adding layers, widening the network, or removing regularization may all improve performance in this regime because the training signal is abundant and trustworthy.
+\textbf{Large capacity with sufficient clean data.} When the dataset is large and labels are reliable, a higher-capacity model can find finer structure and use its additional parameters productively. Adding layers, widening the network, or removing regularization may all help in this regime because the training signal is abundant and trustworthy.
 
-\textbf{Large capacity with limited clean data.} When the dataset is small or labels are sparse, additional capacity often leads to memorization rather than generalization. The model learns idiosyncratic patterns of the training examples instead of the underlying structure. In this regime, regularization, early stopping, data augmentation, and smaller architectures tend to help more than increasing capacity.
+\textbf{Large capacity with limited clean data.} When the dataset is small or labels are sparse, extra capacity tends to produce memorization rather than generalization. The model learns idiosyncratic patterns of the training examples instead of the underlying structure. Here, regularization, early stopping, data augmentation, and smaller architectures help more than additional capacity.
 
-\textbf{High label noise.} When labels contain substantial errors---from careless annotation, ambiguous task definitions, or label leakage---a higher-capacity model is more likely to memorize those errors than a lower-capacity one. The large model has the flexibility to overfit the noise; the small model may not. Label quality should be assessed and improved before architectural decisions are made, because adding layers to fix a label-noise problem usually makes the problem worse.
+\textbf{High label noise.} When labels contain substantial errors---from careless annotation, ambiguous task definitions, or label leakage---a higher-capacity model is more likely to memorize those errors than a lower-capacity one. The large model has the flexibility to overfit the noise; the small model may not. Assess and improve label quality before architectural decisions, because adding layers to fix a label-noise problem usually makes things worse.
 
 \begin{figure}[t]
 \centering
@@ -1284,23 +1284,23 @@ Suppose an augmented image model scores slightly lower on clean validation image
 \node[red, align=left] at (2.0,1.1) {large model};
 \end{tikzpicture}%
 }
-\caption{The benefit of increased model capacity depends on data scale. A larger model does not uniformly outperform a smaller one; it does so reliably only when the training set is large enough to prevent memorization.}
+\caption{The benefit of increased model capacity depends on data scale. A larger model does not uniformly outperform a smaller one; it does so only when the training set is large enough to prevent memorization.}
 \label{fig:capacity-vs-data-scale}
 \end{figure}
 
 \begin{example}[Capacity Decision on a Small Medical Dataset]
-A team has a labeled dataset of $800$ patient records for a readmission prediction task. They train a six-layer transformer and achieve very low training loss but poor validation performance. Adding dropout and reducing to two layers closes the gap substantially. The larger model had the capacity to overfit the $800$ examples; the smaller model was forced to learn a more general pattern. The improvement had nothing to do with the learning rate or optimizer.
+A team has a labeled dataset of $800$ patient records for a readmission-prediction task. They train a six-layer transformer and reach very low training loss but poor validation performance. Adding dropout and reducing to two layers closes most of the gap. The larger model had the capacity to overfit 800 examples; the smaller model was forced to learn a more general pattern. The improvement had nothing to do with the learning rate or optimizer.
 \end{example}
 
-The operational summary is that model size should be chosen in conversation with data size and label quality. The right question before adding capacity is: does this training set contain enough reliable signal to fill these additional parameters? If yes, larger may help. If no, regularization and data quality improvements come first.
+Choose model size in conversation with data size and label quality. The right question before adding capacity is: does this training set contain enough reliable signal to fill these additional parameters? If yes, larger may help. If no, fix regularization and data quality first.
 
 \begin{thinkingtool}
-\textbf{Capacity audit.} Before increasing model size, ask three questions: How large is the labeled training set? How clean are the labels? How much useful augmentation is available? If the answers are ``small,'' ``noisy,'' and ``limited,'' adding capacity is unlikely to help and may harm. Fix the data first.
+\textbf{Capacity audit.} Before increasing model size, ask three questions. How large is the labeled training set? How clean are the labels? How much useful augmentation is available? If the answers are ``small,'' ``noisy,'' and ``limited,'' added capacity will probably hurt. Fix the data first.
 \end{thinkingtool}
 
 \section{Chapter Artifact: A Minimum Credible Neural Training Report}
 
-Real neural training involves more than equations on a board. Several practical choices strongly affect outcomes. By the end of this chapter, a reader should be able to produce a minimum credible training report before making a serious neural-network claim. This is the document that keeps flexible neural models tied back to baselines and evidence instead of hype. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, and the structure diagnosis sheet justified leaving it. This report justifies the learned-model claim itself.
+Real neural training involves more than equations on a board. Several practical choices strongly affect outcomes. By the end of this chapter, you should be able to produce a minimum credible training report before making any serious neural-network claim. The report keeps flexible neural models tied back to baselines and evidence instead of hype. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, and the structure-diagnosis sheet justified leaving it. This report justifies the learned-model claim itself.
 
 \begin{table}[t]
 \centering
@@ -1324,12 +1324,12 @@ Randomness & number of seeds or repeated runs \\
 Baseline & the simpler model used for comparison \\
 \bottomrule
 \end{tabular}
-\caption{This is a minimum credible training report, not an idealized one. Bachelor-level project work improves immediately when these items are stated clearly instead of being left as library defaults.}
+\caption{This is a minimum credible training report, not an idealized one. Project work improves immediately when these items are stated clearly instead of being left as library defaults.}
 \label{tab:minimum-credible-training-report}
 \end{table}
 
 \begin{thinkingtool}
-\textbf{Minimum credible neural training report.} Before reporting a neural result, write down the data split, preprocessing, architecture, loss, optimizer, learning rate, batch size, stopping rule, randomness, and baseline comparison.
+\textbf{Minimum credible neural training report.} Before reporting a neural result, document the data split, preprocessing, architecture, loss, optimizer, learning rate, batch size, stopping rule, randomness, and baseline comparison.
 \end{thinkingtool}
 
 \begin{table}[t]
@@ -1347,13 +1347,13 @@ Adam / AdamW & adapt step sizes using running gradient statistics & often easier
 \label{tab:optimizer-comparison}
 \end{table}
 
-Popular optimizers such as Adam and AdamW often make training easier in practice than plain stochastic gradient descent, especially for smaller research prototypes and teaching examples. The educational lesson is not that one optimizer has permanently won. It is that optimizer choice is part of the experiment and must be justified empirically.
+Popular optimizers such as Adam and AdamW often make training easier in practice than plain stochastic gradient descent, especially for smaller research prototypes and teaching examples. The lesson is not that one optimizer has permanently won. It is that optimizer choice is part of the experiment and must be justified empirically.
 
 \section{Representation Learning as the Payoff}
 
-The most important reason neural networks changed AI is not simply that they fit nonlinear functions. Trees and kernels already offered nonlinearity. The deeper change is that hidden layers can learn representations that make downstream tasks easier.
+The most important reason neural networks changed AI is not that they fit nonlinear functions. Trees and kernels already offered nonlinearity. The deeper change is that hidden layers can learn representations that make downstream tasks easier.
 
-An image classifier does not begin with hand-coded edge counters written by the user. A neural system can learn early filters, then combine them into motifs, parts, and larger semantic patterns. A language model can learn embeddings in which some relationships become geometrically meaningful. An audio model can learn internal features that capture frequency patterns, rhythm, and temporal context. In each case, the network is learning the coordinates in which the task becomes more manageable.
+An image classifier does not begin with hand-coded edge counters written by the user. A neural system can learn early filters, then combine them into motifs, parts, and larger semantic patterns. A language model can learn embeddings in which some relationships become geometrically meaningful. An audio model can learn internal features that capture frequency patterns, rhythm, and temporal context. In each case, the network is learning the coordinates in which the task becomes manageable.
 
 \begin{figure}[t]
 \centering
@@ -1396,23 +1396,23 @@ An image classifier does not begin with hand-coded edge counters written by the 
 \label{fig:representation-hierarchy}
 \end{figure}
 
-This is the culmination of the chapter. Optimization is not only fitting a final boundary. It is teaching the model which internal coordinates make the task easier.
+This is the culmination of the chapter. Optimization is not only fitting a final boundary; it is teaching the model which internal coordinates make the task easier.
 
-This is also the bridge to a later chapter on reusable representations. This chapter learned features for one task through one training loop. A later chapter asks when those learned spaces become reusable assets across tasks, domains, and label budgets. Once representation learning becomes strong enough, we can pretrain models on broad data and reuse those learned spaces across many downstream tasks. That is the foundation-model story in one sentence.
+It is also the bridge to a later chapter on reusable representations. This chapter learned features for one task through one training loop. A later chapter asks when those learned spaces become reusable assets across tasks, domains, and label budgets. Once representation learning is strong enough, models can be pretrained on broad data and the learned spaces reused across many downstream tasks. That is the foundation-model story in one sentence.
 
 \section{Common Mistakes with Neural Networks}
 
-The mistakes in this section are not merely ``deep-learning mistakes.'' They are failures of scientific judgment under flexible models.
+The mistakes in this section are not just ``deep-learning mistakes.'' They are failures of scientific judgment under flexible models.
 
-The usual mistakes here are failures of scientific judgment rather than failures of deep-learning syntax. Readers treat architecture as the whole story even though data quality, preprocessing, metrics, and split design matter just as much; they ignore simpler baselines, overread a single clean training curve, change too many training choices at once, confuse confidence with understanding, or assume that bigger automatically means better. None of those moves strengthens the evidence by itself.
+Readers treat architecture as the whole story even though data quality, preprocessing, metrics, and split design matter just as much. They ignore simpler baselines, overread a single clean training curve, change too many training choices at once, confuse confidence with understanding, or assume bigger means better. None of those moves strengthens the evidence by itself.
 
 \section{Looking Ahead}
 
-This chapter explained how neural learning works: hidden features, loss, backpropagation, and regularization. The next chapter asks what it means for predictions to carry uncertainty, and how probabilistic structure can expose hidden variables, calibration problems, and uncertainty bands.
+This chapter explained how neural learning works: hidden features, loss, backpropagation, and regularization. The thread splits in two directions before rejoining. Chapter~\ref{ch:probabilistic-models} comes next and asks what it means for predictions to carry uncertainty---how probabilistic structure can expose hidden variables, calibration problems, and uncertainty bands. Chapter~\ref{ch:representation-foundation-models} then resumes the representation-learning story this chapter set up: when the spaces a network learns become reusable assets across tasks, domains, and label budgets.
 
 \section*{Chapter Summary}
 
-This chapter explained neural networks as learned feature pipelines whose flexibility comes from composition, nonlinearity, and parameterized hidden representations. It connected forward computation to loss design, gradient-based optimization, and backpropagation, then returned to the generalization concerns of earlier chapters through regularization, capacity control, and data regime. The main payoff is not merely that neural models fit nonlinear functions, but that they can learn intermediate representations that make downstream prediction easier. For that reason, a neural result is credible only when the training setup, optimization choices, and baseline comparison are documented clearly enough to show that the added flexibility was actually justified.
+This chapter explained neural networks as learned feature pipelines whose flexibility comes from composition, nonlinearity, and parameterized hidden representations. It connected forward computation to loss design, gradient-based optimization, and backpropagation, then returned to the generalization concerns of earlier chapters through regularization, capacity control, and data regime. The main payoff is not just that neural models fit nonlinear functions but that they can learn intermediate representations that make downstream prediction easier. A neural result is credible only when the training setup, optimization choices, and baseline comparison are documented clearly enough to show that the added flexibility was justified.
 
 \begin{studyquestions}
 \item Why is ``the useful internal representation is unknown'' a better opening problem than ``deep learning is powerful''?

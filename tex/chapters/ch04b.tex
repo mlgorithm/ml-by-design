@@ -1,43 +1,43 @@
 \chapter{Designing the Dataset}
 \label{ch:dataset-design}
 
-The previous chapters framed the learning problem, chose metrics, protected evaluation, and diagnosed structural gaps. But one critical question was deferred: how should the training data itself be designed? Data is not a given---it is a design choice. The same task can be addressed with different collections of examples, with different labeling schemes, with different class distributions, and with different quality standards for the labels themselves. Each choice changes both what the model can learn and how it will behave in the world.
+Earlier chapters framed the learning problem, chose metrics, protected evaluation, and diagnosed structural gaps. One critical question stayed deferred: how should the training data itself be designed? Data is a design choice, not a given. The same task can be tackled with different examples, different labeling schemes, different class distributions, and different label-quality standards. Each choice changes what the model can learn and how it behaves in the world.
 
-This chapter treats dataset construction as a modeling decision, not as a preprocessing step. Who labels the data? What counts as a valid label when annotators disagree? How should class imbalance be handled? When should a team invest more in collecting additional examples versus cleaning existing labels versus curating better examples? When labels are expensive, which examples should be labeled next? When is synthetic data helpful, and when is it misleading? The answers to all of these questions shape the learning problem itself.
+This chapter treats dataset construction as a modeling decision, not preprocessing. Who labels the data? What counts as a valid label when annotators disagree? How should class imbalance be handled? When should a team invest in more examples, cleaner labels, or better-curated examples? When labels are expensive, which examples should be labeled next? When does synthetic data help, and when does it mislead? Each answer shapes the learning problem itself.
 
-By the end of this chapter, the reader should be able to state what data-design choices their task requires, defend those choices on grounds of coverage and quality, and construct a data design card that documents the assumptions baked into the dataset.
+By the end of this chapter, you should be able to state what data-design choices your task requires, defend them on grounds of coverage and quality, and build a data design card that records the assumptions baked into the dataset.
 
 \begin{practicalnote}
-\textbf{Core path.} The required path is label definition, annotator consistency, label noise, class balance, coverage, and the data design card. Active learning, semi-supervised learning, weak supervision, augmentation, and synthetic data are label-acquisition strategies: assign them selectively or treat them as extensions after the core data-design decision is stable.
+\textbf{Core path.} The required path covers label definition, annotator consistency, label noise, class balance, coverage, and the data design card. Active learning, semi-supervised learning, weak supervision, augmentation, and synthetic data are label-acquisition strategies. Assign them selectively or treat them as extensions once the core data-design decisions are stable.
 \end{practicalnote}
 
 \begin{problemsolvinglens}
-Data design is not optional cleanup work done before the real modeling begins. It is part of the model. The examples labeled, the labels themselves, and their distribution are all deliberate design choices that constrain what the model can learn and where it will fail.
+Data design is not optional cleanup before real modeling begins. It is part of the model. The examples labeled, the labels themselves, and their distribution are deliberate design choices that constrain what the model can learn and where it will fail.
 \end{problemsolvinglens}
 
 \begin{thinkingtool}
-\textbf{Data as design.} When evaluating a model, always ask: what does the dataset tell the model is important? What important structure or distribution is absent from the training set? What gaps exist between the labeled data and the deployment population?
+\textbf{Data as design.} When evaluating a model, always ask three questions. What does the dataset tell the model is important? What structure or distribution is missing from the training set? What gaps exist between the labeled data and the deployment population?
 \end{thinkingtool}
 
 \begin{decisionbox}
-\textbf{Data-design order of operations.} Do not start with augmentation, synthetic data, or a larger labeling budget. First define what each label means and who is allowed to assign it. Then measure label quality and disagreement. Next compare the data distribution with the deployment distribution and the operating policy. Only after those checks should the team choose a label-acquisition strategy such as active learning, semi-supervised learning, weak supervision, augmentation, or synthetic data.
+\textbf{Data-design order of operations.} Do not start with augmentation, synthetic data, or a larger labeling budget. First define what each label means and who may assign it. Then measure label quality and disagreement. Next compare the data distribution with the deployment distribution and the operating policy. Only after those checks should the team pick a label-acquisition strategy such as active learning, semi-supervised learning, weak supervision, augmentation, or synthetic data.
 \end{decisionbox}
 
 \section{Data as a Design Decision}
 
-The dataset encodes assumptions about the world. What you include, exclude, label, and measure shapes the model as much as the architecture. A model trained only on examples from September to November will never see winter-specific behavior. A student-support system trained on cases labeled by one kind of advisor will learn a different definition of ``risk'' than one trained on cases labeled by advisors with different philosophies. A pedestrian detector trained only on sunny weather will fail at dusk.
+The dataset encodes assumptions about the world. What you include, exclude, label, and measure shapes the model as much as the architecture does. A model trained only on examples from September through November will never see winter-specific behavior. A student-support system trained on cases labeled by one kind of advisor learns a different definition of ``risk'' than one trained on cases labeled by advisors with different philosophies. A pedestrian detector trained only on sunny weather will fail at dusk.
 
-These are not minor problems to be fixed later through validation. They are fundamental limits on what the model can learn.
+These are not minor problems to be patched later through validation. They are fundamental limits on what the model can learn.
 
 \subsection{Two Running Cases}
 
-Keep two settings in view throughout this chapter. Both have seen previous mention; now they become frameworks for data-design decisions.
+Keep two settings in view throughout this chapter. Both appeared earlier; here they become frameworks for data-design decisions.
 
-\textbf{Case 1: Course-Support Assistant.} A university builds an early-warning system to flag students who may need additional support. The system needs labeled historical data. But which messages get labeled? Does every submission receive annotation, or only high-uncertainty submissions? Do labels come from a single trained expert advisor, or from multiple advisors with different standards? If two advisors disagree about whether a message indicates ``urgent need for support,'' is that disagreement noise or information? The answer shapes the dataset and the model.
+\textbf{Case 1: Course-Support Assistant.} A university builds an early-warning system to flag students who may need extra support. The system needs labeled historical data. Which messages get labeled? Does every submission receive a label, or only high-uncertainty ones? Do labels come from a single trained expert advisor, or from multiple advisors with different standards? If two advisors disagree about whether a message signals ``urgent need for support,'' is that disagreement noise or information? The answer shapes both the dataset and the model.
 
-\textbf{Case 2: Pedestrian Detector.} A campus shuttle system uses computer vision to detect pedestrians on campus. The model needs labeled video frames. Which video frames should be included? Only clear daylight footage, or also dawn, dusk, and night? Should the training set include all weather conditions? Which camera angles? What about occlusions---should a partially visible pedestrian be labeled as present or absent? These choices determine what the model learns about pedestrian detection.
+\textbf{Case 2: Pedestrian Detector.} A campus shuttle system uses computer vision to detect pedestrians. The model needs labeled video frames. Which frames belong in the training set? Only clear daylight footage, or also dawn, dusk, and night? All weather conditions? Which camera angles? And what about occlusions---should a partially visible pedestrian count as present or absent? These choices determine what the model learns about pedestrian detection.
 
-In both cases, someone must decide what examples matter, how to label them, and what quality standard to enforce. These are dataset-design decisions, not merely cleanup tasks.
+In both cases, someone must decide what examples matter, how to label them, and what quality standard to enforce. These are dataset-design decisions, not cleanup tasks.
 
 \begin{figure}[t]
 \centering
@@ -74,17 +74,17 @@ In both cases, someone must decide what examples matter, how to label them, and 
 \end{scope}
 \end{tikzpicture}%
 }
-\caption{Data design has two main dimensions: what examples to collect and how to label them. Each choice affects what the model learns.}
+\caption{Data design has two main dimensions: which examples to collect and how to label them. Each choice affects what the model learns.}
 \label{fig:data-design-dimensions}
 \end{figure}
 
 \section{Annotation Protocols and Label Quality}
 
-Collecting labels is not as simple as hiring someone to point and click. The labeling process itself is a design decision.
+Collecting labels is not as simple as hiring someone to point and click. The labeling process is itself a design decision.
 
 \subsection{Annotation Guidelines and Consistency}
 
-The first step is to write clear annotation guidelines. These guidelines specify:
+The first step is to write clear annotation guidelines. Good guidelines specify:
 \begin{itemize}[leftmargin=*]
 \item What examples should be labeled and which should be skipped
 \item What each label means and what behavior or feature it identifies
@@ -109,42 +109,50 @@ Label ROUTINE otherwise
 \end{codeexample}
 
 \begin{warningbox}
-High-stakes student-support labels are not only an annotation problem. A dataset that includes mental-health crisis, discrimination, financial hardship, demographics, advising notes, or learning-management-system records also needs governance rules: consent or a lawful institutional basis, data minimization, restricted access, escalation protocols, human review, and a clear statement that the model output is not a welfare decision. Label quality cannot substitute for those safeguards.
+High-stakes student-support labels are not only an annotation problem. A dataset that contains mental-health crisis, discrimination, financial hardship, demographics, advising notes, or learning-management-system records also needs governance rules: consent or a lawful institutional basis, data minimization, restricted access, escalation protocols, human review, and a clear statement that the model output is not a welfare decision. Label quality cannot substitute for those safeguards.
 \end{warningbox}
 
-Good guidelines reduce annotator variation and make the labeling task reproducible. But they cannot eliminate disagreement entirely.
+Good guidelines reduce annotator variation and make labeling reproducible. They cannot eliminate disagreement entirely.
 
 \subsection{Inter-Annotator Agreement and Soft Labels}
 \label{sec:soft-labels}
 
-When multiple annotators label the same example, they often disagree. This disagreement is usually treated as noise, but it is sometimes information. When two trained advisors disagree about whether a student message indicates ``urgent'' need, that disagreement reflects genuine ambiguity in the task, not one ``right answer'' that one rater found and another missed.
+When multiple annotators label the same example, they often disagree. Practitioners usually treat this disagreement as noise, but sometimes it carries information. When two trained advisors disagree about whether a student message indicates ``urgent'' need, the disagreement often reflects genuine ambiguity in the task rather than one ``right answer'' that one rater found and the other missed.
 
 \begin{definition}[Inter-Annotator Agreement]
 Inter-annotator agreement is the degree to which independent annotators assign the same labels to the same examples, typically measured by Cohen's kappa, Fleiss's kappa, or Krippendorff's alpha.
 \end{definition}
 
-Low agreement signals that either the guidelines are unclear, the task is inherently ambiguous, or the annotators need more training. Any of these is a problem worth investigating before treating disagreement as noise to be averaged away.
+\begin{mathlens}
+\textbf{Cohen's kappa.} For two annotators labeling the same examples, let $p_o$ be the observed proportion of agreements and $p_e$ the proportion expected by chance under each annotator's marginal label frequencies. Cohen's kappa is
+\[
+\kappa = \frac{p_o - p_e}{1 - p_e}.
+\]
+Values near $1$ indicate strong agreement beyond chance; $0$ means agreement at the chance level; negative values indicate systematic disagreement. Fleiss's kappa generalizes to more than two annotators; Krippendorff's alpha further allows ordinal or interval labels and missing values.
+\end{mathlens}
 
-Three common strategies exist:
+Low agreement signals one of three things: unclear guidelines, an inherently ambiguous task, or undertrained annotators. Each is worth investigating before treating disagreement as noise to be averaged away.
 
-\textbf{Majority vote.} Give each example to multiple raters, and assign the label that most raters chose. This is simple and works well when agreement is high and annotators are reasonably reliable. It discards disagreement information and is brittle to systematic annotator bias.
+Three common strategies exist.
 
-\textbf{Adjudication.} Give disagreed-upon examples to a senior expert who makes a final call. This handles edge cases well but introduces a single-expert bottleneck and does not capture the underlying ambiguity.
+\textbf{Majority vote.} Give each example to multiple raters and assign the label that most raters chose. This works well when agreement is high and annotators are reasonably reliable, but it discards disagreement information and is brittle to systematic annotator bias.
 
-\textbf{Soft labels.} Record the fraction of annotators who assigned each label. Instead of a single ``URGENT'' or ``ROUTINE'' label, record that 0.7 of raters chose URGENT and 0.3 chose ROUTINE. This preserves the disagreement and allows models to learn that some examples are genuinely uncertain.
+\textbf{Adjudication.} Send disagreed-upon examples to a senior expert who makes the final call. This handles edge cases well but creates a single-expert bottleneck and does not capture underlying ambiguity.
+
+\textbf{Soft labels.} Record the fraction of annotators who chose each label. Instead of a single ``URGENT'' or ``ROUTINE'' label, record that 0.7 of raters chose URGENT and 0.3 chose ROUTINE. This preserves disagreement and lets models learn that some examples are genuinely uncertain.
 
 \begin{example}[Soft Labels for Student Messages]
-Two advisors each label ten student messages. For one message about a missed assignment, one advisor chooses CONCERNING and the other chooses ROUTINE. With majority vote, the model sees a hard label that is arbitrary. With soft labels, the model sees $[0.5, 0.5]$, correctly representing that this example is ambiguous. A model trained on soft labels will learn to output a moderate confidence for similar cases rather than being forced to pick a side.
+Two advisors each label ten student messages. On one message about a missed assignment, one advisor chooses CONCERNING and the other chooses ROUTINE. Majority vote forces an arbitrary hard label. Soft labels record $[0.5, 0.5]$, capturing the genuine ambiguity. A model trained on soft labels learns to output moderate confidence on similar cases instead of being forced to pick a side.
 \end{example}
 
 \begin{practicalnote}
-If annotation guidelines are short and the task feels objective (like ``does this image contain a car?''), majority vote is often sufficient. If guidelines are long, the task is subjective or ambiguous (like ``is this message urgent?''), soft labels or adjudication preserve more information. Measure inter-annotator agreement before committing to one strategy.
+For short guidelines and tasks that feel objective (``does this image contain a car?''), majority vote is usually enough. For long guidelines and subjective or ambiguous tasks (``is this message urgent?''), soft labels or adjudication preserve more information. Measure inter-annotator agreement before committing to one strategy.
 \end{practicalnote}
 
 \section{Label Noise and Its Effects}
 \label{sec:label-noise}
 
-Labels are often imperfect. Noise can be random, or it can be systematic (e.g., one annotator systematically mislabels a particular class). The effect of label noise differs significantly across models.
+Labels are often imperfect. Noise can be random, or it can be systematic---for example, one annotator consistently mislabels a particular class. The effect of label noise varies significantly across models.
 
 \subsection{Types of Label Noise}
 
@@ -160,99 +168,99 @@ Asymmetric label noise has a preferred direction. For example, positive examples
 
 Different model families tolerate label noise differently.
 
-\textbf{Decision trees.} Trees are relatively robust to small amounts of random label noise because they partition the input space and make local decisions. Outliers and noise in one region do not necessarily affect splits in other regions. However, trees can still overfit to noise, especially at deep depths.
+\textbf{Decision trees.} Trees handle small amounts of random label noise reasonably well because they partition the input space and make local decisions. Noise in one region does not necessarily affect splits in another. Trees can still overfit to noise, especially at deep depths.
 
 \textbf{Linear models.} Linear models are sensitive to label noise because each training example contributes directly to the gradient and the final coefficients. Outliers and mislabeled examples are felt globally.
 
-\textbf{Neural networks.} Neural networks are quite sensitive to label noise early in training but can eventually memorize noisy labels given enough capacity. This memorization looks like overfitting: the model fits the noise perfectly on the training set but generalizes poorly.
+\textbf{Neural networks.} Neural networks are sensitive to label noise early in training but, with enough capacity, eventually memorize noisy labels. The memorization looks like overfitting: the model fits the noise perfectly on the training set but generalizes poorly.
 
-The key insight is that no model is immune to noise. The question is what kind of noise your model can afford, and whether cleaning labels or using noise-robust losses is the right response.
+No model is immune to noise. The real question is which kind of noise your model can afford and whether the right response is cleaning labels or switching to noise-robust losses.
 
 \begin{warningbox}
-Systematic mislabeling is much worse than random noise. If all positive examples of a certain type are mislabeled as negative due to annotator confusion, the model will learn the wrong boundary in that region. Random noise averages out to some degree; systematic noise teaches the wrong pattern.
+Systematic mislabeling is much worse than random noise. If all positive examples of a particular type are mislabeled as negative because of annotator confusion, the model learns the wrong boundary in that region. Random noise averages out to some degree; systematic noise teaches the wrong pattern.
 \end{warningbox}
 
 \subsection{Label-Noise Strategies}
 
-When labels are noisy, several strategies exist:
+When labels are noisy, several strategies exist.
 
-\textbf{Clean the labels.} Have a senior expert audit and correct a sample of labels. This is expensive but effective if the noise is mostly systematic.
+\textbf{Clean the labels.} Have a senior expert audit and correct a sample of labels. Expensive, but effective when noise is mostly systematic.
 
-\textbf{Use noise-aware training strategies.} Some training procedures reduce the influence of suspected label errors. For example, a team might estimate class-conditional noise rates and correct the loss, down-weight examples whose labels strongly contradict a clean validation signal, or use robust losses designed for noisy labels. Be careful with focal loss: it is mainly a class-imbalance and hard-example weighting tool, and by itself it can increase attention to mislabeled hard cases.
+\textbf{Use noise-aware training.} Some training procedures reduce the influence of suspected label errors. A team might estimate class-conditional noise rates and correct the loss, down-weight examples whose labels strongly contradict a clean validation signal, or use robust losses designed for noisy labels. Be careful with focal loss: it is primarily a class-imbalance and hard-example weighting tool, and on its own it can amplify attention to mislabeled hard cases.
 
-\textbf{Estimate noise rates.} If you can estimate the rate at which each class is mislabeled, you can adjust the loss function to account for it. This requires a clean validation set or a held-out sample to estimate noise rates.
+\textbf{Estimate noise rates.} If you can estimate how often each class is mislabeled, you can adjust the loss function accordingly. This requires a clean validation set or a held-out sample for the estimate.
 
-\textbf{Threshold and filter.} Train the model and remove or down-weight examples that the model is highly confident were mislabeled (e.g., examples where the model's prediction strongly contradicts the given label).
+\textbf{Threshold and filter.} Train the model and remove or down-weight examples the model is highly confident were mislabeled---those where its prediction strongly contradicts the given label.
 
 \begin{evidencebox}
-Northcutt et al.\ found widespread label errors across common benchmark test sets, averaging at least 3.3\% across ten datasets, and showed that corrected labels can change which model appears best \citep{northcutt2021labelerrors}. Related confident-learning work shows how systematic label auditing can identify likely errors and improve downstream training \citep{northcutt2021confidentlearning}. This demonstrates that cleaning important datasets is not busy work---it can directly change the evidence used to judge trained models.
+Northcutt et al.\ found widespread label errors across common benchmark test sets---averaging at least 3.3\% across ten datasets---and showed that corrected labels can change which model appears best \citep{northcutt2021labelerrors}. Related confident-learning work shows how systematic label auditing can identify likely errors and improve downstream training \citep{northcutt2021confidentlearning}. Cleaning important datasets is not busy work; it can directly change the evidence used to judge trained models.
 \end{evidencebox}
 
 \begin{thinkingtool}
-\textbf{Noise investigation.} When validation performance is worse than expected, before blaming the model, ask whether label noise is the culprit. Sample and hand-inspect a small random subset of training labels to estimate noise rates.
+\textbf{Noise investigation.} When validation performance is worse than expected, ask whether label noise is the culprit before blaming the model. Sample and hand-inspect a small random subset of training labels to estimate noise rates.
 \end{thinkingtool}
 
 \section{Class Imbalance: Problem or Design Choice?}
 
-The most common advice about class imbalance is to ``balance the classes.'' This is usually wrong. The right question is: what does the deployment distribution look like?
+The most common advice about class imbalance is to ``balance the classes.'' That is usually wrong. The right question is what the deployment distribution looks like.
 
 \begin{definition}[Class Imbalance]
 Class imbalance occurs when one class appears much more frequently than another in the training set. A 95--5 split is heavily imbalanced; a 60--40 split is mildly imbalanced.
 \end{definition}
 
-The default concern is that the model will learn to predict the majority class and ignore the minority. This is a real risk if evaluated on a standard metric like accuracy, which is dominated by the majority class. But it is not inherent to imbalanced data. It is an evaluation and loss-design problem.
+The default worry is that the model will learn to predict the majority class and ignore the minority. That risk is real if you evaluate on a metric like accuracy, which the majority class dominates. But the problem is not inherent to imbalanced data; it is a problem of evaluation and loss design.
 
 \subsection{Imbalance in Context}
 
-If the deployment scenario is also 95--5 (95\% negative, 5\% positive), then training on a 95--5 distribution is appropriate. The model should predict the majority class frequently, just as the deployment requires.
+If deployment is also 95--5 (95\% negative, 5\% positive), training on a 95--5 distribution is appropriate. The model should predict the majority class frequently, just as deployment requires.
 
-If the deployment scenario is 50--50, then training on a 95--5 distribution is a distribution-mismatch problem. The model will see too few minority-class examples to learn rich decision boundaries for the deployment setting. Separately, if the minority class is operationally more important than its prevalence suggests, that should be reflected through class weights, decision thresholds, and evaluation metrics rather than by pretending the deployment prevalence is different.
+If deployment is 50--50, training on a 95--5 distribution is a distribution-mismatch problem. The model sees too few minority examples to learn rich decision boundaries for the deployment setting. Separately, if the minority class matters more than its prevalence suggests, reflect that through class weights, decision thresholds, and evaluation metrics rather than by pretending the deployment prevalence is different.
 
 \subsection{Addressing Imbalance}
 
-When the training distribution does not match the deployment distribution, several strategies exist:
+When the training distribution does not match the deployment distribution, several strategies exist.
 
-\textbf{Oversampling the minority class.} Duplicate minority examples or generate similar ones until the classes are balanced. This increases the influence of minority examples. The risk is that the model sees the same minority examples multiple times and overfits to them.
+\textbf{Oversampling the minority class.} Duplicate minority examples or generate similar ones until the classes are balanced. This increases the influence of minority examples but risks overfitting, since the model sees the same minority examples many times.
 
-\textbf{Undersampling the majority class.} Remove majority examples until the classes are balanced. This discards potentially informative examples and works only when you have so much majority data that removal is inconsequential.
+\textbf{Undersampling the majority class.} Remove majority examples until the classes are balanced. This discards potentially informative examples and works only when majority data is so abundant that removal is inconsequential.
 
-\textbf{Class-weighted loss.} Assign a higher loss weight to minority-class examples so that making an error on a minority example costs more than making an error on a majority example. This is computationally efficient and preserves all the data, but it indirectly makes stronger assumptions about deployment importance.
+\textbf{Class-weighted loss.} Give minority examples a higher loss weight so an error on a minority example costs more than an error on a majority example. Computationally efficient and preserves all the data, but it makes implicit assumptions about deployment importance.
 
-\textbf{Threshold adjustment.} Train on the original imbalanced distribution but adjust the decision threshold to reflect the deployment distribution. This is effective when the model outputs a well-calibrated score but requires knowing the deployment distribution and score distribution in advance.
+\textbf{Threshold adjustment.} Train on the original imbalanced distribution and adjust the decision threshold to reflect the deployment distribution. Effective when the model outputs a well-calibrated score, but requires knowing the deployment and score distributions in advance.
 
 \begin{decisionbox}
 \textbf{When to balance the classes:}
 \begin{itemize}
-\item Training and deployment distributions are different, and the minority class matters operationally
-\item You need the model to learn rich decision boundaries for both classes
-\item You care equally about minority and majority recall or want balanced F1 score
+\item Training and deployment distributions differ, and the minority class matters operationally.
+\item You need the model to learn rich decision boundaries for both classes.
+\item You care equally about minority and majority recall, or you want a balanced F1 score.
 \end{itemize}
 \textbf{When to keep the imbalance:}
 \begin{itemize}
-\item The training and deployment distributions match (both imbalanced the same way)
-\item Class importance and error costs are intended to follow the deployment distribution
-\item You evaluate with metrics appropriate for imbalance, such as PR-AUC, macro-F1, balanced accuracy, or cost-sensitive utility; ROC-AUC can help, but it is not sufficient by itself under extreme imbalance
+\item Training and deployment distributions match (both imbalanced the same way).
+\item Class importance and error costs are intended to follow the deployment distribution.
+\item You evaluate with metrics appropriate for imbalance, such as PR-AUC, macro-F1, balanced accuracy, or cost-sensitive utility; ROC-AUC can help but is not sufficient on its own under extreme imbalance.
 \end{itemize}
 \end{decisionbox}
 
 \begin{example}[Imbalance in Pedestrian Detection]
-A campus shuttle's pedestrian detector is trained on all video frames collected during data gathering. 99\% of frames contain no pedestrians; only 1\% contain pedestrians. If the deployment camera sees a similar 99--1 split (because pedestrians are indeed rare), training on the 99--1 distribution is fine; the model should correctly predict ``no pedestrian'' most of the time. But if the model is deployed during times and places where pedestrians are more common (e.g., outside a busy building), the 99--1 training distribution is misleading, and the model will be too conservative about detecting pedestrians. Reweighting or threshold adjustment would be appropriate in that scenario.
+A campus shuttle's pedestrian detector is trained on all video frames collected during data gathering. 99\% of frames contain no pedestrians; only 1\% do. If the deployment camera sees a similar 99--1 split because pedestrians really are rare, training on that distribution is fine: the model should predict ``no pedestrian'' most of the time. But if the model is deployed in times and places where pedestrians are more common---outside a busy building, say---the 99--1 training distribution becomes misleading and the model grows too conservative about detecting pedestrians. Reweighting or threshold adjustment is appropriate in that scenario.
 \end{example}
 
 \section{More Data, Better Data, or Better Labels?}
 
-Data-centric ML is the philosophy that modeling progress often comes not from better algorithms but from better data. The practical question is therefore: should a team invest limited resources in collecting more examples, cleaning existing examples, or improving label quality?
+Data-centric ML holds that modeling progress often comes not from better algorithms but from better data. The practical question follows: should a team invest limited resources in collecting more examples, cleaning existing examples, or improving label quality?
 
 \subsection{When More Data Helps}
 
-More data is most valuable when:
+More data helps most when:
 \begin{itemize}[leftmargin=*]
 \item The current model exhibits high variance: training error is low but validation error is high
 \item The current dataset does not cover the full diversity of the deployment population
 \item The task is well-defined, labels are reliable, and the bottleneck is lack of examples
 \end{itemize}
 
-Collecting more random examples is least helpful when label noise is the primary problem or when the data distribution is far from deployment.
+More random examples help least when label noise is the main problem or when the data distribution is far from deployment.
 
 \subsection{When Better Labels Help}
 
@@ -263,11 +271,11 @@ Better labels matter most when:
 \item Annotation guidelines are unclear or inconsistently applied
 \end{itemize}
 
-Cleaning and improving labels is often cheaper than collecting more examples and can provide immediate performance gains.
+Cleaning and improving labels is often cheaper than collecting more examples and can deliver immediate performance gains.
 
 \subsection{When Better Coverage Helps}
 
-Better coverage or data augmentation is most valuable when:
+Better coverage or data augmentation helps most when:
 \begin{itemize}[leftmargin=*]
 \item The training distribution has systematic gaps (e.g., no night-time pedestrian frames)
 \item The model systematically fails on a slice of the deployment data (e.g., very crowded scenes)
@@ -323,20 +331,20 @@ Better coverage or data augmentation is most valuable when:
 \end{figure}
 
 \begin{thinkingtool}
-\textbf{Data investment triage.} Before collecting new data, diagnose the model's failure mode. If training error is much lower than validation error, the problem is variance. If both are high, the problem is bias or coverage. If labels look unreliable, the problem is noise. Invest accordingly.
+\textbf{Data investment triage.} Before collecting new data, diagnose the failure mode. If training error is much lower than validation error, the problem is variance. If both are high, the problem is bias or coverage. If labels look unreliable, the problem is noise. Invest accordingly.
 \end{thinkingtool}
 
 \section{Active Learning: Labeling Strategically}
 
-When labeling is expensive---because it requires expert annotation or manual review---labeling every available example is wasteful. Active learning addresses this: which examples should be labeled next to improve the model most?
+When labeling is expensive---because it requires expert annotation or manual review---labeling every available example is wasteful. Active learning asks which examples to label next to improve the model most.
 
 \subsection{Core Active Learning Strategies}
 
-\textbf{Uncertainty sampling.} Label the examples for which the current model is least confident. If the model is a probabilistic classifier, this means examples where the predicted probability is closest to 0.5 (for binary classification) or where the probability is most spread across multiple classes. The intuition is that the model has already learned what it can from confident examples; uncertain examples are most informative.
+\textbf{Uncertainty sampling.} Label the examples for which the current model is least confident. For a probabilistic classifier, this means examples where the predicted probability is closest to 0.5 (binary) or most spread across classes. The model has already learned what it can from confident examples; uncertain ones carry more information.
 
-\textbf{Diversity sampling.} Label examples that are most different from those already labeled. This can be measured through clustering, embedding distance, or other diversity metrics. The intuition is that diversity prevents the model from learning only about clusters of similar examples.
+\textbf{Diversity sampling.} Label examples that are most different from those already labeled, measured through clustering, embedding distance, or other diversity metrics. Diversity prevents the model from learning only about clusters of similar examples.
 
-\textbf{Expected model change.} Estimate how much labeling each unlabeled example would change the model parameters if it were labeled and the model were retrained. Label the examples with highest expected change. This requires training multiple candidate models or estimating gradient impact.
+\textbf{Expected model change.} Estimate how much labeling each unlabeled example would shift the model parameters if it were labeled and the model retrained. Label the examples with the highest expected change. This requires training multiple candidate models or estimating gradient impact.
 
 \subsection{When Active Learning Pays Off}
 
@@ -351,27 +359,27 @@ Active learning is most valuable when:
 Active learning is least useful when labeling is cheap, the unlabeled pool is small, or the model is poorly calibrated.
 
 \begin{example}[Active Learning for Course Support]
-A university starts with 100 randomly labeled student messages. The early-warning model performs reasonably but could be improved. Instead of randomly labeling 100 more messages, the team uses uncertainty sampling: they ask the model for the 100 unlabeled messages where it is least confident. A domain expert (student advisor) labels only those 100 high-uncertainty messages. With 200 total labels but 100 of them strategically chosen, the model improves more than if 200 random labels had been collected. The team gets more model improvement from the same expert time by avoiding examples the model was already confident about.
+A university starts with 100 randomly labeled student messages. The early-warning model performs reasonably but has room to improve. Instead of randomly labeling 100 more messages, the team uses uncertainty sampling: they ask the model for the 100 unlabeled messages where it is least confident. A domain expert (student advisor) labels only those 100. With 200 total labels---100 of them strategically chosen---the model improves more than it would from 200 random labels. The team gets more improvement from the same expert time by skipping examples the model already handles confidently.
 \end{example}
 
 \begin{practicalnote}
-Active learning requires discipline: the model must be retrained after each labeling round, and the uncertainty estimates must be reliable. If the model is overconfident or poorly calibrated, uncertainty sampling can select uninformative examples. Test active learning on a small batch first before committing to a full labeling campaign.
+Active learning requires discipline. The model must be retrained after each labeling round, and the uncertainty estimates must be reliable. An overconfident or poorly calibrated model will steer uncertainty sampling toward uninformative examples. Test active learning on a small batch first before committing to a full labeling campaign.
 \end{practicalnote}
 
 \section{Learning with Fewer Labels}
 \label{sec:fewer-labels}
 
-Active learning asks \emph{which} examples to label next. But a different question is often more pressing: can the model learn from examples that have no labels at all, or from labels that are noisy and automatically generated? In many real-world settings, unlabeled data is abundant but labeled data is scarce. A university's learning management system may contain hundreds of thousands of student messages, but only a few hundred have been reviewed by an advisor. A campus shuttle may have millions of video frames, but only a small fraction have been annotated with bounding boxes. The gap between available data and labeled data is the central problem of this section.
+Active learning asks \emph{which} examples to label next. A different question is often more pressing: can the model learn from examples that have no labels at all, or from labels that are noisy and automatically generated? In many real-world settings, unlabeled data is abundant and labeled data is scarce. A university's learning management system may contain hundreds of thousands of student messages, but only a few hundred reviewed by an advisor. A campus shuttle may record millions of video frames, but only a small fraction have bounding boxes. The gap between available data and labeled data is the central problem of this section.
 
-Two families of techniques address this gap. \emph{Semi-supervised learning} uses the structure of unlabeled data to improve a model trained on a small labeled set. \emph{Weak supervision} replaces expensive human labels with cheaper, noisier labels generated by rules, heuristics, or external knowledge sources. Both extend the chapter's core argument: data is a design choice, and the label-acquisition strategy is part of that design.
+Two families of techniques address that gap. \emph{Semi-supervised learning} uses the structure of unlabeled data to improve a model trained on a small labeled set. \emph{Weak supervision} replaces expensive human labels with cheaper, noisier labels produced by rules, heuristics, or external knowledge sources. Both extend the chapter's core argument: data is a design choice, and the label-acquisition strategy is part of that design.
 
 \subsection{Semi-Supervised Learning}
 
-Semi-supervised learning exploits a simple insight: even without labels, the distribution of the input data carries information about the structure of the problem. Clusters, manifolds, and density patterns in the unlabeled data can guide the model toward better decision boundaries.
+Semi-supervised learning exploits a simple insight: even without labels, the distribution of the input data carries information about the structure of the problem. Clusters, manifolds, and density patterns in unlabeled data can guide the model toward better decision boundaries.
 
 \subsubsection{Self-Training}
 
-Self-training is the simplest semi-supervised method. The idea is straightforward:
+Self-training is the simplest semi-supervised method:
 
 \begin{enumerate}[leftmargin=*]
 \item Train a model on the small labeled dataset.
@@ -385,53 +393,53 @@ Self-training is the simplest semi-supervised method. The idea is straightforwar
 The predicted labels assigned in step 3 are called \emph{pseudo-labels}. They are not ground truth---they are the model's best guesses, treated as if they were real labels.
 
 \begin{example}[Self-Training for Course Support]
-A university has 200 labeled student messages and 10,000 unlabeled ones. The team trains an initial classifier on the 200 labeled messages. The model predicts labels for all 10,000 unlabeled messages. For the 1,200 messages where the model's confidence exceeds 0.95, the predicted labels are treated as pseudo-labels and added to the training set. The model is retrained on the expanded set of 1,400 examples. The process repeats: each round, a few hundred more high-confidence pseudo-labels are added. After three rounds, the model has effectively used 2,800 examples despite only 200 having real human labels.
+A university has 200 labeled student messages and 10{,}000 unlabeled ones. The team trains an initial classifier on the 200 labeled messages, then predicts labels for all 10{,}000 unlabeled messages. For the 1{,}200 messages where confidence exceeds 0.95, the predicted labels become pseudo-labels and join the training set. The model retrains on the expanded set of 1{,}400 examples. The process repeats, adding a few hundred more high-confidence pseudo-labels each round. After three rounds, the model has effectively used 2{,}800 examples despite only 200 having real human labels.
 \end{example}
 
 \begin{warningbox}
-Self-training amplifies the model's existing biases. If the initial model is wrong about a cluster of examples---say, it misclassifies a group of formal but urgent student messages as ROUTINE because they lack emotional language---self-training will confidently assign ROUTINE pseudo-labels to similar messages, reinforcing the error. This is called \emph{confirmation bias} in self-training. Always monitor pseudo-label quality by spot-checking a random sample and measuring performance on a held-out validation set after each round.
+Self-training amplifies the model's existing biases. If the initial model misclassifies a cluster---say, formal but urgent student messages as ROUTINE because they lack emotional language---self-training confidently assigns ROUTINE pseudo-labels to similar messages, reinforcing the error. This is \emph{confirmation bias} in self-training. Monitor pseudo-label quality by spot-checking a random sample and tracking performance on a held-out validation set after each round.
 \end{warningbox}
 
 \subsubsection{Co-Training}
 
-Co-training addresses self-training's confirmation bias by using two models instead of one. The idea relies on having two \emph{views} of the data---two sets of features that are each sufficient for the task but provide complementary information.
+Co-training addresses self-training's confirmation bias by using two models instead of one. The idea requires two \emph{views} of the data---two feature sets that are each sufficient for the task but provide complementary information.
 
-Each model is trained on the labeled data using its own view. Then each model labels the unlabeled examples using its view, and the most confident predictions from \emph{one} model are added to the training set of the \emph{other}. Because the two models make different kinds of errors (they see different features), each one corrects the other's mistakes.
+Each model trains on the labeled data using its own view. Each then labels the unlabeled examples, and the most confident predictions from \emph{one} model join the training set of the \emph{other}. Because the two models see different features, they make different errors, and each corrects the other.
 
 \begin{example}[Co-Training for Pedestrian Detection]
-A pedestrian detection system has two views: visual appearance (image pixels) and motion patterns (optical flow between consecutive frames). Model A learns from appearance; Model B learns from motion. Model A confidently identifies a stationary person standing at a crosswalk---easy to see in the image but producing no motion signal. Model B confidently identifies a jogger in a cluttered background---hard to see in a single frame but obvious from motion. Each model's confident predictions become training data for the other, expanding what both models can detect.
+A pedestrian detection system has two views: visual appearance (image pixels) and motion patterns (optical flow between consecutive frames). Model A learns from appearance; Model B learns from motion. Model A confidently identifies a stationary person at a crosswalk---easy to see in the image but invisible to motion. Model B confidently identifies a jogger in a cluttered background---hard to see in a single frame but obvious from motion. Each model's confident predictions become training data for the other, expanding what both can detect.
 \end{example}
 
 \begin{practicalnote}
-Co-training's requirement for two independent, sufficient views is rarely met perfectly in practice. A common relaxation is to use two different model architectures on the same features, or to use random feature splits. These approximations often still help, but the theoretical guarantees weaken. If your features do not naturally split into two independent views, self-training or the weak supervision methods described below may be more practical.
+The co-training requirement for two independent, sufficient views is rarely met perfectly in practice. Common relaxations include using two different architectures on the same features, or random feature splits. These approximations often help, but the theoretical guarantees weaken. If your features do not naturally split into two independent views, self-training or the weak supervision methods below may be more practical.
 \end{practicalnote}
 
 \subsection{Pseudo-Label Quality and the Confidence Threshold}
 
-The success of all pseudo-labeling methods depends on the quality of the pseudo-labels. Two design decisions control this quality:
+The success of every pseudo-labeling method depends on pseudo-label quality. Two design decisions control that quality.
 
-\textbf{Confidence threshold.} A higher threshold (e.g., 0.99) produces fewer but more reliable pseudo-labels. A lower threshold (e.g., 0.8) produces more pseudo-labels but introduces more noise. The right threshold depends on the cost of a wrong pseudo-label versus the benefit of more training data.
+\textbf{Confidence threshold.} A higher threshold (say, 0.99) produces fewer but more reliable pseudo-labels. A lower one (say, 0.8) produces more pseudo-labels and more noise. The right threshold trades the cost of a wrong pseudo-label against the benefit of more training data.
 
-\textbf{Curriculum strategy.} Rather than setting a fixed threshold, some methods start with a high threshold and gradually lower it across rounds. This \emph{curriculum} approach adds the easiest examples first, building a stronger model before tackling ambiguous cases.
+\textbf{Curriculum strategy.} Rather than fixing a threshold, some methods start high and gradually lower it across rounds. This \emph{curriculum} approach adds the easiest examples first, building a stronger model before tackling ambiguous cases.
 
 \begin{decisionbox}
 \textbf{Semi-supervised method selection:}
 \begin{itemize}
-\item If you have one feature set and a simple pipeline, start with self-training. It is the easiest to implement and debug.
-\item If you have two naturally complementary views of the data (e.g., text and metadata, image and motion), consider co-training.
+\item With one feature set and a simple pipeline, start with self-training. It is the easiest to implement and debug.
+\item With two naturally complementary views of the data (text and metadata, image and motion), consider co-training.
 \item In all cases, monitor pseudo-label quality: spot-check a sample, track validation performance after each round, and stop if performance degrades.
-\item Combine with active learning: use semi-supervised methods to expand the training set cheaply, then use active learning to select the most valuable examples for expensive human labeling.
+\item Combine with active learning: expand the training set cheaply through semi-supervised methods, then use active learning to select the most valuable examples for expensive human labeling.
 \end{itemize}
 \end{decisionbox}
 
 \subsection{Weak Supervision}
 \label{subsec:weak-supervision}
 
-Semi-supervised learning extracts signal from \emph{unlabeled} data. Weak supervision takes a different approach: it generates labels automatically using heuristics, rules, and external knowledge. These labels are noisier than expert annotations, but they can be produced at scale and at near-zero marginal cost.
+Semi-supervised learning extracts signal from \emph{unlabeled} data. Weak supervision takes a different route: it generates labels automatically using heuristics, rules, and external knowledge. These labels are noisier than expert annotations, but they can be produced at scale and at near-zero marginal cost.
 
 \subsubsection{Labeling Functions}
 
-The core building block of weak supervision is the \emph{labeling function}: a simple rule or heuristic that assigns a label to an example based on some observable pattern. A labeling function does not need to be accurate on all examples---it only needs to be informative on the examples it chooses to label.
+The core building block of weak supervision is the \emph{labeling function}: a simple rule or heuristic that assigns a label based on an observable pattern. A labeling function does not need to be accurate on all examples; it only needs to be informative on the examples it chooses to label.
 
 \begin{example}[Labeling Functions for Course Support]
 A team building the student early-warning system writes several labeling functions:
@@ -441,12 +449,12 @@ A team building the student early-warning system writes several labeling functio
 \item \texttt{lf\_engagement\_drop}: if the student's login frequency dropped by more than 50\% compared to the previous two weeks, label CONCERNING
 \item \texttt{lf\_routine\_length}: if the message is fewer than 10 words and contains a question mark, label ROUTINE
 \end{itemize}
-Each labeling function covers only a subset of examples and may abstain (assign no label) on most of the data. The key is that each one encodes domain knowledge that would otherwise require expert annotation.
+Each labeling function covers only a subset of examples and may abstain (assign no label) on most of the data. Each one encodes domain knowledge that would otherwise require expert annotation.
 \end{example}
 
 \subsubsection{Data Programming: Combining Labeling Functions}
 
-Individual labeling functions are noisy and incomplete. The insight of \emph{data programming} is to combine many labeling functions into a single, higher-quality label estimate. The framework, developed in the Snorkel system, works as follows:
+Individual labeling functions are noisy and incomplete. The insight of \emph{data programming} is to combine many of them into a single, higher-quality label estimate. The framework, developed in the Snorkel system, works as follows:
 
 \begin{enumerate}[leftmargin=*]
 \item Write multiple labeling functions, each capturing a different heuristic or knowledge source.
@@ -455,35 +463,35 @@ Individual labeling functions are noisy and incomplete. The insight of \emph{dat
 \item Use the label model's probabilistic output as training labels for a downstream model.
 \end{enumerate}
 
-The label model is the critical component. It learns which labeling functions are accurate, which are correlated (and therefore provide redundant signal), and which disagree in informative ways. The output is a probabilistic (soft) label for each example, which can be used directly as a training target.
+The label model is the critical component. It learns which labeling functions are accurate, which are correlated (and so provide redundant signal), and which disagree in informative ways. The output is a probabilistic (soft) label for each example, usable directly as a training target.
 
 \begin{practicalnote}
-Writing labeling functions is a form of encoding domain knowledge. The quality of weak supervision depends entirely on how much relevant knowledge you can express as simple rules. Start by interviewing domain experts: ``What patterns do you look for when labeling this task?'' Each answer is a candidate labeling function. Aim for 10--30 labeling functions with diverse coverage; a few high-precision functions (rarely wrong but often abstain) are more valuable than many low-precision ones.
+Writing labeling functions is a way to encode domain knowledge. The quality of weak supervision depends on how much relevant knowledge you can express as simple rules. Start by interviewing domain experts: ``What patterns do you look for when labeling this task?'' Each answer is a candidate labeling function. Aim for 10--30 labeling functions with diverse coverage; a few high-precision functions (rarely wrong, often abstain) are more valuable than many low-precision ones.
 \end{practicalnote}
 
 \begin{warningbox}
-Labeling functions that are correlated but treated as independent will cause the label model to overcount their shared signal. If three labeling functions all check for keyword overlap with the same word list, the label model may treat their agreement as strong evidence when it is really one signal counted three times. Audit your labeling functions for correlation before training the label model.
+Correlated labeling functions treated as independent will cause the label model to overcount their shared signal. If three functions all check for keyword overlap with the same word list, the label model may treat their agreement as strong evidence when it is really one signal counted three times. Audit your labeling functions for correlation before training the label model.
 \end{warningbox}
 
 \subsubsection{Silver Labels: Terminology and Trust}
 
 Labels produced by labeling functions or label models are sometimes called \emph{silver labels}, to distinguish them from expert-annotated \emph{gold labels}. Silver labels are cheaper but noisier.
 
-The critical design question is how much to trust silver labels. Three strategies are common:
+The critical design question is how much to trust silver labels. Three strategies are common.
 
 \begin{itemize}[leftmargin=*]
-\item \emph{Train on silver, evaluate on gold.} Use silver labels for training but always evaluate on a small set of expert-annotated gold labels. This is the minimum standard---without gold evaluation, you cannot measure how much noise the silver labels introduce.
-\item \emph{Weight by confidence.} If the label model provides probabilistic outputs, weight training examples by the label model's confidence. Examples with high-confidence silver labels contribute more to the loss; low-confidence examples contribute less. This is analogous to soft labels from annotator disagreement (Section~\ref{sec:soft-labels}).
-\item \emph{Mix gold and silver.} Train on a combination of gold labels (expensive, small) and silver labels (cheap, large). The gold labels anchor the model, and the silver labels provide coverage. The mixing ratio is a hyperparameter: too little gold and the model trusts noisy silver labels; too much gold and the silver labels add nothing.
+\item \emph{Train on silver, evaluate on gold.} Use silver labels for training, but always evaluate on a small set of expert-annotated gold labels. This is the minimum standard: without gold evaluation, you cannot measure how much noise the silver labels introduce.
+\item \emph{Weight by confidence.} If the label model produces probabilistic outputs, weight training examples by its confidence. High-confidence silver labels contribute more to the loss; low-confidence ones contribute less. This is analogous to soft labels from annotator disagreement (Section~\ref{sec:soft-labels}).
+\item \emph{Mix gold and silver.} Combine gold labels (expensive, small) with silver labels (cheap, large). Gold labels anchor the model; silver labels provide coverage. The mixing ratio is a hyperparameter: too little gold and the model trusts noisy silver labels; too much and the silver labels add nothing.
 \end{itemize}
 
 \begin{example}[Weak Supervision for Pedestrian-Presence Classification]
-A pedestrian-analytics team has 500 expert-labeled frames (gold) indicating whether each frame contains at least one pedestrian, but 50,000 additional unlabeled frames from campus cameras. They write labeling functions using motion detection (moving objects above a certain size are likely pedestrians), time-of-day priors (frames captured during class changes are more likely to contain pedestrians), and a pretrained generic object detector (whose ``person'' predictions provide a noisy vote about pedestrian presence). A label model combines these three sources into probabilistic silver labels. The team trains a frame-level pedestrian-presence classifier on 500 gold frames plus 50,000 silver-labeled frames, evaluates on a held-out set of 200 gold frames, and finds that the silver-augmented model outperforms the gold-only model by 8 percentage points on recall---it detects more pedestrian-present frames in difficult conditions (dusk, rain) where the gold training set had few examples.
+A pedestrian-analytics team has 500 expert-labeled frames (gold) indicating whether each frame contains at least one pedestrian, plus 50{,}000 additional unlabeled frames from campus cameras. They write labeling functions using motion detection (moving objects above a certain size are likely pedestrians), time-of-day priors (frames captured during class changes are more likely to contain pedestrians), and a pretrained generic object detector (whose ``person'' predictions are a noisy vote on pedestrian presence). A label model combines these three sources into probabilistic silver labels. The team trains a frame-level classifier on 500 gold frames plus 50{,}000 silver-labeled frames, evaluates on a held-out set of 200 gold frames, and finds the silver-augmented model beats the gold-only model by 8 percentage points on recall, detecting more pedestrian-present frames in difficult conditions (dusk, rain) where the gold training set had few examples.
 \end{example}
 
 \subsection{Connecting the Pieces}
 
-Active learning, semi-supervised learning, and weak supervision are not competing strategies---they are complementary tools for a label-acquisition \emph{pipeline}. A practical workflow might proceed as follows:
+Active learning, semi-supervised learning, and weak supervision are not competing strategies. They are complementary tools in a label-acquisition \emph{pipeline}. A practical workflow might proceed as follows:
 
 \begin{enumerate}[leftmargin=*]
 \item Start with a small labeled seed set (gold labels).
@@ -535,16 +543,16 @@ Active learning, semi-supervised learning, and weak supervision are not competin
 \end{figure}
 
 \begin{thinkingtool}
-\textbf{Label-acquisition strategy.} Before building a model, ask: what is the cheapest way to get labels that are good enough? If expert labels are cheap, label everything. If expert labels are expensive, design a pipeline that combines cheap silver labels for coverage with strategic gold labels for quality. The label-acquisition strategy is as important as the model architecture.
+\textbf{Label-acquisition strategy.} Before building a model, ask the cheapest way to get labels that are good enough. If expert labels are cheap, label everything. If they are expensive, design a pipeline that combines cheap silver labels for coverage with strategic gold labels for quality. The label-acquisition strategy is as important as the model architecture.
 \end{thinkingtool}
 
 \section{Data Augmentation as a Modeling Decision}
 
-Data augmentation generates new training examples from existing ones by applying transformations. Every augmentation encodes a claim: ``the model should be invariant to this transformation.''
+Data augmentation generates new training examples from existing ones by applying transformations. Every augmentation encodes a claim: the model should be invariant to this transformation.
 
 \subsection{Augmentation by Modality}
 
-\textbf{Text augmentation.} Common techniques include:
+\textbf{Text augmentation.} Common techniques:
 \begin{itemize}[leftmargin=*]
 \item \emph{Paraphrase}: rewrite a sentence to mean the same thing (e.g., ``the student is struggling'' $\to$ ``the student is having difficulty'')
 \item \emph{Back-translation}: translate to another language and back to introduce variation (e.g., English $\to$ French $\to$ English)
@@ -554,7 +562,7 @@ Data augmentation generates new training examples from existing ones by applying
 
 For the course-support system, augmentation could paraphrase student messages to simulate the same underlying intent phrased differently.
 
-\textbf{Vision augmentation.} Common techniques include:
+\textbf{Vision augmentation.} Common techniques:
 \begin{itemize}[leftmargin=*]
 \item \emph{Rotation, crop, and flip}: rotate or flip the image; crop to different regions
 \item \emph{Brightness, contrast, hue adjustment}: vary lighting and color
@@ -562,25 +570,25 @@ For the course-support system, augmentation could paraphrase student messages to
 \item \emph{Geometric transformation}: apply affine or perspective transformations
 \end{itemize}
 
-For the pedestrian detector, rotation and brightness adjustment make sense because a pedestrian can appear in different lighting and at different angles. Flipping may also be appropriate: the model should detect pedestrians facing left or right equally.
+For the pedestrian detector, rotation and brightness adjustment make sense because pedestrians can appear in different lighting and at different angles. Flipping may also be appropriate: the model should detect pedestrians facing left or right equally well.
 
-\textbf{Tabular augmentation.} Techniques like SMOTE (Synthetic Minority Over-sampling Technique) generate synthetic minority examples by interpolating between existing minority examples. Simpler approaches include adding noise, permuting values, or other local perturbations.
+\textbf{Tabular augmentation.} Techniques like SMOTE (Synthetic Minority Over-sampling Technique) generate synthetic minority examples by interpolating between existing ones. Simpler approaches include adding noise, permuting values, or other local perturbations.
 
 \subsection{Augmentation Risks}
 
-Not all transformations are valid for all tasks. An augmentation is valid only if the true label is preserved under the transformation.
+Not every transformation is valid for every task. An augmentation is valid only if the true label is preserved under the transformation.
 
 \begin{warningbox}
-Consider a student-message classifier that predicts whether a message indicates urgent need. Paraphrasing is a valid augmentation: ``I missed the deadline'' and ``I couldn't meet the deadline'' should have the same label. But removing portions of the text (cutoff) might not be valid: removing the word ``suicide'' from a longer message changes what it is. Be explicit about which augmentations preserve the task semantics.
+Consider a student-message classifier that predicts whether a message indicates urgent need. Paraphrasing is a valid augmentation: ``I missed the deadline'' and ``I couldn't meet the deadline'' should share a label. Cutoff (removing portions of the text) may not be valid: removing the word ``suicide'' from a longer message changes what the message is. Be explicit about which augmentations preserve task semantics.
 \end{warningbox}
 
 \begin{example}[Augmentation Mistakes]
-A team building a sentiment analysis model for student feedback augments training texts by removing punctuation and shortening them. Some sentences like ``I hate this---the worst!'' become ``I hate this the worst,'' which still conveys negative sentiment. But a crude shortening rule can flip meaning: ``The class is not engaging'' can become ``The class is engaging'' if the augmenter drops short negation words while compressing the sentence. The team should have inspected augmented examples and validated that sentiment was preserved.
+A team building a sentiment-analysis model for student feedback augments training texts by removing punctuation and shortening them. Sentences like ``I hate this---the worst!'' become ``I hate this the worst,'' which still conveys negative sentiment. But a crude shortening rule can flip meaning: ``The class is not engaging'' becomes ``The class is engaging'' if the augmenter drops short negation words. The team should have inspected augmented examples and verified that sentiment was preserved.
 \end{example}
 
 \section{Synthetic Data: Promise and Pitfalls}
 
-Synthetic data is generated rather than observed. It can address data scarcity, privacy constraints, and rare events. But it comes with serious risks.
+Synthetic data is generated rather than observed. It can address data scarcity, privacy constraints, and rare events, but it comes with serious risks.
 
 \subsection{When Synthetic Data Helps}
 
@@ -596,44 +604,44 @@ Synthetic data is valuable for:
 
 Synthetic data is risky because it can encode unrealistic assumptions.
 
-\textbf{Distribution mismatch.} Synthetic data generated from a simulation may not match the real-world distribution. A pedestrian detector trained on game-engine-rendered pedestrians may fail on real photographs because the textures, lighting, and pose distributions are different. This is called the ``sim-to-real'' gap.
+\textbf{Distribution mismatch.} Synthetic data generated from a simulation may not match the real-world distribution. A pedestrian detector trained on game-engine renderings may fail on real photographs because textures, lighting, and pose distributions differ. This is the ``sim-to-real'' gap.
 
-\textbf{Mode collapse.} A generative model may produce synthetic data that is too similar, covering only a narrow slice of the possible variation. If a generative adversarial network (GAN) generates pedestrian images, it might produce only frontal poses and miss side views.
+\textbf{Mode collapse.} A generative model may produce synthetic data that is too similar, covering only a narrow slice of the possible variation. A generative adversarial network (GAN) might produce only frontal pedestrian poses and miss side views.
 
-\textbf{False confidence.} A model trained entirely on synthetic data may perform well on held-out synthetic test data but fail on real data. If the model is evaluated against synthetic data, the numbers look good. But real-world deployment reveals the gap. This is why evaluation discipline is critical: synthetic data must be validated against real held-out performance, never against itself.
+\textbf{False confidence.} A model trained entirely on synthetic data may perform well on held-out synthetic test data but fail on real data. Evaluated against synthetic data, the numbers look good; real-world deployment reveals the gap. This is why evaluation discipline is critical: validate synthetic data against real held-out performance, never against itself.
 
 \begin{evidencebox}
-In autonomous driving research, simulators like CARLA are used to generate training data because real driving data is expensive to collect and label. However, simulation studies repeatedly show that transfer depends on how closely the simulator matches the real sensing and control setting \citep{amini2020vista}. The distribution of rendered scenes can differ enough from real camera imagery that simulation-trained models do not transfer well unless the gap is measured and managed. The lesson is that synthetic data should be viewed as a starting point, not as a complete replacement for real data.
+In autonomous-driving research, simulators like CARLA generate training data because real driving data is expensive to collect and label. Simulation studies repeatedly show that transfer depends on how closely the simulator matches the real sensing and control setting \citep{amini2020vista}. Rendered scenes can differ enough from real camera imagery that simulation-trained models fail to transfer unless the gap is measured and managed. Synthetic data is a starting point, not a complete replacement for real data.
 \end{evidencebox}
 
 \begin{advancednote}
-Some recent work uses large pretrained generative models to synthesize training data that is more realistic. However, the same evaluation discipline applies: the synthetic-augmented model must be validated on a real held-out test set, not only on synthetic test data. The false confidence problem persists.
+Some recent work uses large pretrained generative models to synthesize more realistic training data. The same evaluation discipline applies: validate the synthetic-augmented model on a real held-out test set, not only on synthetic test data. The false-confidence problem persists.
 \end{advancednote}
 
 \subsection{Evaluation Discipline for Synthetic Data}
 
 When using synthetic data, enforce these rules:
 \begin{itemize}[leftmargin=*]
-\item Train and validate on a mix of real and synthetic data if possible
-\item Always hold out a real-data test set; never evaluate only on synthetic test data
-\item Report separate performance on real and synthetic held-out data to expose any gap
-\item If possible, measure domain adaptation metrics or transfer performance to understand the mismatch
+\item Train and validate on a mix of real and synthetic data when possible.
+\item Always hold out a real-data test set; never evaluate only on synthetic test data.
+\item Report performance on real and synthetic held-out data separately to expose any gap.
+\item Where possible, use domain-adaptation metrics or transfer performance to quantify the mismatch.
 \end{itemize}
 
 \begin{decisionbox}
 \textbf{Synthetic data decision checklist:}
 \begin{itemize}
 \item Is real data genuinely scarce or expensive, or could more be collected?
-\item Is the synthetic-data generator reliable and realistic, or does it make simplifying assumptions?
+\item Is the synthetic-data generator reliable and realistic, or does it rely on simplifying assumptions?
 \item Can you hold out real data for testing, or will you evaluate only on synthetic data?
-\item How much of a sim-to-real gap is acceptable for your use case?
-\item If performance on synthetic test data is high but real-world performance is poor, what will you do?
+\item How large a sim-to-real gap is acceptable for your use case?
+\item If synthetic test performance is high but real-world performance is poor, what will you do?
 \end{itemize}
 \end{decisionbox}
 
 \section{The Data Design Card}
 
-A data design card is a structured document that records the data-design choices made when building a dataset. It serves as institutional memory and makes assumptions explicit. This is the chapter artifact.
+A data design card is a structured document that records the data-design choices made when building a dataset. It serves as institutional memory and makes assumptions explicit. It is the chapter artifact.
 
 \subsection{Data Design Card Structure}
 
@@ -708,20 +716,20 @@ Version and refresh plan & The current version, when the data was last updated, 
 \end{example}
 
 \begin{practicalnote}
-A data design card is not merely documentation. It is a forcing function. Writing one reveals gaps in your own understanding of the data. If you cannot fill the ``annotator agreement'' field, you should probably measure inter-annotator agreement before building a model. If you cannot describe the ``known gaps'' field clearly, you should probably investigate your data more carefully.
+A data design card is not just documentation. It is a forcing function. Writing one exposes gaps in your understanding of the data. If you cannot fill the ``annotator agreement'' field, measure inter-annotator agreement before building a model. If you cannot describe the ``known gaps'' field clearly, investigate the data more carefully.
 \end{practicalnote}
 
 \section{Common Mistakes in Data Design}
 
-Several mistakes recur when building datasets. The first is treating the data as fixed and given rather than as a design choice. The second is ignoring annotator agreement or treating disagreement purely as noise. A third is assuming that balancing classes is always right without considering deployment distribution. A fourth is collecting synthetic or augmented data without validating against real held-out data. Finally, too many teams build models without documenting data assumptions, making it impossible for others to know what the model has been trained on or what its limitations are.
+Several mistakes recur when teams build datasets. The first is treating data as fixed and given rather than as a design choice. The second is ignoring annotator agreement or treating disagreement purely as noise. The third is assuming that balancing classes is always right, without considering the deployment distribution. The fourth is collecting synthetic or augmented data without validating against real held-out data. Finally, too many teams build models without documenting data assumptions, leaving others unable to tell what the model was trained on or where it falls short.
 
 \section{Looking Ahead}
 
-This chapter made dataset construction explicit: collection, annotation, labeling protocol, class imbalance, active learning, semi-supervised learning, weak supervision, and augmentation are all design decisions that shape what the model learns. When labels are scarce, the label-acquisition strategy---which examples get gold labels, which get silver labels from heuristics, and which get pseudo-labels from the model itself---is as important as the model architecture. With the data now designed and documented, the next chapter returns to model architecture. But with better understanding of data, the conversation about architecture can be more sophisticated: not ``which model family is stronger?'' but ``what does this data allow the model to learn?''
+This chapter made dataset construction explicit. Collection, annotation, labeling protocol, class imbalance, active learning, semi-supervised learning, weak supervision, and augmentation are all design decisions that shape what the model learns. When labels are scarce, the label-acquisition strategy---which examples get gold labels, which get silver labels from heuristics, and which get pseudo-labels from the model itself---is as important as the model architecture. With the data now designed and documented, the next chapter returns to model architecture. With a better understanding of data, the architecture conversation becomes more sophisticated: not ``which model family is stronger?'' but ``what does this data allow the model to learn?''
 
 \section*{Chapter Summary}
 
-Dataset construction is a design choice, not preprocessing. The examples collected, the labels assigned, their distribution, and their quality determine what the model can learn. Labeling protocols, inter-annotator agreement, and whether to use soft or hard labels are decisions that reflect the ambiguity or clarity of the task. Class imbalance should be handled based on the deployment distribution, not by defaulting to balance. The choice between collecting more data, cleaning existing labels, or improving coverage depends on whether the bottleneck is variance, bias, or noise. Active learning lets teams label strategically when labeling is expensive. When labeled data is scarce, semi-supervised learning uses unlabeled data structure to improve models, and weak supervision generates noisy but cheap labels through heuristics and labeling functions. The label-acquisition strategy---combining gold, silver, and pseudo-labels---is itself a design decision. Augmentation and synthetic data are powerful but require careful validation to avoid false confidence. A data design card documents all choices, including label-acquisition strategy, and makes assumptions explicit, protecting future users from discovering problems after the model is deployed.
+Dataset construction is a design choice, not preprocessing. The examples collected, the labels assigned, their distribution, and their quality determine what the model can learn. Labeling protocols, inter-annotator agreement, and the choice between soft and hard labels reflect the ambiguity or clarity of the task. Handle class imbalance based on the deployment distribution, not by defaulting to balance. The choice between collecting more data, cleaning existing labels, or improving coverage depends on whether the bottleneck is variance, bias, or noise. Active learning lets teams label strategically when labeling is expensive. When labeled data is scarce, semi-supervised learning uses unlabeled-data structure to improve models, and weak supervision generates cheap but noisy labels through heuristics and labeling functions. The label-acquisition strategy---combining gold, silver, and pseudo-labels---is itself a design decision. Augmentation and synthetic data are powerful but require careful validation to avoid false confidence. A data design card documents all of these choices, including the label-acquisition strategy, and makes assumptions explicit, protecting future users from discovering problems after deployment.
 
 \begin{studyquestions}
 \item Why is dataset construction a modeling decision rather than just preprocessing?
@@ -751,6 +759,7 @@ Dataset construction is a design choice, not preprocessing. The examples collect
 \item \exercisetag{Design}{Intermediate}Propose two sensible data augmentations for either text, image, or tabular data in your domain. For each, argue why the augmentation preserves label validity.
 \item \exercisetag{Design}{Advanced}Create a data design card (Table~\ref{tab:data-design-card}) for a dataset in a domain you know or have researched. If carrying one case through the book, use the same case as your framing memo and evaluation plan so the three documents can be read together.
 \item \exercisetag{Research}{Advanced}For a public dataset like CIFAR-10 or ImageNet, research what label errors or distribution shifts have been documented. Write a paragraph explaining what was found and what impact it had on models trained on that dataset.
+\item \exercisetag{Implementation}{Core}Hand-write a tiny corpus of about 30 short messages about a course-support task, with gold labels for two classes (e.g., \texttt{logistics} vs.\ \texttt{content}). Write three labeling functions in Python: one keyword rule, one length-based rule, and one regex rule. Each LF should return $+1$, $-1$, or $0$ (abstain). Combine them by majority vote, breaking ties by abstaining, and compare the precision and coverage of (i) each individual LF and (ii) the majority-vote ensemble against the gold labels. Report a 3-row table; comment on whether the ensemble improved both axes or traded one for the other.
 \end{exercises}
 
 \begin{challengeexercises}

@@ -1,63 +1,63 @@
 \chapter{Probabilistic Models and Latent Structure}
 \label{ch:probabilistic-models}
 
-The previous chapter explained how neural networks learn: hidden features, loss surfaces, backpropagation, and regularization. Those tools produce point predictions---a single output for each input. But many real-world problems require more than a best guess. A course-support assistant that flags a student as ``at risk'' is more useful if it can also say \emph{how uncertain} that prediction is. A pedestrian detector that reports ``pedestrian detected with 92\% confidence'' is more actionable than one that simply says ``yes.'' And sometimes the most important structure in the data is not visible at all---it is \emph{latent}, hidden behind the observations.
+The previous chapter showed how neural networks learn: hidden features, loss surfaces, backpropagation, and regularization. Those tools produce point predictions---one output per input. But many real-world problems demand more than a best guess. A course-support assistant that flags a student as ``at risk'' is far more useful when it can also say \emph{how uncertain} that prediction is. A pedestrian detector that reports ``pedestrian detected with 92\% confidence'' is more actionable than one that just says ``yes.'' Sometimes the most important structure in the data is not visible at all---it is \emph{latent}, hidden behind the observations.
 
-This chapter introduces probabilistic models: models that reason about distributions, not just predictions. The central ideas are latent variables (structure that is inferred, not observed), generative modeling (modeling how data is produced, not just how to classify it), and uncertainty (distinguishing what the model does not know from what is inherently unpredictable). These ideas connect to everything that follows: representation learning (Chapter~\ref{ch:representation-foundation-models}) depends on learned latent spaces, generative models produce new data from latent structure, and responsible deployment (Part~IV) requires knowing when the model's confidence is trustworthy.
+This chapter introduces probabilistic models: models that reason about distributions rather than single predictions. Three ideas anchor the chapter. Latent variables capture structure we must infer rather than observe. Generative modeling describes how data is produced rather than only how to classify it. Uncertainty separates what the model does not know from what is inherently unpredictable. These ideas connect to everything that follows. Representation learning (Chapter~\ref{ch:representation-foundation-models}) depends on learned latent spaces, generative models produce new data from latent structure, and responsible deployment (Part~V) requires knowing when the model's confidence is trustworthy.
 
 \begin{problemsolvinglens}
-Point predictions hide what the model does not know. A probabilistic model makes uncertainty explicit, which changes how predictions are used, how failures are detected, and how systems are designed for safety.
+Point predictions hide what the model does not know. Probabilistic models make uncertainty explicit, and that changes how predictions are used, how failures are detected, and how systems are designed for safety.
 \end{problemsolvinglens}
 
 \begin{thinkingtool}
-\textbf{Generative vs.\ discriminative.} When evaluating a model, ask: does this model learn to \emph{classify} inputs (discriminative: $P(Y \mid X)$) or to \emph{generate} inputs (generative: $P(X \mid Y)$ or $P(X, Y)$)? Generative models can do things discriminative models cannot: detect outliers, generate new data, and reason about missing observations. But they require stronger assumptions about the data distribution.
+\textbf{Generative vs.\ discriminative.} When evaluating a model, ask whether it learns to \emph{classify} inputs (discriminative: $P(Y \mid X)$) or to \emph{generate} them (generative: $P(X \mid Y)$ or $P(X, Y)$). Generative models can do things discriminative models cannot: detect outliers, sample new data, and reason about missing observations. The price is stronger assumptions about the data distribution.
 \end{thinkingtool}
 
 \begin{prereqbridge}
-Review Bridge~II if conditional probability, likelihood, expectation, or variance slows the reading down. The core path in this chapter is design fluency with probabilistic structure and uncertainty; the EM proof and deeper Gaussian-process derivations can be treated as extension work in a first course.
+Review Bridge~II if conditional probability, likelihood, expectation, or variance slows down the reading. The core path in this chapter is design fluency with probabilistic structure and uncertainty; the EM proof and deeper Gaussian-process derivations can be treated as extension work in a first course.
 \end{prereqbridge}
 
 \section{Why Probabilistic Thinking Matters}
 
-Many models encountered so far produce a single operational output for each input: a score, a class label, or a thresholded decision. Some of them, such as logistic regression or softmax classifiers, can also produce class probabilities. The issue is not that previous models were never probabilistic; the issue is that their probabilities were often treated only as a way to choose a label, rather than as quantities to calibrate, audit, or propagate into downstream decisions.
+Most models encountered so far produce a single operational output for each input: a score, a class label, or a thresholded decision. Some, such as logistic regression and softmax classifiers, also produce class probabilities. The problem is not that previous models were never probabilistic. It is that their probabilities were typically used only to choose a label, not calibrated, audited, or propagated into downstream decisions.
 
-It is useful to keep three levels separate: point labels or scores; class-probability models such as logistic regression; and full predictive or generative distributions that model richer uncertainty about labels, inputs, or latent structure. This chapter focuses on the latter two levels and asks how uncertainty should be represented and used.
+Three levels are worth keeping separate: point labels or scores; class-probability models such as logistic regression; and full predictive or generative distributions that capture richer uncertainty about labels, inputs, or latent structure. This chapter focuses on the latter two and asks how uncertainty should be represented and used.
 
-Probabilistic models take a different stance: the output is a \emph{distribution}, not merely a point. Instead of asking only ``what is the predicted class?'' a probabilistic model asks ``what distribution over possible outcomes is being represented, and how spread out is that distribution?'' This shift has practical consequences.
+Probabilistic models take a different stance: the output is a \emph{distribution}, not a point. Rather than asking only ``what is the predicted class?'' a probabilistic model asks ``what distribution over possible outcomes does the model represent, and how spread out is it?'' That shift has practical consequences.
 
-\textbf{Decision-making under uncertainty.} A hospital triage system that predicts a 51\% probability of a serious condition should behave differently from one that predicts 99\%. Both may predict the same class (``serious''), but the appropriate action differs. Probabilistic outputs enable cost-sensitive decisions: the downstream system can incorporate the prediction's uncertainty into its response.
+\textbf{Decision-making under uncertainty.} A hospital triage system predicting 51\% probability of a serious condition should behave differently from one predicting 99\%. Both predict the same class (``serious''), but the appropriate action differs. Probabilistic outputs enable cost-sensitive decisions: the downstream system can fold prediction uncertainty into its response.
 
-\textbf{Detecting the unknown.} A discriminative classifier trained on three classes will still assign one of those three labels, even to an input that belongs to none of them, unless extra uncertainty or out-of-distribution machinery is added. A generative model may sometimes help by flagging inputs that look low-likelihood under the learned distribution, but this depends on how well the density model matches reality and must be validated empirically rather than assumed.
+\textbf{Detecting the unknown.} A discriminative classifier trained on three classes still assigns one of those three labels even to an input belonging to none of them---unless extra uncertainty or out-of-distribution machinery is added. A generative model can sometimes help by flagging inputs that look unlikely under the learned distribution, but this depends on how well the density model matches reality. Validate it empirically rather than assuming it works.
 
-\textbf{Missing data and partial observations.} In many real-world settings, some features are missing for some examples. A probabilistic model that has learned the joint distribution $P(X_1, X_2, \ldots, X_d)$ can marginalize over the missing features and still make predictions. A discriminative model trained on complete data may fail or require imputation heuristics.
+\textbf{Missing data and partial observations.} In many real-world settings, some features are missing for some examples. A probabilistic model that learns the joint distribution $P(X_1, X_2, \ldots, X_d)$ can marginalize over the missing features and still predict. A discriminative model trained on complete data may fail or require imputation heuristics.
 
 \begin{example}[Probabilistic Thinking in Course Support]
-The course-support early-warning system classifies student messages as ROUTINE, CONCERNING, or URGENT. A discriminative classifier may still produce class probabilities, but a thresholded workflow often surfaces only the top decision. A probabilistic workflow retains the full distribution: $P(\text{URGENT}) = 0.15$, $P(\text{CONCERNING}) = 0.60$, $P(\text{ROUTINE}) = 0.25$. The message is classified as CONCERNING, but the 15\% probability of URGENT is high enough to warrant a secondary review. Without the full distribution, this nuance is lost. Furthermore, if the model has been trained on data from fall semesters only, a probabilistic model can flag a spring-semester message as low-likelihood under the training distribution, warning the advisor that the model may be unreliable for this input.
+The course-support early-warning system classifies student messages as ROUTINE, CONCERNING, or URGENT. A discriminative classifier may produce class probabilities, but a thresholded workflow often surfaces only the top decision. A probabilistic workflow keeps the full distribution: $P(\text{URGENT}) = 0.15$, $P(\text{CONCERNING}) = 0.60$, $P(\text{ROUTINE}) = 0.25$. The top label is CONCERNING, but the 15\% probability of URGENT is high enough to warrant a secondary review. Without the full distribution, that nuance is lost. If the model was trained only on fall-semester data, a probabilistic model can also flag a spring-semester message as low-likelihood under the training distribution, warning the advisor that the prediction may be unreliable here.
 \end{example}
 
 \section{Generative vs.\ Discriminative Models}
 \label{sec:gen-vs-disc}
 
-The distinction between generative and discriminative models is fundamental to probabilistic reasoning.
+The split between generative and discriminative models is fundamental to probabilistic reasoning.
 
-\textbf{Discriminative models} learn a decision rule or score for predicting $Y$ from $X$. Probabilistic discriminative models such as logistic regression estimate $P(Y \mid X)$, while models such as support vector machines are discriminative without being probability models unless they are separately calibrated. They answer: ``given this input, what is the most likely label?''
+\textbf{Discriminative models} learn a decision rule or score for predicting $Y$ from $X$. Probabilistic discriminative models such as logistic regression estimate $P(Y \mid X)$. Models such as support vector machines are discriminative without being probability models, unless they are separately calibrated. Both answer one question: ``given this input, what is the most likely label?''
 
-\textbf{Generative models} learn the joint distribution $P(X, Y)$ or equivalently the class-conditional distribution $P(X \mid Y)$ and the prior $P(Y)$. They answer a different question: ``how is the data produced?'' Given a generative model, you can compute $P(Y \mid X)$ using Bayes' theorem:
+\textbf{Generative models} learn the joint distribution $P(X, Y)$, or equivalently the class-conditional $P(X \mid Y)$ together with the prior $P(Y)$. They answer a different question: ``how is the data produced?'' Given a generative model, Bayes' theorem recovers $P(Y \mid X)$:
 \[
 P(Y \mid X) = \frac{P(X \mid Y) \, P(Y)}{P(X)}
 \]
-So generative models \emph{can} classify, but they model more than classification requires.
+Generative models \emph{can} classify, but they model more than classification requires.
 
-\subsection{Trade-offs}
+\subsection{Tradeoffs}
 
-Generative models are more flexible but harder to fit. The key trade-offs:
+Generative models are more flexible but harder to fit. The key tradeoffs:
 
 \begin{itemize}[leftmargin=*]
-\item \emph{Classification accuracy.} When the only goal is to predict $Y$ from $X$, discriminative models often win. They focus all their capacity on the decision boundary, while generative models spend capacity modeling the full input distribution, which may not help with classification.
-\item \emph{Data efficiency.} Generative models can sometimes learn from less labeled data because they learn about the structure of $X$, not just the relationship between $X$ and $Y$. This connects to semi-supervised learning (Chapter~\ref{ch:dataset-design}).
-\item \emph{Outlier detection.} Generative models can support density-based checks for inputs that are unlikely under the learned distribution, but this must be validated because likelihood can be misleading out of domain. Plain discriminative classifiers have no built-in input-density model; they need an added rejection rule, uncertainty check, or out-of-distribution detector.
-\item \emph{Generation.} Only generative models can sample new data points. This is useful for data augmentation, creative applications, and understanding what the model has learned.
-\item \emph{Assumptions.} Generative models require specifying a distributional form for $P(X \mid Y)$---Gaussian, multinomial, or some other family. If the assumption is wrong, the model can be worse than a discriminative alternative that makes no such assumption.
+\item \emph{Classification accuracy.} When the only goal is to predict $Y$ from $X$, discriminative models often win. They spend all their capacity on the decision boundary, while generative models spend capacity modeling the full input distribution---capacity that may not help with classification.
+\item \emph{Data efficiency.} Generative models can sometimes learn from less labeled data because they capture the structure of $X$ itself, not just the relationship between $X$ and $Y$. This connects to semi-supervised learning (Chapter~\ref{ch:dataset-design}).
+\item \emph{Outlier detection.} Generative models can support density-based checks that flag inputs unlikely under the learned distribution. The signal must be validated, however, because likelihood can mislead out of domain. Plain discriminative classifiers have no built-in input-density model; they need a separate rejection rule, uncertainty check, or out-of-distribution detector.
+\item \emph{Generation.} Only generative models can sample new data points---useful for data augmentation, creative applications, and understanding what the model has learned.
+\item \emph{Assumptions.} Generative models must specify a distributional form for $P(X \mid Y)$: Gaussian, multinomial, or some other family. When the assumption is wrong, the model can underperform a discriminative alternative that makes no such assumption.
 \end{itemize}
 
 \begin{decisionbox}
@@ -79,55 +79,55 @@ Generative models are more flexible but harder to fit. The key trade-offs:
 
 \section{Latent Variables and the Idea of Hidden Structure}
 
-Many interesting patterns in data are not directly observed. A dataset of student messages may contain clusters of similar messages---messages about deadlines, messages about personal struggles, messages asking procedural questions---but the cluster identities are not labeled. A collection of images may contain natural groupings by scene type, but the groupings are not annotated. The structure is \emph{latent}: it exists in the data but must be inferred.
+Many interesting patterns in data are not directly observed. A dataset of student messages may contain clusters---messages about deadlines, messages about personal struggles, messages asking procedural questions---but the cluster identities are not labeled. A collection of images may form natural groupings by scene type without any annotation. The structure is \emph{latent}: it exists in the data but must be inferred.
 
-A \emph{latent variable} is a variable that is not observed in the data but is part of the model. The model assumes the data was generated by a process that involves both observed variables (the data we see) and latent variables (the hidden structure). Learning the model means inferring the latent variables from the observed data.
+A \emph{latent variable} is a variable that is part of the model but not observed in the data. The model assumes the data arose from a process involving both observed variables (the data we see) and latent variables (the hidden structure). Learning the model means inferring the latent variables from the observations.
 
 \begin{example}[Latent Variables in Pedestrian Detection]
-A pedestrian detector receives video frames from campus cameras. Some frames are taken during class changes (high pedestrian traffic) and others during off-hours (low traffic). The ``scene type'' (busy vs.\ quiet) is not labeled in the training data, but it strongly affects how many pedestrians appear, where they walk, and how occluded they are. A model with a latent scene-type variable can learn different detection strategies for busy and quiet scenes, even though the scene type was never explicitly annotated.
+A pedestrian detector receives video frames from campus cameras. Some frames come from class changes (high traffic) and others from off-hours (low traffic). The scene type (busy vs.\ quiet) is not labeled in the training data, but it strongly affects how many pedestrians appear, where they walk, and how occluded they are. A model with a latent scene-type variable can learn different detection strategies for busy and quiet scenes, even though the scene type was never annotated.
 \end{example}
 
-The simplest and most important model with latent variables is the Gaussian mixture model.
+The simplest and most important latent-variable model is the Gaussian mixture model.
 
 \section{Gaussian Mixture Models and the EM Algorithm}
 \label{sec:gmm-em}
 
 \subsection{The Gaussian Mixture Model}
 
-A Gaussian mixture model (GMM) assumes that the data was generated by a mixture of $K$ Gaussian distributions. Each data point was produced by one of $K$ components, but the identity of which component produced it is unknown (latent). Formally:
+A Gaussian mixture model (GMM) assumes the data was generated by a mixture of $K$ Gaussian distributions. Each data point came from one of $K$ components, but which component is unknown (latent). The generative story is:
 
 \begin{enumerate}[leftmargin=*]
 \item Choose a component $k$ with probability $\pi_k$ (the \emph{mixing weight}).
-\item Generate the data point $x$ from a Gaussian with mean $\mu_k$ and covariance $\Sigma_k$.
+\item Draw the data point $x$ from a Gaussian with mean $\mu_k$ and covariance $\Sigma_k$.
 \end{enumerate}
 
-The overall density of an observed data point is:
+The overall density of an observed data point is
 \[
-p(x) = \sum_{k=1}^{K} \pi_k \, \mathcal{N}(x \mid \mu_k, \Sigma_k)
+p(x) = \sum_{k=1}^{K} \pi_k \, \mathcal{N}(x \mid \mu_k, \Sigma_k).
 \]
 
-The model's parameters are the mixing weights $\{\pi_k\}$, the means $\{\mu_k\}$, and the covariances $\{\Sigma_k\}$. The latent variable for each data point is $z_i \in \{1, \ldots, K\}$: which component generated it.
+The parameters are the mixing weights $\{\pi_k\}$, the means $\{\mu_k\}$, and the covariances $\{\Sigma_k\}$. The latent variable for each data point is $z_i \in \{1, \ldots, K\}$: the component that generated it.
 
 \subsection{Soft vs.\ Hard Clustering}
 
-$k$-means, encountered in earlier chapters, assigns each data point to exactly one cluster. GMMs generalize this: each data point has a \emph{soft assignment}---a probability distribution over clusters. After fitting the model, data point $x_i$ belongs to cluster $k$ with probability:
+The $k$-means algorithm from earlier chapters assigns each data point to exactly one cluster. GMMs generalize this: each data point gets a \emph{soft assignment}, a probability distribution over clusters. After fitting, data point $x_i$ belongs to cluster $k$ with probability
 \[
-\gamma_{ik} = P(z_i = k \mid x_i) = \frac{\pi_k \, \mathcal{N}(x_i \mid \mu_k, \Sigma_k)}{\sum_{j=1}^{K} \pi_j \, \mathcal{N}(x_i \mid \mu_j, \Sigma_j)}
+\gamma_{ik} = P(z_i = k \mid x_i) = \frac{\pi_k \, \mathcal{N}(x_i \mid \mu_k, \Sigma_k)}{\sum_{j=1}^{K} \pi_j \, \mathcal{N}(x_i \mid \mu_j, \Sigma_j)}.
 \]
 
-This is a direct application of Bayes' theorem. The soft assignment reflects genuine ambiguity: a data point near the boundary between two clusters should not be forced into one or the other. This connects to the soft labels discussion in Chapter~\ref{ch:dataset-design}---ambiguity is information, not noise.
+This is just Bayes' theorem. The soft assignment reflects genuine ambiguity: a data point on the boundary between two clusters should not be forced into either. This echoes the soft-labels discussion in Chapter~\ref{ch:dataset-design}: ambiguity is information, not noise.
 
 \begin{practicalnote}
-GMMs connect to $k$-means in a special case: when all covariance matrices are $\sigma^2 I$ (spherical, equal variance) and $\sigma \to 0$, the soft assignments become hard assignments and the EM algorithm (below) becomes the $k$-means update rule. In that sense, $k$-means can be viewed as the hard-assignment limiting case of EM for a constrained spherical GMM, even though it is used as a distinct algorithm in practice.
+GMMs reduce to $k$-means in a special case. When all covariance matrices are $\sigma^2 I$ (spherical, equal variance) and $\sigma \to 0$, the soft assignments harden into hard assignments and the EM algorithm (below) becomes the $k$-means update rule. So $k$-means is the hard-assignment limit of EM for a constrained spherical GMM, even though it is used as a distinct algorithm in practice.
 \end{practicalnote}
 
 \subsection{The Expectation-Maximization Algorithm}
 
-The parameters of a GMM cannot be estimated in closed form because the latent variables $z_i$ are unknown. If we knew which component generated each data point, estimating the means and covariances would be straightforward (just compute the statistics of each group). And if we knew the parameters, computing the latent assignments would be straightforward (just apply Bayes' theorem). The problem is that neither is known.
+GMM parameters cannot be estimated in closed form because the latent variables $z_i$ are unknown. If we knew which component generated each data point, estimating the means and covariances would be easy: compute the statistics of each group. If we knew the parameters, computing the latent assignments would also be easy: apply Bayes' theorem. The problem is that neither is known.
 
-The \emph{Expectation-Maximization} (EM) algorithm resolves this chicken-and-egg problem by alternating between two steps:
+The \emph{Expectation-Maximization} (EM) algorithm breaks this chicken-and-egg problem by alternating between two steps:
 
-\textbf{E-step (Expectation).} Using the current parameter estimates, compute the soft assignments $\gamma_{ik}$ for each data point---the probability that data point $i$ belongs to component $k$. This is the Bayes' theorem calculation above.
+\textbf{E-step (Expectation).} Using the current parameters, compute the soft assignments $\gamma_{ik}$ for each data point---the probability that data point $i$ belongs to component $k$. This is the Bayes' theorem calculation above.
 
 \textbf{M-step (Maximization).} Using the soft assignments as weights, re-estimate the parameters:
 \begin{align}
@@ -136,14 +136,14 @@ The \emph{Expectation-Maximization} (EM) algorithm resolves this chicken-and-egg
 \pi_k &= \frac{1}{N} \sum_{i=1}^{N} \gamma_{ik}
 \end{align}
 
-Each $\mu_k$ is a weighted average of the data points, where the weights are the soft assignments. Each $\Sigma_k$ is a weighted covariance. Each $\pi_k$ is the average responsibility of component $k$.
+Each $\mu_k$ is a weighted average of the data points, with weights given by the soft assignments. Each $\Sigma_k$ is a weighted covariance. Each $\pi_k$ is the average responsibility of component $k$.
 
 \begin{example}[One EM Pass in One Dimension]
-Suppose three points are \(x=\{0,2,8\}\), and a two-component mixture starts with rough means \(\mu_1=1\) and \(\mu_2=7\). After the E-step, imagine the responsibilities for component 1 are
+Suppose three points are \(x=\{0,2,8\}\), and a two-component mixture starts with rough means \(\mu_1=1\) and \(\mu_2=7\). Suppose the E-step gives component-1 responsibilities
 \[
 \gamma_{\cdot 1}=(0.90,\ 0.80,\ 0.05),
 \]
-so the responsibilities for component 2 are \((0.10,0.20,0.95)\). The M-step updates the first mean as a responsibility-weighted average:
+so component-2 responsibilities are \((0.10,0.20,0.95)\). The M-step updates the first mean as a responsibility-weighted average:
 \[
 \mu_1^{\text{new}}=\frac{0.90(0)+0.80(2)+0.05(8)}{0.90+0.80+0.05}
 =\frac{2.0}{1.75}\approx 1.14.
@@ -153,191 +153,175 @@ The second mean updates similarly:
 \mu_2^{\text{new}}=\frac{0.10(0)+0.20(2)+0.95(8)}{0.10+0.20+0.95}
 =\frac{8.0}{1.25}=6.40.
 \]
-This is the whole EM rhythm: infer soft membership with the current parameters, then recompute parameters as weighted statistics under those memberships.
+That is the EM rhythm: infer soft membership using the current parameters, then recompute parameters as weighted statistics under those memberships.
 \end{example}
 
-\textbf{Convergence.} The E-step and M-step are repeated until the parameters stop changing (or the log-likelihood stops increasing). EM is guaranteed to never decrease the log-likelihood, but it can converge to a local optimum. Different initializations can lead to different solutions.
+\textbf{Convergence.} EM repeats the E-step and M-step until the parameters stop changing (or the log-likelihood stops increasing). EM never decreases the log-likelihood, but it can converge to a local optimum. Different initializations can produce different solutions.
 
 \begin{warningbox}
-EM is sensitive to initialization. If a component's mean starts far from any data, it may end up empty (all soft assignments near zero). Common practice is to run EM multiple times with different random initializations and keep the solution with the highest log-likelihood. Using $k$-means to initialize the means is often more robust than pure random initialization.
+EM is sensitive to initialization. If a component's mean starts far from any data, the component can collapse and end up empty (all soft assignments near zero). Common practice is to run EM multiple times from different random starts and keep the solution with the highest log-likelihood. Initializing the means with $k$-means is often more robust than pure random initialization.
 \end{warningbox}
 
 \begin{example}[GMM for Student Message Clustering]
-A course-support team has 5,000 student messages with no labels. The GMM does not operate on the raw strings directly: each message is first embedded or featurized into a numeric space where Gaussian clusters are at least a defensible approximation. That representation choice determines whether the mixture assumption makes sense.
+A course-support team has 5{,}000 unlabeled student messages. A GMM does not operate on raw strings directly: each message is first embedded or featurized into a numeric space where Gaussian clusters are at least a defensible approximation. That representation choice decides whether the mixture assumption is reasonable.
 
-They fit a GMM with $K=5$ to discover natural groupings. EM converges and reveals five clusters: administrative questions (``when is the assignment due?''), technical help requests (``I can't log in''), content questions (``I don't understand the difference between X and Y''), expressions of frustration (``this is impossible''), and personal disclosures (``I've been dealing with a family issue''). Each message gets soft assignments: a message like ``I can't figure out the homework and I'm really stressed'' has probability 0.4 for content questions, 0.35 for frustration, and 0.25 for personal disclosures. The soft assignments are more informative than forcing a hard cluster label.
+They fit a GMM with $K=5$ to discover natural groupings. EM converges and reveals five clusters: administrative questions (``when is the assignment due?''), technical help requests (``I can't log in''), content questions (``I don't understand the difference between X and Y''), expressions of frustration (``this is impossible''), and personal disclosures (``I've been dealing with a family issue''). Each message receives a soft assignment. A message like ``I can't figure out the homework and I'm really stressed'' has probability 0.40 for content questions, 0.35 for frustration, and 0.25 for personal disclosures. The soft assignments carry more information than a forced hard label.
 \end{example}
 
 \subsection{Choosing the Number of Components}
 
-GMMs require specifying $K$, the number of components. This is a model selection problem. Common approaches:
+GMMs require specifying $K$, the number of components. That is a model-selection problem. Common approaches:
 
 \begin{itemize}[leftmargin=*]
-\item \emph{Information criteria.} The Bayesian Information Criterion (BIC) and Akaike Information Criterion (AIC) balance model fit against complexity. Fit GMMs for $K = 1, 2, \ldots, K_{\max}$ and choose the $K$ that minimizes BIC (or AIC). BIC penalizes complexity more heavily and tends to select simpler models.
-\item \emph{Held-out likelihood.} Fit GMMs on training data and evaluate the log-likelihood on a held-out validation set. Choose the $K$ with the highest validation log-likelihood.
-\item \emph{Domain knowledge.} Sometimes the number of components is known from the domain. If the course-support team expects five types of student messages, $K=5$ is a reasonable starting point.
+\item \emph{Information criteria.} The Bayesian Information Criterion (BIC) and Akaike Information Criterion (AIC) balance fit against complexity. Fit GMMs for $K = 1, 2, \ldots, K_{\max}$ and pick the $K$ that minimizes BIC (or AIC). BIC penalizes complexity more heavily and tends to favor simpler models.
+\item \emph{Held-out likelihood.} Fit on training data and score the log-likelihood on a validation set. Pick the $K$ with the highest validation log-likelihood.
+\item \emph{Domain knowledge.} Sometimes the number of components is known from the domain. If the course-support team expects five message types, $K=5$ is a reasonable starting point.
 \end{itemize}
 
 \begin{practicalnote}
-In practice, $K$ is often not ``correct''---the data may not have been generated by any finite mixture. Treat $K$ as a complexity parameter that controls the granularity of the model, not as the ``true'' number of clusters. If BIC suggests $K=4$ but the domain expects 6 categories, it may mean that two of the expected categories are too similar for the model to distinguish, or that the data does not support that level of resolution.
+The ``correct'' $K$ rarely exists---the data may not have been generated by any finite mixture. Treat $K$ as a complexity parameter that controls model granularity, not as the true number of clusters. If BIC suggests $K=4$ but the domain expects 6 categories, two expected categories may be too similar for the model to separate, or the data may not support that resolution.
 \end{practicalnote}
 
 \section{Bayesian Reasoning: Priors, Posteriors, and Uncertainty}
 \label{sec:bayesian-reasoning}
 
-The EM algorithm illustrated one use of Bayes' theorem: computing soft assignments (posteriors over latent variables) given observed data. But Bayesian reasoning applies more broadly---to the \emph{parameters} of the model themselves.
+EM showed one use of Bayes' theorem: computing soft assignments (posteriors over latent variables) given observed data. Bayesian reasoning applies more broadly---to the model's \emph{parameters} themselves.
 
 \subsection{Maximum Likelihood vs.\ Maximum a Posteriori}
 
-All models fitted so far have used \emph{maximum likelihood estimation} (MLE): find the parameters $\theta$ that maximize $P(\text{data} \mid \theta)$. MLE treats parameters as unknown but fixed quantities and finds the single best value.
+All models fitted so far use \emph{maximum likelihood estimation} (MLE): find the parameters $\theta$ that maximize $P(\text{data} \mid \theta)$. MLE treats parameters as unknown but fixed and returns the single best value.
 
 \emph{Maximum a posteriori} (MAP) estimation adds a prior: find the parameters that maximize $P(\theta \mid \text{data}) \propto P(\text{data} \mid \theta) \, P(\theta)$. The prior $P(\theta)$ encodes beliefs about which parameter values are plausible before seeing the data.
 
-The connection to regularization is direct. $L_2$ regularization (ridge regression) is equivalent to MAP estimation with a Gaussian prior on the parameters: the prior says ``parameters should be small,'' and the penalty term $\lambda \|\theta\|^2$ implements this belief. $L_1$ regularization (lasso) corresponds to a Laplace prior, which says ``most parameters should be zero.'' What seemed like an ad hoc penalty in earlier chapters is actually a principled statement of prior belief.
+The connection to regularization is direct. $L_2$ regularization (ridge regression) is MAP estimation with a Gaussian prior on the parameters: the prior says ``parameters should be small,'' and the penalty $\lambda \|\theta\|^2$ implements that belief. $L_1$ regularization (lasso) corresponds to a Laplace prior, which says ``most parameters should be zero.'' What seemed like an ad hoc penalty in earlier chapters is a principled statement of prior belief.
 
 \begin{thinkingtool}
-\textbf{Regularization as prior knowledge.} Common parameter penalties such as $L_2$ and $L_1$ can be interpreted as priors. When choosing a regularization scheme, ask: if I use this penalty, what belief about the parameters am I implicitly encouraging? Is that belief appropriate for my problem?
+\textbf{Regularization as prior knowledge.} Common parameter penalties like $L_2$ and $L_1$ can be read as priors. When choosing a regularization scheme, ask what belief about the parameters the penalty implicitly encourages---and whether that belief fits the problem.
 \end{thinkingtool}
 
 \subsection{Bayesian Linear Regression}
 
 Ordinary linear regression finds a single weight vector $w$ that minimizes squared error. Bayesian linear regression treats $w$ as a random variable with a prior distribution and computes a \emph{posterior distribution} over weights after observing data.
 
-The prior is typically Gaussian: $P(w) = \mathcal{N}(0, \sigma_w^2 I)$. Given data $(X, y)$ and an assumed noise model $y_i = w^\top x_i + \epsilon$ where $\epsilon \sim \mathcal{N}(0, \sigma^2)$, the posterior is also Gaussian (a property of conjugate priors):
+The prior is typically Gaussian: $P(w) = \mathcal{N}(0, \sigma_w^2 I)$. Given data $(X, y)$ and the noise model $y_i = w^\top x_i + \epsilon$ with $\epsilon \sim \mathcal{N}(0, \sigma^2)$, the posterior is also Gaussian (a property of conjugate priors):
 \[
-P(w \mid X, y) = \mathcal{N}(\mu_{\text{post}}, \Sigma_{\text{post}})
+P(w \mid X, y) = \mathcal{N}(\mu_{\text{post}}, \Sigma_{\text{post}}).
 \]
 
-The posterior mean $\mu_{\text{post}}$ is the MAP estimate (equivalent to ridge regression). But the posterior covariance $\Sigma_{\text{post}}$ is new: it tells us how uncertain we are about the weights. Directions in parameter space where the data provides strong evidence have low posterior variance; directions where the data is sparse have high posterior variance.
+The posterior mean $\mu_{\text{post}}$ matches the MAP estimate (equivalent to ridge regression). The posterior covariance $\Sigma_{\text{post}}$ is the new piece: it tells us how uncertain we are about the weights. Directions in parameter space where the data provides strong evidence have low posterior variance; directions where data is sparse have high posterior variance.
 
-\textbf{Predictive distribution.} For a new input $x_*$, the prediction is not a single value but a distribution:
+\textbf{Predictive distribution.} For a new input $x_*$, the prediction is a distribution rather than a single value:
 \[
-P(y_* \mid x_*, X, y) = \mathcal{N}(\mu_{\text{post}}^\top x_*, \; x_*^\top \Sigma_{\text{post}} x_* + \sigma^2)
+P(y_* \mid x_*, X, y) = \mathcal{N}(\mu_{\text{post}}^\top x_*, \; x_*^\top \Sigma_{\text{post}} x_* + \sigma^2).
 \]
 
-The prediction variance has two terms. The first, $x_*^\top \Sigma_{\text{post}} x_*$, reflects \emph{epistemic uncertainty}---uncertainty about the model parameters that would shrink with more data. The second, $\sigma^2$, reflects \emph{aleatoric uncertainty}---inherent noise in the data that cannot be reduced by collecting more data. This decomposition is one of the most important ideas in probabilistic modeling.
+The prediction variance has two terms. The first, $x_*^\top \Sigma_{\text{post}} x_*$, captures \emph{epistemic uncertainty}: uncertainty about the model parameters that would shrink with more data. The second, $\sigma^2$, captures \emph{aleatoric uncertainty}: inherent noise that cannot be reduced by more data. This decomposition is one of the most important ideas in probabilistic modeling.
 
 \begin{example}[Bayesian Regression for Pedestrian Counts]
-A campus shuttle team uses linear regression to predict pedestrian density from time of day, weather, and academic calendar features. Ordinary regression gives a point prediction: ``expect 45 pedestrians per minute at the main crosswalk at 12:15 PM on a Tuesday.'' Bayesian regression gives a predictive distribution: ``expect $45 \pm 8$ pedestrians per minute.'' But the uncertainty is not uniform. For midday predictions during the academic term (where the training data is dense), the uncertainty is small ($\pm 4$). For predictions at 6 AM during winter break (where the training data is sparse), the uncertainty is large ($\pm 20$). The shuttle system can use this uncertainty to decide when to trust the model and when to default to conservative behavior.
+A campus shuttle team uses linear regression to predict pedestrian density from time of day, weather, and academic-calendar features. Ordinary regression returns a point prediction: ``expect 45 pedestrians per minute at the main crosswalk at 12:15 PM on a Tuesday.'' Bayesian regression returns a predictive distribution: ``expect $45 \pm 8$ pedestrians per minute.'' The uncertainty is not uniform. Midday predictions during the academic term, where the training data is dense, have small uncertainty ($\pm 4$). Predictions at 6 AM during winter break, where data is sparse, have large uncertainty ($\pm 20$). The shuttle system uses this uncertainty to decide when to trust the model and when to fall back on conservative behavior.
 \end{example}
 
 \begin{practicalnote}
-Full Bayesian inference (computing exact posteriors) is tractable for linear regression with Gaussian assumptions but becomes intractable for neural networks and other complex models. Approximate methods---variational inference, Monte Carlo dropout, and deep ensembles---are used in practice to approximate Bayesian uncertainty for larger models. These are discussed briefly in the uncertainty section below.
+Full Bayesian inference (exact posteriors) is tractable for linear regression with Gaussian assumptions but becomes intractable for neural networks and other complex models. In practice, approximate methods---variational inference, Monte Carlo dropout, and deep ensembles---approximate Bayesian uncertainty for larger models. The uncertainty section below discusses them briefly.
 \end{practicalnote}
 
-\subsection{Gaussian Processes}
+\subsection{Gaussian Processes: A Pointer}
 \label{sec:gaussian-processes}
 
 \begin{advancednote}
-Bayesian linear regression reasons about a distribution over weights. A \emph{Gaussian process} (GP) reasons about a distribution over \emph{functions} directly, without committing to a parametric form. Given training inputs and outputs, a GP returns, for every possible new input, a Gaussian distribution over the function value at that input. The predictive mean gives the best point estimate; the predictive variance says how much the GP is willing to commit to that estimate at that particular location.
-
-The shift from weights to functions is not just philosophical. It changes what the prior encodes. In Bayesian linear regression, a prior on $w$ expresses ``parameters should be small.'' In a GP, the prior is specified by a \emph{kernel} $k(x, x')$ that measures similarity between inputs, and the implicit belief is ``nearby inputs should produce nearby outputs.'' The choice of kernel therefore encodes what ``nearby'' means. A squared-exponential kernel assumes the underlying function is smooth; a Mat\'ern kernel allows rougher behavior; a periodic kernel expresses the belief that the function repeats with a known period. Every kernel is a hypothesis about the function family the data lives in.
-
-\textbf{Predictive distribution.} For a new input $x_*$, the \emph{standard GP-regression} setting---Gaussian likelihood with observation noise variance $\sigma_n^2$ and a kernel with fixed hyperparameters---gives a predictive distribution that is Gaussian with mean $\mu(x_*)$ and variance $\sigma^2(x_*)$. Both depend on the training data and the kernel. Three properties make the variance particularly useful for reliability work. First, it is \emph{input-dependent}: the GP is confident in regions where training points cluster and unconfident in regions where training points are sparse. Second, under fixed kernel and noise hyperparameters it does \emph{not} depend on the observed outputs $y$: the posterior variance is a function of the training-input locations, the kernel, and the assumed noise level only. Third, for stationary kernels whose covariance decays with distance, it grows smoothly toward the prior variance as $x_*$ moves far from the training data, giving an honest ``I do not know'' signal rather than a falsely confident extrapolation. Other kernels extrapolate according to their own structure.
-
-\begin{warningbox}
-The ``variance does not depend on $y$'' property is a feature of the exact GP-regression formula with \emph{fixed} hyperparameters. In practice the noise variance $\sigma_n^2$ and the kernel hyperparameters (length-scales, output scale) are almost always learned from the training data---typically by maximizing the marginal likelihood $p(y \mid X)$---and that learning couples the predictive variance to $y$ indirectly. The geometry-of-inputs intuition is right for a fixed kernel and is a useful teaching lens for why GPs extrapolate honestly, but a deployed GP whose hyperparameters were fitted to data does carry output information in its uncertainty. Non-Gaussian likelihoods (GP classification, count data) break the closed-form Gaussian posterior altogether and require approximate inference.
-\end{warningbox}
+A \emph{Gaussian process} (GP) places a prior directly on functions rather than on weights, with the prior expressed through a kernel $k(x,x')$ that says ``nearby inputs should produce nearby outputs.'' The kernel \emph{is} the hypothesis: a squared-exponential kernel encodes smoothness, a periodic kernel encodes repetition, and so on. For standard GP regression with a Gaussian likelihood, the predictive distribution at a new input is Gaussian, and---this is the appealing reliability property---its variance is input-dependent: small where training points cluster, larger where they are sparse, and growing toward the prior variance for stationary kernels far from any training data. That gives an ``I do not know'' signal that parametric models do not produce on their own. The caveats are real, however. Kernel hyperparameters (length-scales, noise variance) are almost always fit from the data, which couples the predictive variance to the outputs and makes the geometry-of-inputs intuition only partially correct in practice; non-Gaussian likelihoods break the closed-form posterior; and exact inference scales as $O(n^3)$, restricting GPs to small or medium datasets unless sparse approximations are used. Readers who want the full treatment should consult the canonical reference \citep{rasmussen2006gp}.
 \end{advancednote}
-
-\begin{thinkingtool}
-\textbf{Kernel as a hypothesis.} Every GP kernel is a claim about which inputs should share information. When choosing a kernel, ask: if two inputs are ``similar'' under this kernel, does that similarity predict anything the task actually cares about? A spatial kernel over GPS coordinates may be right for crowd density but wrong for student-message similarity, where lexical or semantic distance matters more than Euclidean distance in some feature space.
-\end{thinkingtool}
-
-\begin{example}[Gaussian Process for Pedestrian Counts with Sparse Sensors]
-The campus shuttle team deploys counting sensors at only eight locations along the main walking corridor, but the shuttle-routing system needs density estimates at twenty-five candidate stop locations. A GP with a squared-exponential kernel over walkway position interpolates between the eight measurements. Near each sensor the predictive mean tracks the observed count and the predictive variance is small. Midway between sensors the mean is a smooth interpolation and the variance grows. At the two ends of the corridor, outside the sensor placements, the variance approaches the prior variance, signaling that the estimate there is essentially a guess. The routing system uses the predictive variance directly: it proposes a new stop only at candidate locations where the predicted density is high \emph{and} the predictive variance is low, avoiding locations where the model is merely guessing confidently.
-\end{example}
-
-\begin{practicalnote}
-In standard GP regression with a Gaussian likelihood and fixed hyperparameters, inference is exact and non-parametric, but computing the predictive distribution requires solving an $n \times n$ kernel system at cost $O(n^3)$ where $n$ is the number of training points. GPs are therefore most useful when data is scarce (hundreds to a few thousand points) and calibrated uncertainty is valuable---spatial and temporal interpolation, small-sample scientific regression, and Bayesian optimization of expensive hyperparameters or experiments. For large-scale problems, sparse GP approximations or neural-network-based uncertainty methods (ensembles, Monte Carlo dropout, or variational inference, introduced in the uncertainty section below) scale better at the cost of giving up exact posterior guarantees.
-\end{practicalnote}
 
 \section{Naive Bayes: A Transparent Probabilistic Baseline}
 \label{sec:naive-bayes}
 
-Chapter~\ref{ch:structure-beyond-linearity} previewed Naive Bayes as a structural baseline for classification. This section gives the full probabilistic treatment: the formal model, why the ``naive'' assumption works despite being wrong, calibration issues, and when it is the right design choice. Naive Bayes is one of the simplest generative classifiers. Despite its strong assumptions, it often performs surprisingly well and provides a useful probabilistic baseline.
+Chapter~\ref{ch:structure-beyond-linearity} previewed Naive Bayes as a structural baseline for classification. This section gives the full probabilistic treatment: the formal model, why the ``naive'' assumption works despite being wrong, calibration issues, and when it is the right design choice. Naive Bayes is one of the simplest generative classifiers. Despite its strong assumptions, it often performs surprisingly well and offers a useful probabilistic baseline.
 
 \subsection{The Model}
 
 Naive Bayes models the joint probability $P(X_1, X_2, \ldots, X_d, Y)$ by assuming that all features are \emph{conditionally independent} given the class label:
 \[
-P(X_1, X_2, \ldots, X_d \mid Y = k) = \prod_{j=1}^{d} P(X_j \mid Y = k)
+P(X_1, X_2, \ldots, X_d \mid Y = k) = \prod_{j=1}^{d} P(X_j \mid Y = k).
 \]
 
-This is the ``naive'' assumption: features are independent within each class. Under this assumption, classification reduces to:
+That is the ``naive'' assumption: within each class, features are independent. Classification then reduces to
 \[
-\hat{y} = \arg\max_k \; P(Y = k) \prod_{j=1}^{d} P(X_j \mid Y = k)
+\hat{y} = \arg\max_k \; P(Y = k) \prod_{j=1}^{d} P(X_j \mid Y = k).
 \]
 
-The prior $P(Y = k)$ is estimated from class frequencies. The class-conditional distributions $P(X_j \mid Y = k)$ are estimated from the data within each class. For continuous features, a common choice is Gaussian: $P(X_j \mid Y = k) = \mathcal{N}(\mu_{jk}, \sigma_{jk}^2)$. For text data, a multinomial or Bernoulli distribution is used over word counts or word presence.
+Estimate the prior $P(Y = k)$ from class frequencies and the class-conditional distributions $P(X_j \mid Y = k)$ from the data within each class. For continuous features, a Gaussian is common: $P(X_j \mid Y = k) = \mathcal{N}(\mu_{jk}, \sigma_{jk}^2)$. For text, a multinomial or Bernoulli distribution over word counts or word presence is standard.
 
 \subsection{Why ``Naive'' Still Works}
 
-The conditional independence assumption is almost always violated. Student messages that mention ``deadline'' are more likely to also mention ``extension''---the features are correlated. Yet Naive Bayes often classifies well despite this violation. The reason is that classification only requires getting the \emph{ranking} of class probabilities right, not the exact probabilities. Even if the absolute probabilities are wrong (because the independence assumption distorts them), the class with the highest probability may still be correct.
+The conditional independence assumption is almost always violated. Student messages that mention ``deadline'' are more likely to also mention ``extension''---the features are correlated. Yet Naive Bayes still classifies well despite the violation. The reason: classification needs the \emph{ranking} of class probabilities to be right, not the exact values. Even when the absolute probabilities are wrong (because independence distorts them), the highest-probability class can still be correct.
 
-This is a general lesson: a model can be wrong about the joint distribution but still useful for classification. However, the probabilities produced by Naive Bayes should \emph{not} be trusted as calibrated---they tend to be overconfident (pushed toward 0 or 1) because the independence assumption ignores correlations that would spread probability mass.
+The broader lesson: a model can be wrong about the joint distribution and still useful for classification. But Naive Bayes probabilities should \emph{not} be trusted as calibrated. They tend toward overconfidence---pushed near 0 or 1---because independence ignores the correlations that would otherwise spread probability mass.
 
 \begin{warningbox}
-Naive Bayes probabilities are typically poorly calibrated. A Naive Bayes probability of 0.99 does not mean 99\% of such predictions are correct---it often means the model is overconfident. If you need calibrated probabilities (for cost-sensitive decisions or as input to another system), apply Platt scaling or isotonic regression to the Naive Bayes outputs.
+Naive Bayes probabilities are typically poorly calibrated. A Naive Bayes probability of 0.99 does not mean 99\% of such predictions are correct; it often means the model is overconfident. If you need calibrated probabilities (for cost-sensitive decisions or as input to another system), apply Platt scaling or isotonic regression to the Naive Bayes outputs.
 \end{warningbox}
+
+\begin{mathlens}
+\textbf{Two post-hoc calibrators.} \emph{Platt scaling} fits a single-parameter logistic function that maps raw scores to calibrated probabilities, $\hat p = \sigma(a\,s + b)$, where $s$ is the model's score and $a, b$ are fit on a held-out validation set by minimizing log loss. It assumes a sigmoid-shaped relationship between score and probability and works well when that assumption is roughly correct. \emph{Isotonic regression} is non-parametric: it fits the best monotone-non-decreasing step function from score to probability under squared error on the validation set. It is more flexible (it can correct any monotone miscalibration) but needs more validation data to avoid overfitting bin boundaries.
+\end{mathlens}
 
 \subsection{When to Use Naive Bayes}
 
 \begin{itemize}[leftmargin=*]
-\item \emph{As a baseline.} Naive Bayes is fast to train, requires almost no hyperparameter tuning, and provides a lower bound on what more complex models should achieve. If a neural network barely beats Naive Bayes, the task may be simpler than expected---or the neural network may be poorly configured.
-\item \emph{With small data.} Because it estimates each feature independently, Naive Bayes has very few parameters relative to the number of features. It is less prone to overfitting than models that estimate feature interactions, making it effective when labeled data is scarce.
-\item \emph{For text classification.} Multinomial Naive Bayes remains a strong baseline for document classification, spam filtering, and sentiment analysis. Its conditional independence assumption is a reasonable approximation for bag-of-words representations.
-\item \emph{For interpretability.} Each feature's contribution to the classification can be examined independently: which words increase $P(\text{URGENT})$ most? This transparency is valuable when stakeholders need to understand and trust the model.
+\item \emph{As a baseline.} Naive Bayes trains fast, needs almost no hyperparameter tuning, and sets a lower bound for more complex models. If a neural network barely beats it, the task may be simpler than expected---or the neural network may be poorly configured.
+\item \emph{With small data.} Because each feature is estimated independently, Naive Bayes has very few parameters relative to feature count. It is less prone to overfitting than models that estimate feature interactions, which makes it effective when labels are scarce.
+\item \emph{For text classification.} Multinomial Naive Bayes remains a strong baseline for document classification, spam filtering, and sentiment analysis. Conditional independence is a reasonable approximation for bag-of-words representations.
+\item \emph{For interpretability.} Each feature's contribution to classification can be examined independently---which words raise $P(\text{URGENT})$ most? That transparency is valuable when stakeholders must understand and trust the model.
 \end{itemize}
 
 \begin{example}[Naive Bayes for Course Support Triage]
-The course-support team builds a Naive Bayes classifier as a first baseline. Using a bag-of-words representation, the model learns which words are most associated with each class. The word ``deadline'' has high probability under CONCERNING; ``emergency'' has high probability under URGENT; ``quiz'' has high probability under ROUTINE. The model achieves 78\% accuracy---not state-of-the-art, but it was trained in seconds, requires no GPU, and its predictions are fully interpretable. The team uses it as a baseline: any more complex model must meaningfully exceed 78\% to justify its additional complexity and opacity.
+The course-support team builds a Naive Bayes classifier as a first baseline. Using a bag-of-words representation, the model learns which words associate with each class. ``Deadline'' has high probability under CONCERNING; ``emergency'' under URGENT; ``quiz'' under ROUTINE. The model reaches 78\% accuracy---not state-of-the-art, but trained in seconds, runs without a GPU, and produces fully interpretable predictions. The team treats it as a baseline: any more complex model must meaningfully exceed 78\% to justify its added complexity and opacity.
 \end{example}
 
 \section{Uncertainty: What the Model Knows It Does Not Know}
 \label{sec:uncertainty}
 
-Uncertainty is not a single concept. Conflating different types of uncertainty leads to poor decisions: spending resources to collect more data when the problem is inherent noise, or trusting a model's confidence when it has never seen similar inputs. This section makes the distinction precise.
+Uncertainty is not a single concept. Conflating its types leads to poor decisions: collecting more data when the problem is irreducible noise, or trusting a model's confidence when it has never seen similar inputs. This section sharpens the distinction.
 
 \subsection{Aleatoric vs.\ Epistemic Uncertainty}
 
-\textbf{Aleatoric uncertainty} (from the Latin \emph{alea}, ``dice'') is inherent randomness in the data-generating process. Even with a perfect model and infinite data, some outcomes cannot be predicted exactly. A coin flip has aleatoric uncertainty. A student who is borderline between CONCERNING and ROUTINE may genuinely be ambiguous---the uncertainty is in the world, not in the model.
+\textbf{Aleatoric uncertainty} (from the Latin \emph{alea}, ``dice'') is inherent randomness in the data-generating process. Even with a perfect model and infinite data, some outcomes cannot be predicted exactly. A coin flip is aleatoric. A student borderline between CONCERNING and ROUTINE may be genuinely ambiguous---the uncertainty lives in the world, not in the model.
 
-\textbf{Epistemic uncertainty} (from the Greek \emph{episteme}, ``knowledge'') is uncertainty due to the model's ignorance---insufficient data, wrong model family, or unseen conditions. A pedestrian detector that has never been trained on nighttime images has high epistemic uncertainty for nighttime inputs. This uncertainty can be reduced by collecting more (or more relevant) data.
+\textbf{Epistemic uncertainty} (from the Greek \emph{episteme}, ``knowledge'') reflects the model's ignorance: insufficient data, wrong model family, or unseen conditions. A pedestrian detector never trained on nighttime images has high epistemic uncertainty on nighttime inputs. More (or more relevant) data can reduce it.
 
-The distinction matters because the two types of uncertainty call for different responses:
+The distinction matters because the two call for different responses:
 
 \begin{itemize}[leftmargin=*]
-\item \emph{High aleatoric uncertainty:} The model is uncertain because the outcome is inherently unpredictable. Collecting more data of the same type will not help. The appropriate response is to design the system to handle ambiguity---use soft predictions, involve a human, or defer the decision.
-\item \emph{High epistemic uncertainty:} The model is uncertain because it has not seen enough relevant examples. Collecting more data (especially from the uncertain region) will help. The appropriate response is active learning: target data collection at the regions of high epistemic uncertainty.
+\item \emph{High aleatoric uncertainty:} the outcome is inherently unpredictable. More data of the same type will not help. Design the system to handle ambiguity---use soft predictions, involve a human, or defer the decision.
+\item \emph{High epistemic uncertainty:} the model has not seen enough relevant examples. More data, especially from the uncertain region, will help. Use active learning: target data collection at regions of high epistemic uncertainty.
 \end{itemize}
 
 \begin{example}[Uncertainty in Pedestrian Detection]
-A pedestrian detector reports high uncertainty for a nighttime frame. Is this aleatoric or epistemic? If the training data included many nighttime frames and the image is genuinely ambiguous (a shadow that could be a pedestrian), the uncertainty is aleatoric---more nighttime data will not resolve it. If the training data contained almost no nighttime frames, the uncertainty is epistemic---the model has never learned what nighttime pedestrians look like, and collecting nighttime data would reduce the uncertainty. The shuttle team checks: the training set contains only 3\% nighttime frames. The uncertainty is mostly epistemic. The solution is to collect and label more nighttime footage, not to lower the detection threshold.
+A pedestrian detector reports high uncertainty on a nighttime frame. Is this aleatoric or epistemic? If the training set already contained many nighttime frames and the image is genuinely ambiguous (a shadow that might be a pedestrian), the uncertainty is aleatoric---more nighttime data will not resolve it. If the training set contained almost no nighttime frames, the uncertainty is epistemic: the model has never learned what nighttime pedestrians look like, so nighttime data would reduce it. The shuttle team checks and finds that only 3\% of training frames are nighttime. The uncertainty is mostly epistemic. The fix is to collect and label more nighttime footage, not to lower the detection threshold.
 \end{example}
 
 \subsection{Measuring Uncertainty in Practice}
 
-For Bayesian linear regression, the decomposition into aleatoric and epistemic uncertainty is analytically available (as shown in Section~\ref{sec:bayesian-reasoning}). For more complex models, approximations are needed.
+Bayesian linear regression decomposes uncertainty into aleatoric and epistemic parts analytically (Section~\ref{sec:bayesian-reasoning}). Complex models need approximations.
 
-\textbf{Deep ensembles.} Train $M$ copies of the same model with different random initializations (and optionally different data subsets). For a given input, each model produces a prediction. The spread of predictions across the ensemble indicates epistemic uncertainty: if all models agree, the model has seen enough data to be confident; if they disagree, the model is uncertain. The average prediction can be used as the point estimate, and the variance as the uncertainty.
+\textbf{Deep ensembles.} Train $M$ copies of the same model with different random initializations (and optionally different data subsets). Each model produces a prediction for a given input. Spread across the ensemble indicates epistemic uncertainty: agreement means the model has seen enough data to be confident; disagreement means it is uncertain. Use the average prediction as the point estimate and the variance as the uncertainty.
 
-\textbf{Monte Carlo dropout.} At prediction time, keep dropout enabled and run the input through the network $M$ times, each time with a different random dropout mask. The spread of predictions approximates epistemic uncertainty. This is computationally cheaper than training a full ensemble.
+\textbf{Monte Carlo dropout.} At prediction time, keep dropout enabled and run the input through the network $M$ times with different random masks. The spread of predictions approximates epistemic uncertainty. This is cheaper than training a full ensemble.
 
-\textbf{Calibration.} As introduced in Chapter~\ref{ch:prediction-loss-decision}, a model is well calibrated when events predicted with probability $p$ occur about a fraction $p$ of the time---i.e., across all predictions assigned a probability near $0.9$, roughly $90\%$ should turn out to be positive. This is a property of the predicted probabilities themselves and is distinct from accuracy at any single threshold. Calibration can be measured with reliability diagrams and the Expected Calibration Error (ECE). Temperature scaling is a simple post-hoc calibration method: divide the logits by a scalar temperature $T$ before applying softmax, where $T$ is tuned on validation data.
+\textbf{Calibration.} As introduced in Chapter~\ref{ch:prediction-loss-decision}, a model is well calibrated when events predicted with probability $p$ occur about a fraction $p$ of the time---across all predictions near $0.9$, roughly $90\%$ should turn out positive. This is a property of the probabilities themselves, distinct from accuracy at any single threshold. Reliability diagrams and the Expected Calibration Error (ECE) measure it. Temperature scaling is a simple post-hoc fix: divide the logits by a scalar temperature $T$ before softmax, with $T$ tuned on validation data.
 
 \begin{practicalnote}
-Deep ensembles are the most reliable uncertainty method in practice but the most expensive (train and store $M$ models). Monte Carlo dropout is cheaper but noisier. Temperature scaling often improves held-out in-distribution calibration, but it does not distinguish aleatoric from epistemic uncertainty and may leave subgroup or out-of-distribution calibration problems unresolved. Start with temperature scaling as a cheap first calibration check, then add ensembles if the application requires detecting out-of-distribution inputs or distinguishing uncertainty types.
+Deep ensembles are the most reliable uncertainty method in practice but the most expensive (train and store $M$ models). Monte Carlo dropout is cheaper but noisier. Temperature scaling often improves held-out in-distribution calibration, but it does not distinguish aleatoric from epistemic uncertainty and can leave subgroup or out-of-distribution calibration problems unresolved. Start with temperature scaling as a cheap first calibration check, then add ensembles when the application requires detecting out-of-distribution inputs or distinguishing uncertainty types.
 \end{practicalnote}
 
 \begin{warningbox}
-A confident model is not necessarily a correct model. Neural networks are notoriously overconfident on out-of-distribution inputs: they assign high probability to a class even for inputs that are nothing like the training data. Confidence should always be validated through calibration analysis, not assumed to be meaningful.
+A confident model is not necessarily a correct one. Neural networks are notoriously overconfident on out-of-distribution inputs, assigning high probability to a class even for inputs nothing like the training data. Confidence must be validated through calibration analysis, not assumed to be meaningful.
 \end{warningbox}
 
 \section{Chapter Artifact: The Uncertainty Audit Card}
 \label{sec:uncertainty-audit}
 
-The chapter artifact is the \emph{uncertainty audit card}: a structured document that records what kinds of uncertainty the model faces, how they are measured, and what decisions depend on the uncertainty estimates. It complements the data design card from Chapter~\ref{ch:dataset-design} and the evaluation plan from earlier chapters.
+The chapter artifact is the \emph{uncertainty audit card}: a structured document that records what kinds of uncertainty the model faces, how they are measured, and which decisions depend on the estimates. It complements the data design card from Chapter~\ref{ch:dataset-design} and the evaluation plan from earlier chapters.
 
 \subsection{Uncertainty Audit Card Structure}
 
@@ -367,41 +351,41 @@ Monitoring plan & How uncertainty will be tracked in deployment; what triggers r
 
 \begin{example}[Uncertainty Audit Card for Campus Pedestrian Detector]
 
-\textbf{Model type.} Discriminative (convolutional neural network). Outputs class probabilities via softmax over two classes (pedestrian present, pedestrian absent) for each region proposal.
+\textbf{Model type.} Discriminative convolutional neural network. For each region proposal, it outputs class probabilities via softmax over two classes (pedestrian present, pedestrian absent).
 
-\textbf{Uncertainty method.} Deep ensemble of 5 models with different initializations. Prediction is the ensemble mean; uncertainty is the variance across ensemble members. Temperature scaling ($T = 1.8$) applied to each member's logits before averaging.
+\textbf{Uncertainty method.} Deep ensemble of 5 models with different initializations. The prediction is the ensemble mean; uncertainty is the variance across members. Temperature scaling ($T = 1.8$) is applied to each member's logits before averaging.
 
-\textbf{Aleatoric sources.} Partial occlusion: a pedestrian behind a tree may be genuinely ambiguous. Motion blur at dusk reduces image clarity. Some frames contain pedestrian-like objects (mannequins, statues) that are inherently ambiguous without context.
+\textbf{Aleatoric sources.} Partial occlusion---a pedestrian behind a tree may be genuinely ambiguous. Motion blur at dusk reduces image clarity. Some frames contain pedestrian-like objects (mannequins, statues) that are inherently ambiguous without context.
 
-\textbf{Epistemic gaps.} Training data is 72\% daytime, 25\% dusk/dawn, 3\% nighttime. Nighttime predictions have high epistemic uncertainty. Training data covers only the main campus; satellite parking areas are underrepresented. No training data from snow conditions (campus location rarely has snow, but it does occur).
+\textbf{Epistemic gaps.} The training data is 72\% daytime, 25\% dusk/dawn, and 3\% nighttime, so nighttime predictions carry high epistemic uncertainty. Coverage is limited to the main campus; satellite parking areas are underrepresented. No training data from snow conditions (the campus rarely has snow, but it does occur).
 
-\textbf{Calibration status.} After temperature scaling, ECE = 0.04 on the validation set (well-calibrated). Reliability diagram shows slight overconfidence in the 0.8--0.9 bin. ECE has not been measured separately for nighttime frames.
+\textbf{Calibration status.} After temperature scaling, ECE = 0.04 on the validation set (well-calibrated). The reliability diagram shows slight overconfidence in the 0.8--0.9 bin. ECE has not been measured separately for nighttime frames.
 
-\textbf{Out-of-distribution behavior.} Ensemble disagreement increases significantly for nighttime frames and for frames with unusual lighting (e.g., emergency vehicle lights). A threshold of ensemble variance $> 0.15$ triggers a fallback to conservative braking behavior.
+\textbf{Out-of-distribution behavior.} Ensemble disagreement rises sharply on nighttime frames and frames with unusual lighting (e.g., emergency vehicle lights). Ensemble variance $> 0.15$ triggers a fallback to conservative braking.
 
-\textbf{Downstream decisions.} The shuttle's autonomous driving system uses the detection probability to decide braking intensity. High-confidence detections ($> 0.9$) trigger immediate braking. Medium-confidence detections ($0.5$--$0.9$) trigger slowing and sensor fusion with lidar. Low-confidence detections ($< 0.5$) with high ensemble disagreement trigger a human driver alert.
+\textbf{Downstream decisions.} The shuttle's autonomous driving system uses detection probability to decide braking intensity. High-confidence detections ($> 0.9$) trigger immediate braking. Medium confidence ($0.5$--$0.9$) triggers slowing plus sensor fusion with lidar. Low confidence ($< 0.5$) with high ensemble disagreement alerts a human driver.
 
-\textbf{Monitoring plan.} Weekly calibration checks on newly collected frames. Monthly review of ensemble disagreement distribution. Re-calibrate temperature scaling quarterly. Retrain if ECE exceeds 0.08 or if nighttime frame volume exceeds 10\% of inference volume.
+\textbf{Monitoring plan.} Weekly calibration checks on new frames. Monthly review of the ensemble-disagreement distribution. Recalibrate temperature scaling quarterly. Retrain if ECE exceeds 0.08 or nighttime frames exceed 10\% of inference volume.
 
 \end{example}
 
 \begin{practicalnote}
-The uncertainty audit card is not a one-time document. As the deployment environment changes---new lighting conditions, new camera angles, different seasons---the epistemic gaps change. Review the card whenever the model is retrained or the deployment context shifts.
+The uncertainty audit card is not a one-time document. As the deployment environment changes---new lighting conditions, new camera angles, different seasons---the epistemic gaps shift. Review the card whenever the model is retrained or the deployment context shifts.
 \end{practicalnote}
 
 \section{Common Mistakes in Probabilistic Modeling}
 
-Several mistakes recur when building probabilistic models. The first is treating all uncertainty as the same: using a single confidence score without distinguishing aleatoric from epistemic sources leads to poor decisions about when to collect more data and when to accept irreducible noise. The second is trusting uncalibrated probabilities: neural network softmax outputs are not calibrated by default, and using them as if they were leads to overconfident systems. A third is choosing $K$ for a mixture model based on aesthetics rather than evidence: use evidence such as information criteria, held-out likelihood, stability checks, and domain constraints. A fourth is assuming that the Naive Bayes independence assumption makes the model useless: it is wrong but often useful, and dismissing it means losing a fast, interpretable baseline. Finally, treating the EM algorithm as a black box without checking for convergence, sensitivity to initialization, or empty components leads to unreliable clustering.
+Several mistakes recur when building probabilistic models. First, treating all uncertainty as the same. A single confidence score that does not distinguish aleatoric from epistemic sources leads to poor decisions about when to collect more data and when to accept irreducible noise. Second, trusting uncalibrated probabilities. Neural network softmax outputs are not calibrated by default, and using them as if they were yields overconfident systems. Third, choosing $K$ for a mixture model on aesthetics rather than evidence---rely on information criteria, held-out likelihood, stability checks, and domain constraints. Fourth, assuming that the Naive Bayes independence assumption makes the model useless: the assumption is wrong but often useful, and dismissing it costs a fast, interpretable baseline. Finally, treating EM as a black box. Failing to check convergence, initialization sensitivity, or empty components leads to unreliable clustering.
 
 \section{Looking Ahead}
 
-This chapter introduced probabilistic models as tools for reasoning about distributions, latent structure, and uncertainty. Gaussian mixture models showed how latent variables and the EM algorithm can discover hidden structure. Bayesian reasoning formalized the distinction between aleatoric and epistemic uncertainty and connected regularization to prior knowledge. Gaussian processes extended that reasoning from parametric to non-parametric modeling, placing a prior on functions rather than weights so that predictive uncertainty grows honestly in regions the training data never reached. Naive Bayes demonstrated that even a model with ``wrong'' assumptions can serve as a useful, interpretable baseline. The uncertainty audit card documented what the model knows it does not know.
+This chapter introduced probabilistic models as tools for reasoning about distributions, latent structure, and uncertainty. Gaussian mixture models showed how latent variables and the EM algorithm can uncover hidden structure. Bayesian reasoning formalized the split between aleatoric and epistemic uncertainty and connected regularization to prior knowledge. Gaussian processes were noted as an extension that places a prior directly on functions through a kernel, yielding input-dependent predictive variance. Naive Bayes showed that even a model with ``wrong'' assumptions can serve as a useful, interpretable baseline. The uncertainty audit card documented what the model knows it does not know.
 
-The next chapter moves from probabilistic structure to learned representations. The question shifts from ``what distribution generated this data?'' to ``what representation of the data makes downstream tasks easier?'' The probabilistic lens developed here---latent variables, generative models, and uncertainty---will return throughout Part~III and Part~IV, where reliable predictions and responsible deployment demand knowing not just what the model predicts, but how much to trust that prediction.
+The next chapter moves from probabilistic structure to learned representations. The question shifts from ``what distribution generated this data?'' to ``what representation of the data makes downstream tasks easier?'' The probabilistic lens developed here---latent variables, generative models, and uncertainty---returns throughout Part~IV and Part~V, where reliable predictions and responsible deployment demand knowing not just what the model predicts, but how much to trust that prediction.
 
 \section*{Chapter Summary}
 
-Probabilistic models reason about distributions, not just point predictions. Generative models learn the joint distribution $P(X, Y)$ and can support outlier checks, handle missing data, and generate new examples; discriminative models learn decision rules or conditional probability models for predicting $Y$ from $X$ and typically achieve higher classification accuracy. Latent variables represent hidden structure that must be inferred from observations. Gaussian mixture models use latent cluster assignments and the EM algorithm to discover soft clusters. Bayesian reasoning treats parameters as random variables with prior distributions, connects regularization to prior beliefs, and produces posterior distributions that encode uncertainty. Gaussian processes push this idea from parametric to non-parametric regression: by placing a prior on functions through a kernel, they yield predictive variance that grows where training data is sparse and shrinks where it is dense; under fixed kernel and noise hyperparameters, the latent-function posterior variance depends on the training input locations and kernel, not directly on observed output values. The posterior predictive distribution decomposes into aleatoric uncertainty (inherent noise) and epistemic uncertainty (model ignorance). Naive Bayes is a fast, interpretable generative baseline that works despite its strong independence assumption. An uncertainty audit card documents what kinds of uncertainty the model faces, how they are measured, and what downstream decisions depend on them.
+Probabilistic models reason about distributions, not just point predictions. Generative models learn the joint $P(X, Y)$ and can support outlier checks, handle missing data, and generate new examples. Discriminative models learn decision rules or conditional probability models for predicting $Y$ from $X$ and typically achieve higher classification accuracy. Latent variables represent hidden structure that must be inferred from observations. Gaussian mixture models use latent cluster assignments and EM to discover soft clusters. Bayesian reasoning treats parameters as random variables with priors, connects regularization to prior beliefs, and produces posterior distributions that encode uncertainty. Gaussian processes are noted as an extension that places a kernel-based prior on functions, yielding predictive variance that grows where training data is sparse, with the caveat that fitted hyperparameters and non-Gaussian likelihoods complicate that picture in practice. The posterior predictive distribution decomposes into aleatoric uncertainty (inherent noise) and epistemic uncertainty (model ignorance). Naive Bayes is a fast, interpretable generative baseline that works despite its strong independence assumption. The uncertainty audit card documents which uncertainties the model faces, how they are measured, and which downstream decisions depend on them.
 
 \begin{studyquestions}
 \item What is the difference between a generative and a discriminative model?
@@ -411,7 +395,7 @@ Probabilistic models reason about distributions, not just point predictions. Gen
 \item In what sense is $k$-means a special case of Gaussian mixture models?
 \item What is the difference between MLE and MAP estimation? How does MAP connect to regularization?
 \item Why does the posterior predictive distribution in Bayesian linear regression have two uncertainty terms?
-\item How does a Gaussian process's predictive variance behave as a new input moves away from the training data, and why is this pattern more honest than a parametric model's extrapolated confidence?
+\item In a standard Gaussian process with fixed kernel hyperparameters, how does the predictive variance behave as a new input moves away from the training data, and what caveats apply once kernel hyperparameters are fitted to the data?
 \item Why does Naive Bayes classify well despite violating the conditional independence assumption?
 \item Why are Naive Bayes probabilities typically poorly calibrated?
 \item What is the difference between aleatoric and epistemic uncertainty, and why does the distinction matter for data collection?

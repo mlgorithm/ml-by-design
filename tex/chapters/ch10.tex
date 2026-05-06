@@ -1,7 +1,7 @@
 \chapter{Experiments, Error Analysis, and Scientific Claims}
 \label{ch:experiments-claims}
 
-The earlier chapters showed how to frame tasks, choose representations, train models, and judge their outputs. This chapter changes the question. Once a result looks promising, what kind of scientific claim does it actually support? A small gain can be meaningful, accidental, unstable, or irrelevant depending on the protocol behind it. This chapter turns evaluation into scientific judgment: state the claim, protect the premises, test whether the gain is stable, ask what caused it, inspect where it fails, and only then decide what sentence is actually honest. A \emph{claim audit}, meaning the habit of writing that sentence before reading the headline number, is the chapter's organizing discipline. By the end of the chapter, the reader should be able to turn a result table into a bounded empirical claim.
+Earlier chapters showed how to frame tasks, choose representations, train models, and judge their outputs. This chapter shifts the question. Once a result looks promising, what scientific claim does it actually support? A small gain can be meaningful, accidental, unstable, or irrelevant, depending on the protocol behind it. This chapter turns evaluation into scientific judgment: state the claim, protect the premises, test whether the gain is stable, ask what caused it, inspect where it fails, and only then decide what sentence is honest. The chapter's organizing discipline is the \emph{claim audit}: the habit of writing that sentence before reading the headline number. By the end, the reader should be able to turn a result table into a bounded empirical claim.
 
 Suppose an experiment table reports the following:
 
@@ -20,25 +20,25 @@ Contextual retrieval + grounded generator & 0.846 & +0.004 \\
 \label{tab:score-improved-so-what}
 \end{table}
 
-At first glance, the new system looks better. But many interpretations are still possible. The baseline may have been too weak for a grounded support task. The gain may vanish across different seeds, prompts, or retrieval tie breaks. The overall score may hide failure on high-risk slices such as visa or accommodation questions. The generator may improve fluent phrasing while harming faithfulness to retrieved policy text. The protocol may have mixed document versions, reused the test set, or allowed hidden leakage from policy updates.
+At first glance, the new system looks better. But many interpretations remain open. The baseline may have been too weak for a grounded support task. The gain may vanish across different seeds, prompts, or retrieval tie breaks. The overall score may hide failure on high-risk slices such as visa or accommodation questions. The generator may produce more fluent phrasing while harming faithfulness to retrieved policy text. The protocol may have mixed document versions, reused the test set, or allowed hidden leakage from policy updates.
 
-This is why a result table should never be read as self-explanatory. The chapter's job is to train a stronger reflex:
+A result table is never self-explanatory. The chapter's job is to train a stronger reflex:
 
 \begin{center}
 \emph{a number is not evidence until we know what claim it supports and what rival explanation still survives.}
 \end{center}
 
-Throughout this chapter, keep one experimental story in view: the grounded course-support assistant introduced in the language chapter. It receives student questions, routes them, retrieves syllabus or policy passages, sometimes escalates them to humans, and sometimes generates a grounded answer. This case is useful because a tiny numerical gain can still hide weak controls, retrieval errors, unsafe slices, or overconfident generation. It also gives the chapter its spine: the same small gain is revisited under stronger protocol control, repeated runs, \emph{ablations}---controlled removals or replacements of one component so the mechanism claim gets tested rather than assumed---slice analysis, and finally a bounded written claim.
+Throughout this chapter, keep one experimental story in view: the grounded course-support assistant introduced in the language chapter. It receives student questions, routes them, retrieves syllabus or policy passages, sometimes escalates to humans, and sometimes generates a grounded answer. The case is useful because a tiny numerical gain can still hide weak controls, retrieval errors, unsafe slices, or overconfident generation. It also gives the chapter its spine: we revisit the same small gain under stronger protocol control, repeated runs, \emph{ablations}---controlled removals or replacements of one component, used to test rather than assume the mechanism claim---slice analysis, and finally a bounded written claim.
 
-When this opening section says \emph{accuracy}, read it narrowly: the fraction of held-out questions judged correct under a fixed document snapshot and grading rubric. Later sections will ask whether that narrow metric hides weaker faithfulness, weaker slice performance, or unstable wins across repeated runs.
+When this opening section says \emph{accuracy}, read it narrowly: the fraction of held-out questions judged correct under a fixed document snapshot and grading rubric. Later sections ask whether that narrow metric hides weaker faithfulness, weaker slice performance, or unstable wins across repeated runs.
 
-To keep the chapter from reading as if these habits belong only to educational NLP, occasionally cross-check the same questions against the earlier dashboard-camera pedestrian detector. A small gain on familiar daytime campus footage may still disappear under night rain, unseen cameras, or tighter latency constraints. The scientific discipline is the same even though the modality is different.
+To keep these habits from looking like concerns only for educational NLP, occasionally cross-check the same questions against the earlier dashboard-camera pedestrian detector. A small gain on familiar daytime campus footage may still disappear under night rain, unseen cameras, or tighter latency constraints. The scientific discipline does not change even though the modality does.
 
-Before moving on, it helps to name two more terms that will matter later. A \emph{paired comparison} keeps the comparison aligned example by example rather than treating two systems as if they had been tested on unrelated data. When data are scarce, \emph{nested selection} means choosing prompts or hyperparameters inside the training side of each fold before scoring untouched outer folds.
+Before moving on, two more terms will matter later. A \emph{paired comparison} keeps the two systems aligned example by example rather than treating them as if they had been tested on unrelated data. When data are scarce, \emph{nested selection} means choosing prompts or hyperparameters inside the training side of each fold before scoring untouched outer folds.
 
 \section{From Scores to Claims}
 
-A claim audit asks three questions before the result is overread: what weaker claim is definitely supported, what stronger claim is still not supported, and what alternative explanation would survive even if the score improved? This is the chapter's master habit. Once students adopt it, experiments stop looking like a stream of numbers and start looking like arguments with premises, controls, and scope limits. The rest of the chapter follows one arc: state the claim, protect the protocol, choose the control, quantify uncertainty, isolate the mechanism, inspect the failures, and then bound the scope.
+A claim audit asks three questions before the result is overread. What weaker claim is definitely supported? What stronger claim is still not supported? What alternative explanation would survive even if the score improved? This is the chapter's master habit. Once students adopt it, experiments stop looking like a stream of numbers and start looking like arguments with premises, controls, and scope limits. The rest of the chapter follows one arc: state the claim, protect the protocol, choose the control, quantify uncertainty, isolate the mechanism, inspect the failures, and bound the scope.
 
 \begin{figure}[t]
 \centering
@@ -47,11 +47,11 @@ A claim audit asks three questions before the result is overread: what weaker cl
 \label{fig:experiment-workflow}
 \end{figure}
 
-Each step exists because a different rival explanation can otherwise survive. A good experiment does not remove every uncertainty, but it should make the remaining uncertainties visible rather than hiding them. Later sections follow this order closely, so the reader can treat the rest of the chapter as one pass through the same argument rather than as a list of disconnected evaluation tricks. The workflow figure and the claim sheet are two views of the same discipline.
+Each step exists because some rival explanation would otherwise survive. A good experiment does not remove every uncertainty, but it should make the remaining uncertainties visible rather than hide them. Later sections follow this order closely, so the reader can treat the rest of the chapter as one pass through the same argument rather than a list of disconnected evaluation tricks. The workflow figure and the claim sheet are two views of the same discipline.
 
 \subsection{Write the Claim Sheet Before the Result Exists}
 
-One way to prevent post hoc storytelling is to write down the experimental claim structure before the final result is known. This does not need to be a formal research pre-registration in the strongest institutional sense. For this book, it is enough to adopt the habit of committing early to the main claim, baseline, metric, slices, and uncertainty plan before tuning has already suggested the winning story.
+To block post hoc storytelling, write the experimental claim structure down before the final result is known. This need not be a formal pre-registration in the strongest institutional sense. For this book, it is enough to commit early to the main claim, baseline, metric, slices, and uncertainty plan before tuning has already suggested the winning story.
 
 \begin{table}[t]
 \centering
@@ -73,10 +73,10 @@ What result would change your mind & turns the experiment into a test rather tha
 \label{tab:prerun-claim-sheet}
 \end{table}
 
-This habit is especially valuable when the expected gain is small. Tiny improvements are exactly where prompt search, hyperparameter luck, weak baselines, or selective reporting can create persuasive but fragile stories. Writing the rough claim sheet early does not remove every bias, but it makes later scope drift easier to detect.
+This habit is especially valuable when the expected gain is small. Tiny improvements are exactly where prompt search, hyperparameter luck, weak baselines, or selective reporting can produce persuasive but fragile stories. Writing the rough claim sheet early will not remove every bias, but it makes later scope drift easier to detect.
 
 \begin{practicalnote}
-If the claimed win is only a few tenths of a point, write down before the run which metric counts, which slices matter, how many seeds will be used, and what baseline must be beaten. Otherwise the comparison is too easy to rewrite after the numbers arrive.
+If the claimed win is only a few tenths of a point, write down before the run which metric counts, which slices matter, how many seeds will be used, and what baseline must be beaten. Otherwise the comparison becomes too easy to rewrite after the numbers arrive.
 \end{practicalnote}
 
 \begin{decisionbox}
@@ -95,15 +95,15 @@ If the claimed win is only a few tenths of a point, write down before the run wh
 Return to Table~\ref{tab:score-improved-so-what}, where the new support assistant appears to beat the baseline by $0.004$ accuracy points. The seven-step protocol turns that table into a disciplined judgment:
 \begin{enumerate}[leftmargin=*]
 \item \textbf{State the claim.} A narrow starting claim might be: under the current question set, document snapshot, and evaluation rubric, the contextual retrieval plus grounded-generation system outperformed the lexical retrieval plus template baseline.
-\item \textbf{Protect the protocol.} We must confirm that both systems used the same question split, the same policy-document snapshot, the same grading rubric, and the same test discipline, and that the test set was not reused during development.
-\item \textbf{Choose the control.} We must ask whether the lexical-template system is actually a serious grounded baseline or merely an easy system to beat.
-\item \textbf{Quantify uncertainty.} A gain of $0.004$ may disappear entirely across seeds, so repeated runs are essential.
-\item \textbf{Isolate the mechanism.} If retrieval, generation, prompt wording, and postprocessing all changed at once, we still do not know which change produced the gain.
+\item \textbf{Protect the protocol.} Confirm that both systems used the same question split, the same policy-document snapshot, the same grading rubric, and the same test discipline. Confirm too that the test set was not reused during development.
+\item \textbf{Choose the control.} Ask whether the lexical-template system is a serious grounded baseline or merely an easy one to beat.
+\item \textbf{Quantify uncertainty.} A gain of $0.004$ may disappear across seeds, so repeated runs are essential.
+\item \textbf{Isolate the mechanism.} If retrieval, generation, prompt wording, and postprocessing all changed at once, we still cannot tell which change produced the gain.
 \item \textbf{Inspect the failures.} The overall score may hide a collapse on multilingual, distressed, or high-risk advising slices that matter in deployment.
-\item \textbf{Bound the scope.} Even if every earlier step looks clean, the supported claim is still local unless broader external evidence is added.
+\item \textbf{Bound the scope.} Even if every earlier step looks clean, the supported claim remains local unless broader external evidence is added.
 \end{enumerate}
 
-So the raw table does \emph{not} yet justify ``the new support assistant is better.'' At best, it motivates the next experiments needed to decide whether that sentence can be defended.
+So the raw table does \emph{not} yet justify ``the new support assistant is better.'' At best, it motivates the next experiments needed to decide whether that sentence is defensible.
 
 \begin{thinkingtool}
 \textbf{Tempting mistake $\rightarrow$ corrected reasoning.} Tempting mistake: ``The score improved, so the method works.'' Corrected reasoning: ``A score change is only one premise. The claim still depends on protocol control, baseline strength, uncertainty, mechanism isolation, failure analysis, and bounded scope.''
@@ -123,7 +123,7 @@ Before running an experiment, decide what result would genuinely support the cla
 Reproducibility is the ability for another person, or the same person later, to repeat an experiment with the documented setup and obtain comparable results.
 \end{definition}
 
-Reproducibility is not paperwork. It is control over the premises of the argument. If the dataset version is unclear, the preprocessing is undocumented, the split procedure is vague, or the seeds are missing, then the scientific premise of the result is unstable. Field-scale reproducibility efforts have made this expectation explicit by asking authors to document data, code, training details, and evaluation choices clearly \citep{pineau2021}.
+Reproducibility is not paperwork. It is control over the premises of the argument. If the dataset version is unclear, the preprocessing is undocumented, the split procedure is vague, or the seeds are missing, the scientific premise of the result is unstable. Field-scale reproducibility efforts have made this expectation explicit by asking authors to document data, code, training details, and evaluation choices clearly \citep{pineau2021}.
 
 \subsection{What Must Be Recorded}
 
@@ -138,23 +138,23 @@ A serious experiment record should include at least:
 \item any postprocessing, thresholding, or filtering steps.
 \end{itemize}
 
-In small projects this may be a careful notebook and a script. In larger systems it may involve experiment tracking tools, model registries, and configuration files. The scale changes, but the principle does not: another practitioner should be able to understand how the result came to exist.
+In small projects, this may be a careful notebook and a script. In larger systems, it may involve experiment-tracking tools, model registries, and configuration files. The scale changes; the principle does not. Another practitioner should be able to understand how the result came to exist.
 
 \begin{practicalnote}
 If a result can be reproduced only by the original author from memory, it is not a robust experimental result. It is a fragile anecdote.
 \end{practicalnote}
 
 \begin{example}[Real-World Callout: Reproducibility Changed the Standard]
-Henderson et al.\ showed that deep reinforcement learning results could shift substantially under different seeds, code details, and evaluation choices, making apparently clear model comparisons much less stable than many papers suggested \citep{henderson2018}. Pineau et al.\ then described the NeurIPS reproducibility program as a field-level response: stronger documentation of data, code, hyperparameters, and experimental procedure became part of what counts as serious empirical work \citep{pineau2021}. The point is not limited to reinforcement learning. Once a field sees how easily results can move under weak controls, better experimental reporting stops looking optional.
+Henderson et al.\ showed that deep reinforcement learning results could shift substantially under different seeds, code details, and evaluation choices, making apparently clear model comparisons far less stable than many papers had suggested \citep{henderson2018}. Pineau et al.\ then described the NeurIPS reproducibility program as a field-level response: stronger documentation of data, code, hyperparameters, and experimental procedure became part of what counts as serious empirical work \citep{pineau2021}. The point is not limited to reinforcement learning. Once a field sees how easily results move under weak controls, better experimental reporting no longer looks optional.
 \end{example}
 
 \subsection{Split Logic Is Part of the Premise}
 
-Chapter 3 introduced protected evaluation, and Chapter~\ref{ch:audio-time} showed how split logic can break sequential claims entirely. The same principle applies broadly. If the validation set guides model development, then it is part of development. If the test set influences design choices, it is no longer a clean test. Leakage does not need to be dramatic to be destructive. Protocol control is what makes the later questions about baselines, uncertainty, and mechanism worth asking at all.
+Chapter~\ref{ch:evaluation-discipline} introduced protected evaluation, and Chapter~\ref{ch:audio-time} showed how split logic can break sequential claims entirely. The same principle applies broadly. If the validation set guides model development, it is part of development. If the test set influences design choices, it is no longer a clean test. Leakage need not be dramatic to be destructive. Protocol control is what makes the later questions about baselines, uncertainty, and mechanism worth asking at all.
 
 \section{Baselines and Controls: Better Than What?}
 
-No model can be interpreted in isolation. A result only becomes informative once it survives a control that makes the claim hard to win.
+No model can be interpreted in isolation. A result becomes informative only once it survives a control that makes the claim hard to win.
 
 \begin{center}
 \emph{A result is not informative until it has survived a control that makes the claim hard to win.}
@@ -170,29 +170,29 @@ The right baseline depends on the task:
 \item for deep systems, smaller or simpler models with comparable data access.
 \end{itemize}
 
-This is why the book has repeatedly returned to linear models, classical methods, and naive forecasting rules. They are not ceremonial—they are methodological controls that expose whether a new method genuinely outperforms simpler alternatives.
+This is why the book has repeatedly returned to linear models, classical methods, and naive forecasting rules. They are not ceremonial. They are methodological controls that expose whether a new method genuinely outperforms simpler alternatives.
 
 \begin{example}[A Strong Baseline for the Running Support Case]
-For the course-support assistant, a meaningful baseline is not an ungrounded generator that answers from internal statistics alone. A much stronger control is a lexical retriever over current syllabus and policy documents plus a conservative template or extractive answerer. That baseline already respects the chapter's grounding requirement. Beating it means more than beating a fluent but ungrounded chatbot.
+For the course-support assistant, a meaningful baseline is not an ungrounded generator answering from internal statistics alone. A much stronger control is a lexical retriever over current syllabus and policy documents paired with a conservative template or extractive answerer. That baseline already respects the chapter's grounding requirement. Beating it means more than beating a fluent but ungrounded chatbot.
 \end{example}
 
 \subsection{Weak Controls Produce Weak Claims}
 
-Beating a deliberately weak baseline may still be useful as a sanity check, but it does not justify a strong scientific story. A baseline should make unearned claims harder, not easier.
+Beating a deliberately weak baseline can still serve as a sanity check, but it does not justify a strong scientific story. A baseline should make unearned claims harder, not easier.
 
 \begin{failurebox}
-Reporting only the best new model, with no meaningful control and no explanation of what simpler alternatives can or cannot do, is not showing discipline. It is hiding the context required for interpretation.
+Reporting only the best new model, with no meaningful control and no account of what simpler alternatives can or cannot do, is not discipline. It hides the context required for interpretation.
 \end{failurebox}
 
 Once protocol and controls are credible, the next question is whether the apparent gain is stable or merely fortunate.
 
 \section{Repeated Runs and Uncertainty: Stable or Lucky?}
 
-Many machine-learning systems are stochastic. Initialization, data order, subsampling, augmentation randomness, and hardware nondeterminism can all change the final result. This means a single run can be a poor basis for a scientific claim, a point made especially visible by reproducibility analyses in deep reinforcement learning \citep{henderson2018}. This section is the chapter's stability check: after asking ``better than what?'' it asks ``better often enough to believe?''
+Many machine-learning systems are stochastic. Initialization, data order, subsampling, augmentation randomness, and hardware nondeterminism can all change the final result. A single run is therefore a poor basis for a scientific claim, a point made especially visible by reproducibility analyses in deep reinforcement learning \citep{henderson2018}. This section is the chapter's stability check. After ``better than what?'' it asks ``better often enough to believe?''
 
 \subsection{Why One Number Is Not Enough}
 
-Suppose model A achieves accuracy $0.846$ on one run and model B achieves accuracy $0.842$. It is tempting to announce that A is better. But if each model varies by several points across seeds, the difference may be too small to justify that conclusion.
+Suppose model A achieves accuracy $0.846$ on one run and model B achieves $0.842$. It is tempting to announce that A is better. But if each model varies by several points across seeds, the difference is too small to justify that conclusion.
 
 \begin{prereqbridge}
 If repeated runs produce metrics $m_1, m_2, \ldots, m_S$, the sample mean is
@@ -233,7 +233,7 @@ while the shifted accuracies become:
 \]
 with mean about $0.855$.
 
-This is a much better scientific result than one headline number. It shows:
+This is a much stronger scientific result than one headline number. It shows that:
 \begin{itemize}[leftmargin=*]
 \item the baseline is excellent on clean data,
 \item the same baseline collapses on a realistic robustness slice,
@@ -241,10 +241,10 @@ This is a much better scientific result than one headline number. It shows:
 \item the tradeoff is stable enough across seeds to support a real claim.
 \end{itemize}
 
-The honest conclusion is not ``augmentation is better.'' It is narrower: in this setup, augmentation greatly improves shifted-data robustness at a measurable clean-data cost. The companion demo is useful here because it makes the same point computationally: repeated runs are valuable partly because they reveal tradeoffs, not only because they stabilize one favorite metric.
+The honest conclusion is not ``augmentation is better.'' It is narrower: in this setup, augmentation greatly improves shifted-data robustness at a measurable clean-data cost. The companion demo helps here because it makes the same point computationally. Repeated runs are valuable partly because they reveal tradeoffs, not only because they stabilize one favorite metric.
 
 \begin{evidencebox}
-When a result changes the tradeoff rather than improving every metric, report the tradeoff explicitly. That is stronger science than hiding the uncomfortable metric.
+When a result changes the tradeoff rather than improving every metric, report the tradeoff explicitly. Stronger science makes the uncomfortable metric visible rather than hiding it.
 \end{evidencebox}
 
 \subsection{Uncertainty Is Part of the Finding}
@@ -252,12 +252,12 @@ When a result changes the tradeoff rather than improving every metric, report th
 If a method varies widely across seeds, that instability is itself part of the result. A model that sometimes wins and sometimes collapses may be less useful than a slightly weaker but more stable alternative.
 
 \begin{advancednote}
-More advanced work may report confidence intervals, bootstrap uncertainty, or paired tests. The basic principle is unchanged: quantify uncertainty instead of pretending that one run is the whole story.
+More advanced work may report confidence intervals, bootstrap uncertainty, or paired tests. The basic principle does not change: quantify uncertainty instead of pretending that one run is the whole story.
 \end{advancednote}
 
 \subsection{Cross-Validation for Limited Data}
 
-When data are scarce, a single train/validation/test split can make the claim depend too much on which examples happened to land in each partition. Cross-validation reduces that sensitivity by rotating which examples play the held-out role. It is not a shortcut around experimental discipline. It is a different evaluation design for limited data.
+When data are scarce, a single train/validation/test split makes the claim depend too much on which examples happened to land in each partition. Cross-validation reduces that sensitivity by rotating which examples play the held-out role. It is not a shortcut around experimental discipline. It is a different evaluation design for limited data.
 
 \begin{practicalnote}
 A compact cross-validation workflow is:
@@ -271,15 +271,19 @@ A compact cross-validation workflow is:
 \end{enumerate}
 \end{practicalnote}
 
-This matters because the outer fold is part of the claim, while the inner fold is part of selection. If the held-out fold influences prompt choice, hyperparameter choice, or model choice, then the fold is no longer a clean test. The claim supported by cross-validation should therefore name the search protocol as well as the average score: under this specified nested procedure, the method appears to generalize about this well on new data from the same source.
+This matters because the outer fold is part of the claim, while the inner fold is part of selection. If the held-out fold influences prompt choice, hyperparameter choice, or model choice, the fold is no longer a clean test. The claim supported by cross-validation should therefore name the search protocol as well as the average score: under this specified nested procedure, the method appears to generalize about this well on new data from the same source.
 
 \begin{practicalnote}
-The logic of nested selection is: the \emph{outer} loop evaluates performance honestly (each fold serves as a held-out test set in turn), while the \emph{inner} loop selects hyperparameters (using only the outer-fold training data, split again into train and validation). This nesting ensures that no information from the evaluation set leaks into model selection. If this feels complex, the key intuition is simple: never choose and evaluate with the same data.
+The logic of nested selection is straightforward: the \emph{outer} loop evaluates performance honestly (each fold serves as a held-out test set in turn), while the \emph{inner} loop selects hyperparameters using only the outer-fold training data, split again into train and validation. This nesting prevents information from the evaluation set leaking into model selection. If this feels complex, the key intuition is simple: never choose and evaluate with the same data.
 \end{practicalnote}
 
 \begin{example}[Cautionary Example]
-A small medical-support dataset has only 120 labeled cases. A team tries three prompt variants and four retrieval depths, then keeps the combination with the best average across all folds and reports that number as the final result. The score may be real, but the selection protocol has leaked into the evaluation protocol. The honest claim is weaker unless the winner was chosen inside the training side of each fold and evaluated on untouched outer folds.
+A small medical-support dataset has only 120 labeled cases. A team tries three prompt variants and four retrieval depths, keeps the combination with the best average across all folds, and reports that number as the final result. The score may be real, but the selection protocol has leaked into the evaluation protocol. The honest claim is weaker unless the winner was chosen inside the training side of each fold and evaluated on untouched outer folds.
 \end{example}
+
+\begin{claimdefense}
+After silent multi-comparison selection, the safe claim is that the chosen configuration scored well in this particular search. The unsafe claim is that it is the best configuration for the underlying task. Only nested or pre-committed selection licenses the stronger reading.
+\end{claimdefense}
 
 \begin{thinkingtool}
 \textbf{Three uncertainty sources.} Do not lump every kind of uncertainty together:
@@ -298,11 +302,11 @@ s=\sqrt{\frac{1}{n-1}\sum_{i=1}^n (x_i-\bar{x})^2},
 \qquad
 \bar{x}=\frac{1}{n}\sum_{i=1}^n x_i.
 \]
-The standard error of the mean is then \(s/\sqrt{n}\), which shrinks as the number of runs grows. A rough undergraduate confidence interval for the mean is
+The standard error of the mean is \(s/\sqrt{n}\), which shrinks as the number of runs grows. A rough undergraduate confidence interval for the mean is
 \[
-\bar{x}\pm 2\frac{s}{\sqrt{n}},
+\bar{x}\pm 2\frac{s}{\sqrt{n}}.
 \]
-which is only an approximation, but it gives the right intuition: a result is less convincing when the run-to-run spread is large compared with the reported gain.
+This is only an approximation, but it gives the right intuition: a result is less convincing when the run-to-run spread is large compared with the reported gain.
 \end{mathlens}
 
 \subsection{Worked Example: Mean Improvement Is Not the Whole Uncertainty Story}
@@ -314,17 +318,17 @@ Suppose the support-assistant team runs the same comparison over five seeds and 
 \[
 \text{new system}: 0.846,\ 0.845,\ 0.850,\ 0.844,\ 0.848
 \]
-The new system still looks better on average, but now the evidence is more honest. The baseline mean is about $0.843$, the new-system mean is about $0.847$, and the average improvement is again roughly $0.004$. That result is more credible than the single-run table because it survives repeated stochastic variation. But the scientific judgment is still incomplete until we ask how variable the run-to-run gap itself is.
+The new system still looks better on average, and the evidence is now more honest. The baseline mean is about $0.843$, the new-system mean is about $0.847$, and the average improvement is again roughly $0.004$. This result is more credible than the single-run table because it survives repeated stochastic variation. But the scientific judgment remains incomplete until we ask how variable the run-to-run gap itself is.
 
 If one or two seeds erase the gain entirely, the correct interpretation changes. The practical question is not only whether the new mean is larger. It is whether the improvement is stable enough that another practitioner running the documented pipeline should expect a similar outcome rather than an arbitrary reversal.
 
 \begin{practicalnote}
-When the claimed improvement is small, the standard of evidence should become stricter rather than looser. Tiny gains are exactly where seed luck, evaluation noise, or minor implementation asymmetries can create the strongest false stories.
+When the claimed improvement is small, the standard of evidence should become stricter, not looser. Tiny gains are exactly where seed luck, evaluation noise, or minor implementation asymmetries can produce the strongest false stories.
 \end{practicalnote}
 
 \subsection{Paired Comparison Usually Matters More Than Separate Means}
 
-Many model comparisons are naturally paired because both systems are evaluated on the same examples. This is important. If the new support assistant and the baseline answer the same $n$ student questions, then each question contributes a paired difference rather than two unrelated observations.
+Many model comparisons are naturally paired because both systems are evaluated on the same examples. This matters. If the new support assistant and the baseline answer the same $n$ student questions, each question contributes a paired difference rather than two unrelated observations.
 
 \begin{mathlens}
 Suppose six shared questions give per-example differences
@@ -338,25 +342,25 @@ where \(+1\) means the new system is correct and the baseline is wrong, \(-1\) m
 The mean gain is real, but the negative entry still matters if it occurs on a high-risk question. Paired evaluation keeps that structure visible.
 \end{mathlens}
 
-Suppose that across $10$ held-out questions, the new system improves on four, ties on four, and becomes worse on two. The average gain may still be positive, but the example-level pattern reveals more:
+Suppose that across $10$ held-out questions, the new system improves on four, ties on four, and worsens on two. The average gain may still be positive, but the example-level pattern reveals more:
 \begin{itemize}[leftmargin=*]
 \item Are the wins concentrated on routine low-stakes questions while the losses occur on high-risk cases?
 \item Are the wins only stylistic while the losses are factual or policy-related?
 \item Are the same difficult items unstable across seeds?
 \end{itemize}
 
-Paired reasoning is often scientifically stronger because it asks where one system changed the actual decision outcome rather than merely comparing two aggregate means as if the evaluations were independent. In language and retrieval work, paired designs are especially useful because the same examples often vary greatly in difficulty.
+Paired reasoning is often scientifically stronger because it asks where one system actually changed the decision outcome rather than comparing two aggregate means as if the evaluations were independent. In language and retrieval work, paired designs help because the same examples often vary widely in difficulty.
 
 \begin{mathlens}
-If the baseline and new system are both scored on the same examples, define the per-example difference \(d_i=a_i-b_i\). The comparison then reduces to one average difference,
+If the baseline and new system are scored on the same examples, define the per-example difference \(d_i=a_i-b_i\). The comparison then reduces to one average difference,
 \[
 \bar{d}=\frac{1}{n}\sum_{i=1}^n d_i,
 \]
-with uncertainty governed by the spread of the differences rather than by two separate totals. That is stronger because shared example difficulty often cancels out in \(d_i\), so the noise term is smaller than in an unpaired comparison. In short: paired evaluation asks, example by example, what actually changed.
+with uncertainty governed by the spread of the differences rather than two separate totals. This is stronger because shared example difficulty often cancels in \(d_i\), shrinking the noise term relative to an unpaired comparison. In short: paired evaluation asks, example by example, what actually changed.
 \end{mathlens}
 
 \begin{advancednote}
-The interval formula below is useful for students who need to compute paired uncertainty. A first concept-first pass can read only the surrounding examples: paired evaluation means comparing systems on the same cases and interpreting the distribution of within-example differences.
+The interval formula below helps students who need to compute paired uncertainty. A first concept-first pass can read only the surrounding examples: paired evaluation means comparing systems on the same cases and interpreting the distribution of within-example differences.
 \end{advancednote}
 
 \begin{theorem}[Paired intervals are built from within-example differences]
@@ -369,13 +373,15 @@ where \(\bar d\) is the sample mean of the \(d_i\) values and \(s_d\) is their s
 
 The point of the formula is conceptual as much as computational. Once the same cases are shared, the comparison should live on the differences, not on two unrelated means that ignore shared difficulty.
 
+
+
 \begin{example}[Paired Wins Are Not All Equal]
-Imagine that a new grounded generator answers five extra routine deadline questions correctly but also gives two unsupported answers on visa-status questions that the baseline had escalated safely. A raw net gain of three examples does not settle the story. The paired reading is better because it reveals that the gain came from low-risk convenience while the losses hit high-risk cases. This is precisely the kind of result that should weaken a deployment claim even if the mean score improves.
+Suppose a new grounded generator answers five extra routine deadline questions correctly but also gives two unsupported answers on visa-status questions that the baseline had escalated safely. A raw net gain of three examples does not settle the story. The paired reading is better because it reveals that the gain came from low-risk convenience while the losses hit high-risk cases. This is precisely the kind of result that should weaken a deployment claim, even if the mean score improves.
 \end{example}
 
 \subsection{Confidence Intervals and Practical Importance}
 
-Confidence intervals, bootstrap summaries, or paired significance tests can help quantify uncertainty more formally. The book does not need every mathematical detail, but the interpretation habit matters. A narrow interval around a tiny improvement can still describe a result that is scientifically real but operationally trivial. Conversely, a practically important difference may remain uncertain if the study is too small or too noisy.
+Confidence intervals, bootstrap summaries, or paired significance tests can quantify uncertainty more formally. The book does not need every mathematical detail, but the interpretation habit matters. A narrow interval around a tiny improvement can describe a result that is scientifically real yet operationally trivial. Conversely, a practically important difference may remain uncertain if the study is too small or too noisy.
 
 \begin{decisionbox}
 Ask two separate questions. First, is the result stable enough that the claimed direction of improvement is believable? Second, even if it is believable, is the gain large enough on the right metrics and slices to matter?
@@ -383,13 +389,14 @@ Ask two separate questions. First, is the result stable enough that the claimed 
 
 This distinction is especially important in applied AI. A statistically stable gain of $0.003$ in generic answer quality may matter far less than a stable reduction in unsafe direct answers on escalation-required cases. Good experimental work therefore combines uncertainty summaries with task-specific consequence analysis rather than treating ``significant'' as a synonym for ``important.''
 
+
 \subsection{Hyperparameter Budget and Selection Protocol}
 
-One of the easiest ways to produce a misleading result is to tune the new system heavily while giving the baseline only a casual configuration. The final table may still look clean, but the comparison is no longer fair. What won was not only the method. It was also the unequal search effort behind the method.
+One of the easiest ways to produce a misleading result is to tune the new system heavily while giving the baseline only a casual configuration. The final table may still look clean, but the comparison is no longer fair. What won was not only the method but also the unequal search effort behind it.
 
-This issue appears in small student projects and in serious industrial experiments alike. Online experimentation teams learned long ago that apparently clear wins can dissolve once logging bugs, metric definitions, or implementation asymmetries are checked carefully \citep{kohavi2012,kohavi2013}. The same lesson applies to offline machine-learning comparisons. If one model receives broader threshold tuning, more prompt variants, more retrieval settings, or more careful early stopping than another, then part of the reported gain may simply reflect evaluation effort.
+This issue appears in small student projects and serious industrial experiments alike. Online experimentation teams learned long ago that apparently clear wins can dissolve once logging bugs, metric definitions, or implementation asymmetries are checked carefully \citep{kohavi2012,kohavi2013}. The same lesson applies to offline machine-learning comparisons. If one model receives broader threshold tuning, more prompt variants, more retrieval settings, or more careful early stopping than another, part of the reported gain may simply reflect evaluation effort.
 
-Modern language-model comparisons make this risk even sharper. A new method may appear to win because it received more prompt search, more retrieval-query variants, or more aggressive filtering of failed generations than the baseline. Once search effort becomes asymmetric, the table is no longer only comparing methods. It is comparing methods plus unequal experimentation budgets.
+Modern language-model comparisons sharpen this risk. A new method may appear to win because it received more prompt search, more retrieval-query variants, or more aggressive filtering of failed generations than the baseline. Once search effort becomes asymmetric, the table is no longer comparing methods alone. It is comparing methods plus unequal experimentation budgets.
 
 \begin{practicalnote}
 A fair search protocol is:
@@ -402,10 +409,10 @@ A fair search protocol is:
 \end{enumerate}
 \end{practicalnote}
 
-In claim terms, the search protocol is part of the premise. If method A got more tuning opportunities than method B, then the result supports a claim about method A under a larger search budget, not a clean claim that the method itself is better. Equal tuning budget is therefore a fairness condition, not a bookkeeping detail.
+In claim terms, the search protocol is part of the premise. If method A got more tuning opportunities than method B, the result supports a claim about method A under a larger search budget, not a clean claim that the method itself is better. Equal tuning budget is therefore a fairness condition, not a bookkeeping detail.
 
 \begin{failurebox}
-``New method beats baseline'' is a weak sentence if the baseline received less tuning, fewer seeds, weaker prompts, or inferior access to the same information. Fair comparison requires roughly comparable optimization effort, not only identical test data.
+``New method beats baseline'' is a weak sentence if the baseline received less tuning, fewer seeds, weaker prompts, or inferior access to the same information. Fair comparison requires roughly comparable optimization effort, not just identical test data.
 \end{failurebox}
 
 \begin{thinkingtool}
@@ -418,22 +425,22 @@ In claim terms, the search protocol is part of the premise. If method A got more
 \item same retrieval budget,
 \item same stopping and model-selection rule.
 \end{itemize}
-If one side got more search effort, say so explicitly; otherwise the table is comparing method plus extra optimization effort, not method alone.
+If one side got more search effort, say so explicitly; otherwise the table compares method plus extra optimization effort, not method alone.
 \end{thinkingtool}
 
 \subsection{Multiple Comparisons and Researcher Degrees of Freedom}
 
-Unequal budget is not the only way experiments become misleading. Even when two methods receive similar tuning effort, the final reported result may still be inflated if the team tries many prompts, several retrieval settings, multiple seeds, different stopping rules, a few model sizes, and then reports only the most flattering comparison. This is a version of the same scientific problem that appears in other fields under names such as multiple comparisons or researcher degrees of freedom. The more chances we give ourselves to find a lucky win, the easier it becomes to mistake search noise for method evidence.
+Unequal budget is not the only path to a misleading experiment. Even when two methods receive similar tuning effort, the final reported result may still be inflated if the team tries many prompts, several retrieval settings, multiple seeds, different stopping rules, and a few model sizes, then reports only the most flattering comparison. This is the same scientific problem that other fields call multiple comparisons or researcher degrees of freedom. The more chances we give ourselves to find a lucky win, the easier it becomes to mistake search noise for method evidence.
 
 \begin{mathlens}
-If one comparison has a false-alarm rate \(\alpha\), then \(m\) independent attempts have probability
+If one comparison has a false-alarm rate \(\alpha\), \(m\) independent attempts have probability
 \[
 1-(1-\alpha)^m
 \]
-of producing at least one apparently significant win by luck alone. For small \(\alpha\), this is approximately \(m\alpha\). So a \(5\%\) false-alarm rate becomes much less reassuring once the team tries many prompts, thresholds, or seeds and only reports the best one.
+of producing at least one apparently significant win by luck alone. For small \(\alpha\), this is approximately \(m\alpha\). A \(5\%\) false-alarm rate becomes much less reassuring once the team tries many prompts, thresholds, or seeds and reports only the best one.
 \end{mathlens}
 
-Current AI practice creates this risk constantly. A system may be tested with several prompt phrasings, retrieval depths, reranking choices, decoding temperatures, and context-window policies before one configuration is declared the result. That exploration is often necessary. The problem is not exploration itself. The problem begins when the search process is hidden, when only the best outcome survives into the table, or when one method quietly receives more opportunities to look good than another.
+Current AI practice creates this risk constantly. A system may be tested with several prompt phrasings, retrieval depths, reranking choices, decoding temperatures, and context-window policies before one configuration is declared the result. Such exploration is often necessary. The problem is not exploration itself; it is hidden exploration. Trouble begins when the search process disappears from the report, when only the best outcome survives into the table, or when one method quietly receives more opportunities to look good than another.
 
 \begin{decisionbox}
 Before trusting an improvement, ask: how many comparison opportunities existed? If the team tried many prompts, thresholds, seeds, or model variants, the write-up should say so and should explain which decisions were fixed in advance, which were tuned on validation data, and which were only inspected after the result appeared.
@@ -449,13 +456,15 @@ A practical student protocol is simple:
 
 This does not require turning every student project into a clinical trial. It means making the scientific opportunity structure visible. When a gain appears only after many attempts, the honest claim is weaker than when the same gain appears under a narrow, pre-committed comparison plan.
 
+
+
 \begin{advancednote}
-When testing many hypotheses simultaneously---for example, comparing performance across ten ablation variants---the probability of at least one false positive grows rapidly. The simplest correction is \emph{Bonferroni}: divide the significance threshold $\alpha$ by the number of comparisons. More powerful alternatives, such as the Benjamini--Hochberg procedure, control the false discovery rate instead. The key habit is: report how many comparisons were attempted, not just the ones that succeeded.
+When testing many hypotheses at once---for example, comparing performance across ten ablation variants---the probability of at least one false positive grows quickly. The simplest correction is \emph{Bonferroni}: divide the significance threshold $\alpha$ by the number of comparisons. More powerful alternatives, such as the Benjamini--Hochberg procedure, control the false discovery rate instead. The key habit is to report how many comparisons were attempted, not just those that succeeded.
 \end{advancednote}
 
 \subsection{Human Evaluation Can Also Be an Experimental Protocol}
 
-For generated answers, summaries, or grounded responses, some important qualities are not well captured by one automatic metric. Faithfulness, clarity, escalation appropriateness, and policy compliance may require human judgment. But human evaluation is not an escape from rigor. It is another protocol that needs controls. Once a result looks real under the right protocol, the next chapter question is no longer only whether the gain exists, but what mechanism actually produced it.
+For generated answers, summaries, or grounded responses, some important qualities resist one automatic metric. Faithfulness, clarity, escalation appropriateness, and policy compliance may require human judgment. But human evaluation is not an escape from rigor. It is another protocol that needs controls. Once a result looks real under the right protocol, the next chapter question is no longer only whether the gain exists, but what mechanism actually produced it.
 
 A serious human evaluation design usually specifies:
 \begin{itemize}[leftmargin=*]
@@ -484,7 +493,7 @@ Clarity & A student can act on the response without guessing & fluent but vague 
 \label{tab:human-eval-rubric}
 \end{table}
 
-This matters because otherwise human review can collapse into impressionistic scoring. A fluent answer may be preferred even when it is less faithful to the retrieved policy. A shorter answer may look safer simply because reviewers do not see the omitted requirement. The same scientific discipline from earlier sections applies here: define the claim, make the rubric legible, and inspect disagreement rather than hiding it.
+This matters because human review otherwise collapses into impressionistic scoring. A fluent answer may be preferred even when it is less faithful to the retrieved policy. A shorter answer may look safer simply because reviewers do not see the omitted requirement. The same scientific discipline from earlier sections applies: define the claim, make the rubric legible, and inspect disagreement rather than hide it.
 
 \section{From Improvement to Mechanism: Ablation}
 
@@ -492,7 +501,7 @@ This matters because otherwise human review can collapse into impressionistic sc
 An ablation study isolates the contribution of one component or design choice by removing or changing it while holding the rest of the system as fixed as possible.
 \end{definition}
 
-Benchmarking tells us that a bundle improved. Ablation begins to tell us why. This is the transition from evidence of improvement to evidence about mechanism.
+Benchmarking tells us a bundle improved. Ablation begins to tell us why. This is the transition from evidence of improvement to evidence about mechanism.
 
 \subsection{What Good Ablation Looks Like}
 
@@ -504,11 +513,11 @@ A useful ablation is:
 \item interpreted carefully when components interact.
 \end{itemize}
 
-For example, if a system uses pretraining, augmentation, regularization, and a new architecture block, an honest ablation plan tests each element separately and then in combination. This still may not resolve every interaction, but it is far stronger than presenting only the best final bundle.
+For example, if a system uses pretraining, augmentation, regularization, and a new architecture block, an honest ablation plan tests each element separately and then in combination. This may not resolve every interaction, but it is far stronger than presenting only the best final bundle.
 
 \subsection{Mechanism Evidence Is Stronger Than Bundle Evidence}
 
-If five changes are introduced at once, the engineering result may still be useful, but the scientific explanation remains weak. Ablation cannot guarantee full explanation, yet it is one of the best tools for reducing unexplained bundle effects.
+If five changes are introduced at once, the engineering result may still be useful, but the scientific explanation stays weak. Ablation cannot guarantee full explanation, yet it is one of the best tools for shrinking unexplained bundle effects.
 
 \subsection{Worked Example: What Actually Caused the Gain?}
 
@@ -532,13 +541,13 @@ Contextual retrieval + grounded generator & 0.872 & 0.962 & best overall perform
 \label{tab:support-assistant-ablation}
 \end{table}
 
-This is a much stronger scientific story than a single final comparison. The table suggests that contextual retrieval accounts for most of the improvement, while generation adds some additional answer quality once the evidence is strong enough. It also shows a tradeoff: the more flexible generator is not as faithful as the template answerer, even when the retriever is improved. The right conclusion is therefore narrower than ``generation is better.'' A stronger conclusion is: in this setup, better retrieval explains most of the gain, and grounded generation adds some value while also increasing unsupported wording risk.
+This is a much stronger scientific story than a single final comparison. The table suggests that contextual retrieval accounts for most of the improvement, while generation adds some answer quality once the evidence is strong enough. It also shows a tradeoff: the more flexible generator is not as faithful as the template answerer, even when the retriever is improved. The right conclusion is therefore narrower than ``generation is better.'' A stronger conclusion: in this setup, better retrieval explains most of the gain, and grounded generation adds some value while also raising unsupported-wording risk.
 
 Ablation asks what caused the gain; error analysis asks where that gain stops helping. Both are needed before a result can support a serious deployment-facing sentence.
 
 \section{Error Analysis and Slice Diagnosis: Where Does It Fail?}
 
-Aggregate metrics hide structure. This is one of the most important lessons in the whole book. Ablation asks why the system improved; error analysis asks where that story breaks.
+Aggregate metrics hide structure. This is one of the most important lessons in the whole book. Ablation asks why the system improved. Error analysis asks where that story breaks.
 
 \begin{thinkingtool}
 \textbf{Slice diagnosis.} Do not trust one aggregate score until you inspect where performance fails, what kinds of mistakes dominate those slices, and whether those failures matter for deployment.
@@ -564,10 +573,10 @@ An overall score of $84.6\%$ may sound respectable. But Slice B accuracy is
 \frac{15}{30} = 0.5.
 \]
 
-If Slice B contains questions that should have been escalated or handled with much stronger caution, then the overall score is concealing a deployment-critical failure. A system that looks respectable in aggregate may still be unsafe exactly where the institutional stakes are highest.
+If Slice B contains questions that should have been escalated or handled with much stronger caution, the overall score is hiding a deployment-critical failure. A system that looks respectable in aggregate can still be unsafe exactly where the institutional stakes are highest.
 
 \begin{example}[Contrast Case: A Vision Gain That Fails on the Slice That Matters]
-Suppose a new pedestrian detector raises daytime campus-camera average precision from $0.91$ to $0.93$, but on the night-rain slice from the earlier vision chapter it drops from $0.74$ to $0.58$. The honest conclusion is not that the detector improved. It is that the new detector improved one familiar slice while becoming worse on a deployment-critical slice. That is exactly the kind of result a claim audit is supposed to surface before launch language appears.
+Suppose a new pedestrian detector raises daytime campus-camera average precision from $0.91$ to $0.93$, but on the night-rain slice from the earlier vision chapter it drops from $0.74$ to $0.58$. The honest conclusion is not that the detector improved. It is that the new detector improved on one familiar slice while becoming worse on a deployment-critical one. That is exactly the kind of result a claim audit should surface before launch language appears.
 \end{example}
 
 \subsection{Useful Slices}
@@ -584,13 +593,15 @@ Useful slices usually come from one of four sources:
 
 Error analysis is not just subgroup tabulation. It also means reading false positives, false negatives, calibration failures, confusing examples, and cases where the model is confidently wrong.
 
+
+
 \begin{practicalnote}
-If you know only how many mistakes occurred, but not what kinds of mistakes they were, you still do not understand the model well enough to make a strong claim.
+If you know only how many mistakes occurred, not what kinds, you do not understand the model well enough to make a strong claim.
 \end{practicalnote}
 
 \subsection{From Error Clusters to the Next Experiment}
 
-Error analysis becomes much more valuable when it leads to the next controlled experiment rather than a vague impression that ``the model struggles on hard cases.'' The purpose of reading failures is to propose a sharper rival explanation and then test it.
+Error analysis is much more valuable when it leads to the next controlled experiment rather than to a vague impression that ``the model struggles on hard cases.'' The purpose of reading failures is to propose a sharper rival explanation and then test it.
 
 \begin{table}[t]
 \centering
@@ -610,7 +621,7 @@ Night-rain detector failures despite strong daytime metrics & shortcut learning 
 \label{tab:error-cluster-next-experiment}
 \end{table}
 
-This table embodies a habit worth reusing across the whole book. A failure pattern should usually trigger one of three responses:
+This table embodies a habit worth reusing across the whole book. A failure pattern should typically trigger one of three responses:
 \begin{itemize}[leftmargin=*]
 \item a cleaner evaluation slice,
 \item a sharper ablation,
@@ -620,10 +631,10 @@ What it should \emph{not} trigger is immediate storytelling about the model's ``
 
 \subsection{When the Right Conclusion Is to Change the Claim}
 
-Sometimes error analysis does not suggest a fix strong enough to preserve the original claim. That is still scientifically valuable. If a support assistant remains brittle on institution-specific advising cases, the right move may be to narrow the claim from ``automated answering'' to ``retrieval support plus escalation.'' If a detector fails under the visibility conditions that matter most, the right conclusion may be to redesign the operating envelope rather than to celebrate average performance.
+Sometimes error analysis does not suggest a fix strong enough to preserve the original claim. That is still scientifically valuable. If a support assistant remains brittle on institution-specific advising cases, the right move may be to narrow the claim from ``automated answering'' to ``retrieval support plus escalation.'' If a detector fails under the visibility conditions that matter most, the right conclusion may be to redesign the operating envelope rather than celebrate average performance.
 
 \begin{evidencebox}
-Strong experimental work does not insist that every result end with a larger claim. Sometimes the highest-quality outcome of a chapter's protocol is a smaller, better-defended claim or a decision not to deploy yet.
+Strong experimental work does not insist that every result end with a larger claim. Sometimes the highest-quality outcome is a smaller, better-defended claim, or a decision not to deploy yet.
 \end{evidencebox}
 
 \section{Claim Scope: Local, External, and Negative Results}
@@ -636,7 +647,7 @@ After the protocol, controls, uncertainty, mechanism evidence, and failure analy
 
 \subsection{Local Claims Versus Broad Claims}
 
-If an experiment compares two methods on one dataset under one evaluation protocol, the strongest supported claim is usually local:
+If an experiment compares two methods on one dataset under one evaluation protocol, the strongest supported claim is local:
 \begin{quote}
 Under this held-out course-support dataset, document snapshot, grading rubric, and implementation, contextual retrieval plus grounded generation outperformed the lexical-template baseline.
 \end{quote}
@@ -647,29 +658,29 @@ Retrieval-augmented generation is generally better for student support, policy a
 
 \subsection{External Validity}
 
-A result may be internally valid and still have weak \emph{external validity}, meaning the finding may be real on the benchmark at hand yet transfer poorly to new domains, institutions, devices, or future data. Claims about robustness, fairness, or general usefulness usually require broader evidence than one benchmark score.
+A result may be internally valid and still have weak \emph{external validity}: the finding may be real on the benchmark at hand yet transfer poorly to new domains, institutions, devices, or future data. Claims about robustness, fairness, or general usefulness usually require broader evidence than one benchmark score.
 
 \subsection{Negative and Partial Results}
 
-A result showing failure under noise, subgroup shift, or strict chronological evaluation is still a result. Negative findings often clarify the real limits of an approach and may be scientifically more valuable than another narrow leaderboard gain.
+A result showing failure under noise, subgroup shift, or strict chronological evaluation is still a result. Negative findings often clarify the real limits of an approach and can be scientifically more valuable than another narrow leaderboard gain.
 
 \section{Prediction Is Not Causation}
 
-A predictive model learns associations between inputs and outputs. That is often enough for forecasting or ranking, but it is not enough to justify an intervention. Learning that umbrella sales predict rain does not mean selling umbrellas causes rain. Learning that students who visit the tutoring center later earn lower grades does not mean tutoring causes poor performance. The chapter's workflow therefore needs one last warning before deployment: a predictive win does not automatically license a causal story.
+A predictive model learns associations between inputs and outputs. That is often enough for forecasting or ranking, but it does not justify an intervention. Learning that umbrella sales predict rain does not mean selling umbrellas causes rain. Learning that students who visit the tutoring center later earn lower grades does not mean tutoring causes poor performance. The chapter's workflow therefore needs one last warning before deployment: a predictive win does not automatically license a causal story.
 
 \begin{thinkingtool}
 \textbf{Association versus causation.} A model that predicts $Y$ from $X$ has learned $P(Y \mid X)$, the conditional distribution of outcomes given inputs. This does not tell us what happens if we \emph{intervene} to change $X$. The causal question is: does changing $X$ cause $Y$ to change?
 \end{thinkingtool}
 
-The course-support assistant makes the danger concrete. Suppose the model learns that students with fewer early help-desk visits tend to score lower on the midterm. Using that signal to \emph{identify} at-risk students may be useful. Using it to conclude that mandatory tutoring is the right intervention is a stronger claim: low help-seeking may be a cause, or it may be a symptom of disengagement, schedule constraints, or prerequisite gaps. The prediction alone does not decide among those stories.
+The course-support assistant makes the danger concrete. Suppose the model learns that students with fewer early help-desk visits tend to score lower on the midterm. Using that signal to \emph{identify} at-risk students can be useful. Using it to conclude that mandatory tutoring is the right intervention is a stronger claim. Low help-seeking may be a cause, or it may be a symptom of disengagement, schedule constraints, or prerequisite gaps. The prediction alone does not decide among those stories.
 
 By contrast, the pedestrian detector is less causally ambiguous. The system predicts whether a pedestrian is present, and the downstream action is to brake. The main scientific question is reliability under the chapter's evaluation protocol: false negatives, false positives, latency, and slice performance. The system still needs careful testing, but it does not require the same causal leap from correlation to intervention design.
 
 \begin{practicalnote}
-If a deployment action changes treatment, resources, or opportunity, write the causal assumption explicitly in the claim sheet. If that assumption is supported only by observational correlation, keep the claim narrow or run a pilot experiment before treating the model as a policy guide.
+If a deployment action changes treatment, resources, or opportunity, write the causal assumption explicitly in the claim sheet. If only observational correlation supports that assumption, keep the claim narrow or run a pilot experiment before treating the model as a policy guide.
 \end{practicalnote}
 
-By the end of this chapter, the reader should be able to write down not only what result they obtained, but what scientific sentence it actually supports. Earlier artifacts in the book named the decision, the metric, the evaluation boundary, the baseline family, the structure diagnosis, the training claim, the reuse plan, the modality-specific deployment constraints, and the sequential prediction-time contract. This chapter's sheet adds the scientific-argument layer: which premise is fixed, which rival explanation is blocked, and what scope remains.
+By the end of this chapter, the reader should be able to write down not only what result they obtained but what scientific sentence it actually supports. Earlier artifacts in the book named the decision, the metric, the evaluation boundary, the baseline family, the structure diagnosis, the training claim, the reuse plan, the modality-specific deployment constraints, and the sequential prediction-time contract. This chapter's sheet adds the scientific-argument layer: which premise is fixed, which rival explanation is blocked, and what scope remains.
 
 \begin{table}[t]
 \centering
@@ -701,11 +712,11 @@ Stronger claim still unsupported & What the result does \emph{not} justify yet \
 \end{thinkingtool}
 
 \begin{practicalnote}
-Treat the claim sheet as a table that is filled throughout the chapter, not as prose written at the end. The baseline and metric are filled before the run, the repeated-run summary after stability checks, the mechanism row after ablation, the slice row after error analysis, and the strongest supported claim only after those rows stop changing.
+Treat the claim sheet as a table filled throughout the chapter, not prose written at the end. Fill the baseline and metric before the run, the repeated-run summary after stability checks, the mechanism row after ablation, the slice row after error analysis, and the strongest supported claim only after those rows stop changing.
 \end{practicalnote}
 
 \begin{example}[Filled Experiment Claim Sheet]
-For the $0.004$ gain in Table~\ref{tab:score-improved-so-what}, a disciplined sheet might read as follows: claim in one sentence is ``the contextual-retrieval support assistant improves held-out answer accuracy over the lexical-template baseline on this question set''; strongest baseline is the grounded lexical-template system rather than an ungrounded chatbot; protocol assumptions are identical question splits, frozen policy-document snapshot, fixed grading rubric, and no test-set reuse; sources of randomness include initialization, retrieval tie breaking, and generation stochasticity; repeated-run summary now shows a modest mean gain across five seeds, so the pilot no longer rests on one lucky run; essential ablations are still missing for that pilot comparison, so the mechanism behind the gain remains unresolved; critical slices include multilingual questions, distressed messages, and high-risk advising requests where aggregate accuracy may hide failure; remaining alternative explanations include weak controls, better retrieval rather than better generation, and unsafe slice tradeoffs; strongest supported claim right now is that under this protocol the contextual-retrieval system achieved a modest accuracy gain on this benchmark; stronger unsupported claim is that the new system is generally better for course support or safer for deployment.
+For the $0.004$ gain in Table~\ref{tab:score-improved-so-what}, a disciplined sheet might read as follows. Claim in one sentence: ``the contextual-retrieval support assistant improves held-out answer accuracy over the lexical-template baseline on this question set.'' Strongest baseline: the grounded lexical-template system rather than an ungrounded chatbot. Protocol assumptions: identical question splits, frozen policy-document snapshot, fixed grading rubric, and no test-set reuse. Sources of randomness: initialization, retrieval tie breaking, and generation stochasticity. Repeated-run summary: a modest mean gain across five seeds, so the pilot no longer rests on one lucky run. Essential ablations: still missing for that pilot comparison, so the mechanism behind the gain remains unresolved. Critical slices: multilingual questions, distressed messages, and high-risk advising requests where aggregate accuracy may hide failure. Remaining alternative explanations: weak controls, better retrieval rather than better generation, and unsafe slice tradeoffs. Strongest supported claim right now: under this protocol the contextual-retrieval system achieved a modest accuracy gain on this benchmark. Stronger unsupported claim: that the new system is generally better for course support, or safer for deployment.
 \end{example}
 
 \section{Common Mistakes in Experimental Work}
@@ -720,7 +731,7 @@ These mistakes are surface forms of the chapter's main enemy:
 \item \textbf{Changing too many things at once.} This may improve the final system, but it weakens the explanation.
 \item \textbf{Choosing weak baselines.} A poor control can make a weak gain look impressive.
 \item \textbf{Reporting only the best run.} The best run is often the least informative summary when the method is stochastic.
-\item \textbf{Using only aggregate metrics.} Aggregate numbers can hide subgroup failures and deployment tradeoffs.
+\item \textbf{Using only aggregate metrics.} Aggregate numbers hide subgroup failures and deployment tradeoffs.
 \item \textbf{Making claims larger than the evidence.} A strong-sounding conclusion can still be scientifically weak if the experiment is narrow.
 \item \textbf{Confusing benchmarking with explanation.} A benchmark tells us which number is larger, not why.
 \end{mistakebox}
@@ -731,7 +742,7 @@ This chapter treated experiments as scientific arguments. The next chapter exten
 
 \section*{Chapter Summary}
 
-An experimental result means only what its claim, controls, and uncertainty allow it to mean. Strong baselines, protected protocols, repeated runs, ablations, and slice analysis are what turn a score change into evidence rather than optimism. The central habit of the chapter is claim audit: write the strongest sentence the evidence supports, and refuse the stronger sentences it does not.
+An experimental result means only what its claim, controls, and uncertainty allow it to mean. Strong baselines, protected protocols, repeated runs, ablations, and slice analysis turn a score change into evidence rather than optimism. The central habit of the chapter is claim audit: write the strongest sentence the evidence supports, and refuse the stronger sentences it does not.
 
 \begin{studyquestions}
 \item Why is it useful to think of an experiment as an argument rather than as a scoreboard entry?
@@ -753,6 +764,7 @@ An experimental result means only what its claim, controls, and uncertainty allo
 \item \exercisetag{Concept}{Intermediate}For a retrieval-augmented support assistant, name one slice where generation quality matters most and one slice where escalation quality matters most. Explain why the evidence should differ.
 \item \exercisetag{Diagnosis}{Advanced}A pedestrian detector improves on familiar daytime footage but degrades on night-rain or unseen-camera slices. State the strongest honest claim and one deployment recommendation that follows.
 \item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:experiment-claim-sheet} to sketch an experiment claim sheet for a system of your choice. If you are carrying one case through the book, state which earlier artifact supplies the baseline, the critical slices, and the strongest remaining deployment limitation.
+\item \exercisetag{Implementation}{Intermediate}Implement a paired bootstrap confidence interval and verify its coverage. Write \verb|paired_bootstrap_ci(d, B=2000, alpha=0.05)| that takes a vector \verb|d| of paired model differences, resamples with replacement $B$ times, and returns the $2.5$th and $97.5$th percentile of the bootstrapped means. Then run a simulation: for $\mu \in \{0, 0.05\}$, draw $n=200$ paired differences from $\mathcal{N}(\mu, 1)$, compute your interval, and record whether the true $\mu$ is inside it. Repeat 1{,}000 times for each $\mu$ and report the empirical coverage. Confirm both rates are close to $95\%$ and explain why $\mu=0$ and $\mu=0.05$ should both yield comparable coverage even though one is significant and the other is not.
 \end{exercises}
 
 \begin{challengeexercises}

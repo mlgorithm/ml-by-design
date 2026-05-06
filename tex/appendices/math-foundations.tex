@@ -1,532 +1,115 @@
-\chapter{Mathematical Foundations for the Main Text}
+\chapter{Notation Reference}
+\label{app:math}
 
-This appendix is not meant to replace a full course in calculus, linear algebra, probability, or statistics. Its purpose is narrower and more practical. The main chapters of this book are written at a later-bachelor level, but mathematically ambitious readers and self-learners may still want a compact bridge into the notation and habits of university-level machine learning. This appendix provides that bridge.
+This appendix is a notation reference, not a tutorial. The two mathematical bridges at the start of the book develop these objects in context: Bridge~I introduces representation, vectors, matrices, norms, and geometry; Bridge~II introduces probability, loss, empirical risk, and gradients. The main chapters then build on that vocabulary. This appendix collects the resulting symbols and conventions in one place so that a reader who has worked through the bridges can look up a forgotten symbol without rereading the development. Entries point to the chapter or bridge where the object is introduced.
 
-The right attitude toward this material is not to memorize every formula in isolation. The goal is to become comfortable reading notation inside an argument. If a chapter uses a dot product, a conditional probability, a loss function, a gradient, or a confidence interval, the reader should be able to answer three questions:
-\begin{itemize}[leftmargin=*]
-\item what object is being described,
-\item what role the object plays in the model or evaluation,
-\item what the expression means in plain language.
-\end{itemize}
+\section{Typographic Conventions}
 
-\begin{prereqbridge}
-The appendix is designed for legibility, not for maximum formal completeness. If you can read the symbols in context and connect them to the modeling story, then it is doing its job.
-\end{prereqbridge}
-
-\section{Scalars, Vectors, and Matrices}
-
-Machine learning is mostly about structured collections of numbers. Three objects appear constantly:
-\begin{itemize}[leftmargin=*]
-\item a \textbf{scalar} is one number, such as a probability $p$, a loss value $\mathcal{L}$, or a coefficient $\beta$,
-\item a \textbf{vector} is an ordered list of numbers, such as a feature vector $x$ or a parameter vector $w$,
-\item a \textbf{matrix} is a rectangular grid of numbers, such as a dataset $X$ with one row per example and one column per feature.
-\end{itemize}
-
-If an example has $d$ features, we may write it as
-\[
-x = [x_1, x_2, \ldots, x_d]^\top.
-\]
-This notation simply means that the example has $d$ coordinates or feature values. The superscript $\top$ indicates transpose and is often used to write the vector as a column rather than a row.
-
-If another vector of the same length is
-\[
-w = [w_1, w_2, \ldots, w_d]^\top,
-\]
-then their dot product is
-\[
-w^\top x = \sum_{j=1}^{d} w_j x_j.
-\]
-This is one of the most important operations in the book. A dot product is a weighted sum. In linear models, the vector $w$ contains coefficients and the vector $x$ contains features. The dot product therefore combines many signals into a single score.
-
-\begin{prereqbridge}
-If the notation $w^\top x$ feels abstract, read it as ``multiply each feature by its weight, then add the results.'' That informal sentence is often all you need in early chapters.
-\end{prereqbridge}
-
-\subsection{Matrices as Datasets}
-
-If a dataset has $n$ examples and $d$ features, a common representation is
-\[
-X \in \mathbb{R}^{n \times d}.
-\]
-This means that $X$ is a matrix with $n$ rows and $d$ columns. The entry in row $i$ and column $j$ is often written as $x_{ij}$.
-
-It is useful to keep the two index roles separate:
-\begin{itemize}[leftmargin=*]
-\item $i$ usually identifies the example,
-\item $j$ usually identifies the feature.
-\end{itemize}
-
-So a formula such as
-\[
-\hat{y}_i = \sum_{j=1}^{d} w_j x_{ij}
-\]
-should be read in two layers. The subscript $i$ identifies the example, and the subscript $j$ moves across the features of that example. This is just a more explicit way of writing a dot product.
-
-\subsection{Matrix Multiplication as Many Dot Products at Once}
-
-If we multiply the dataset matrix $X$ by the parameter vector $w$, we get
-\[
-Xw =
-\begin{bmatrix}
-x_1^\top w \\
-x_2^\top w \\
-\vdots \\
-x_n^\top w
-\end{bmatrix}.
-\]
-This means that matrix multiplication is often just a compact way to compute one linear score for each example in the dataset. In practice, a great deal of machine-learning notation is simply compressed bookkeeping for many repeated dot products or weighted sums.
-
-\section{Summation, Means, and Indexing}
-
-Machine-learning formulas often use summation notation because datasets contain many examples and each example contains many features. For instance,
-\[
-\sum_{i=1}^{n} (y_i - \hat{y}_i)^2
-\]
-means: for each example indexed by $i$ from $1$ to $n$, compute the squared difference between the true target $y_i$ and the prediction $\hat{y}_i$, then add all those values together.
-
-Several recurring symbols are worth reading fluently:
-\begin{itemize}[leftmargin=*]
-\item $\sum$ means add many terms,
-\item $\prod$ means multiply many terms,
-\item $\frac{1}{n}\sum_{i=1}^{n} a_i$ means the average of the values $a_1,\ldots,a_n$.
-\end{itemize}
-
-The sample mean of numbers $a_1,\ldots,a_n$ is
-\[
-\bar{a} = \frac{1}{n}\sum_{i=1}^{n} a_i.
-\]
-This appears everywhere: average loss, average accuracy over runs, average error on a slice, or average confidence of a prediction rule.
-
-\subsection{Why Means Matter}
-
-Many quantities in machine learning are empirical averages. For example:
-\begin{itemize}[leftmargin=*]
-\item training loss is usually the average loss across training examples,
-\item validation accuracy is the average correctness across validation examples,
-\item repeated-run summaries often report the average metric across seeds.
-\end{itemize}
-
-This is conceptually helpful. A machine-learning objective often looks complicated, but many of them are simply averages of per-example penalties.
-
-\section{Functions That Appear Everywhere}
-
-\subsection{Logarithms and Exponentials}
-
-Logarithms and exponentials appear throughout machine learning because they are tightly connected to probabilities, growth, and optimization.
-
-The natural exponential function is written as $e^z$, and its inverse is the natural logarithm $\log z$. Two properties matter constantly:
-\[
-\log(ab) = \log a + \log b,
-\qquad
-\log\left(\frac{a}{b}\right) = \log a - \log b.
-\]
-These properties make logarithms useful for turning products of probabilities into sums, which are easier to analyze and optimize.
-
-\subsection{The Sigmoid Function}
-
-The sigmoid function is
-\[
-\sigma(z) = \frac{1}{1+e^{-z}}.
-\]
-It turns any real number into a value between $0$ and $1$. Large positive values of $z$ map to probabilities near $1$, large negative values map to probabilities near $0$, and $z=0$ maps to $0.5$. This is why logistic regression uses the sigmoid: it converts a linear score into a probability-like output.
-
-\subsection{The Softmax Function}
-
-For multiclass prediction, a model often needs a probability distribution over several classes rather than one binary probability. If a model produces class scores $z_1,\ldots,z_K$, the softmax is
-\[
-\mathrm{softmax}(z)_k = \frac{e^{z_k}}{\sum_{\ell=1}^{K} e^{z_\ell}}.
-\]
-This transforms arbitrary real-valued scores into nonnegative values that sum to $1$. Conceptually, the softmax says: larger scores receive larger probabilities, but all class probabilities must fit into one normalized distribution.
-
-\begin{prereqbridge}
-You do not need to memorize the softmax formula immediately. It is enough at first to know that it turns class scores into a probability distribution over classes.
-\end{prereqbridge}
-
-\section{Probability Language}
-
-If a model predicts a probability, the reader should know what that means. A probability such as $P(y=1 \mid x)$ is read as ``the probability that $y=1$ given $x$.'' The vertical bar means ``given'' or ``conditioned on.''
-
-Conditional probability matters because machine learning almost always predicts targets \emph{given} inputs. A spam classifier does not estimate the overall fraction of spam in the universe. It estimates the probability that a message is spam \emph{given the features of that message}.
-
-Several ideas return frequently:
-\begin{itemize}[leftmargin=*]
-\item a probability lies between $0$ and $1$,
-\item conditional probabilities depend on what information is available,
-\item a model can assign probabilities even when it is uncertain, and that uncertainty can itself be useful.
-\end{itemize}
-
-\subsection{Random Variables and Distributions}
-
-A \textbf{random variable} is a quantity whose value is uncertain. In the book, $Y$ often denotes the target variable and $X$ the input. A distribution describes how likely different values are. For a binary target, we might write
-\[
-P(Y=1) = p,
-\qquad
-P(Y=0) = 1-p.
-\]
-
-For a multiclass target with classes $1,\ldots,K$, a model might output probabilities
-\[
-P(Y=1 \mid x),\ P(Y=2 \mid x),\ \ldots,\ P(Y=K \mid x),
-\]
-which together sum to $1$.
-
-\subsection{Joint, Marginal, and Conditional Probability}
-
-Three related probability ideas appear often:
-\begin{itemize}[leftmargin=*]
-\item a \textbf{joint probability} such as $P(X,Y)$ describes two variables together,
-\item a \textbf{marginal probability} such as $P(Y)$ ignores other variables,
-\item a \textbf{conditional probability} such as $P(Y \mid X)$ asks about one variable given another.
-\end{itemize}
-
-The relation
-\[
-P(X,Y) = P(Y \mid X)P(X)
-\]
-is one of the basic identities that underlies probabilistic modeling. It simply says that the probability of both events occurring can be decomposed into first seeing $X$ and then seeing $Y$ given $X$.
-
-\subsection{Bayes' Rule}
-
-Bayes' rule is
-\[
-P(Y \mid X) = \frac{P(X \mid Y)P(Y)}{P(X)}.
-\]
-This matters because it connects a posterior probability, which is often what we want, to a likelihood and a prior. In practical machine learning, Bayes' rule is most important conceptually. It reminds us that predictions can change when either the evidence or the prior assumptions change.
-
-\section{Expectation, Variance, and Covariance}
-
-\subsection{Expectation}
-
-The expectation of a random variable is its long-run average or average value under the distribution. For a discrete variable $Z$ taking values $z$,
-\[
-\mathbb{E}[Z] = \sum_z z \, P(Z=z).
-\]
-
-In machine learning, expectation appears whenever we speak about expected loss, expected error, or average performance under a data-generating process. Empirical averages over a dataset are often used as estimates of these theoretical expectations.
-
-\subsection{Variance}
-
-Variance measures spread:
-\[
-\mathrm{Var}(Z) = \mathbb{E}\left[(Z - \mathbb{E}[Z])^2\right].
-\]
-If the variance is small, values tend to stay near the mean. If it is large, values vary more widely.
-
-This matters for repeated runs, prediction uncertainty, and confidence intervals. A model with strong mean performance but high variability may be less dependable than a slightly weaker but more stable model.
-
-\subsection{Covariance and Correlation}
-
-Covariance measures whether two quantities move together:
-\[
-\mathrm{Cov}(X,Y) = \mathbb{E}\left[(X-\mathbb{E}[X])(Y-\mathbb{E}[Y])\right].
-\]
-If the covariance is positive, larger values of one variable tend to occur with larger values of the other. Correlation rescales covariance into a unitless measure between $-1$ and $1$.
-
-This matters because machine-learning features are rarely independent in practice. Correlated features can make coefficient interpretation harder, can change optimization behavior, and can explain why a model seems to discover signal that is really a proxy for something else.
-
-\section{Loss Functions and Objectives}
-
-Learning usually means choosing parameters that make a loss function small. A \textbf{loss} assigns a penalty to one prediction on one example. An \textbf{objective} is often an average of those losses across the dataset.
-
-\subsection{Squared Error}
-
-For regression, one common loss is squared error:
-\[
-\ell(y,\hat{y}) = (y-\hat{y})^2.
-\]
-The average squared error across the dataset is
-\[
-\mathcal{L}(w) = \frac{1}{n}\sum_{i=1}^{n}(y_i - \hat{y}_i)^2.
-\]
-Large errors are penalized more heavily than small ones because of the squaring.
-
-\subsection{Log Loss and Cross-Entropy}
-
-For binary classification, if a model outputs predicted probability $\hat{p}_i$ for the positive class, the log loss on example $i$ is
-\[
-\ell_i = -\left[y_i \log \hat{p}_i + (1-y_i)\log(1-\hat{p}_i)\right].
-\]
-This loss becomes very large when the model assigns low probability to the true label. That is one reason log loss is useful: it punishes confident mistakes strongly.
-
-For multiclass classification, the same idea generalizes to cross-entropy. Conceptually, cross-entropy rewards assigning high probability to the true class and penalizes spreading too much probability mass onto wrong classes.
-
-\begin{mathlens}
-Loss functions are not just optimization devices. They encode what kinds of mistakes the training process will care about. That is why Chapter~\ref{ch:prediction-loss-decision} treats metric choice and Chapter~\ref{ch:reliability} treats bounded-failure choice as part of the real modeling problem.
-\end{mathlens}
-
-\subsection{Regularized Objectives}
-
-Often we do not minimize only the data-fit term. We add a regularization penalty:
-\[
-\mathcal{L}_{\text{reg}}(w) = \frac{1}{n}\sum_{i=1}^{n}\ell_i + \lambda \Omega(w),
-\]
-where $\Omega(w)$ measures the size or complexity of the parameter vector and $\lambda$ controls how strongly we penalize it.
-
-This is a clean mathematical way to express a modeling preference: fit the data, but do not do so with unnecessarily extreme or unstable parameter values.
-
-\section{Derivatives, Gradients, and the Chain Rule}
-
-Modern machine learning relies heavily on optimization, and optimization relies heavily on derivatives. A derivative measures how a quantity changes when one variable changes slightly. If a function $f(x)$ has derivative $f'(x)$, then $f'(x)$ tells us the local slope of the function at $x$.
-
-\subsection{Partial Derivatives and Gradients}
-
-In many dimensions, the analogue of the derivative is the gradient. If a function depends on many parameters, the gradient collects the partial derivatives with respect to each parameter:
-\[
-\nabla_\theta \mathcal{L} =
-\left[
-\frac{\partial \mathcal{L}}{\partial \theta_1},
-\frac{\partial \mathcal{L}}{\partial \theta_2},
-\ldots
-\right]^\top.
-\]
-
-Why is this useful? Because the gradient points in the direction of increasing loss. If we want to reduce the loss, we usually move in the opposite direction.
-
-\subsection{Gradient Descent}
-
-The basic gradient-descent update is
-\[
-\theta \leftarrow \theta - \eta \nabla_\theta \mathcal{L},
-\]
-where $\eta$ is the learning rate. The symbol $\leftarrow$ means ``update the old value to the new value.''
-
-This rule says: compute how the loss changes with respect to each parameter, then move the parameter vector a little in the direction that reduces the loss. Nearly all modern neural-network training is a scaled-up variant of this idea.
-
-\subsection{Why the Learning Rate Matters}
-
-If the learning rate is too small, optimization moves slowly. If it is too large, updates may overshoot and become unstable. This is one reason Chapter~\ref{ch:optimization-neural-networks} emphasizes training curves and optimization diagnosis. The math is simple; the behavior can still be tricky.
-
-\subsection{The Chain Rule}
-
-The chain rule explains how derivatives pass through compositions of functions. If
-\[
-z = g(x)
-\qquad \text{and} \qquad
-y = f(z),
-\]
-then
-\[
-\frac{dy}{dx} = \frac{dy}{dz}\frac{dz}{dx}.
-\]
-This matters because neural networks are layered compositions of simpler transformations. Backpropagation is largely an organized application of the chain rule to many nested functions.
-
-\begin{prereqbridge}
-You do not need to derive backpropagation from scratch to read the main chapters. At first, it is enough to know that gradients tell the model how to adjust parameters so the loss goes down, and that the chain rule is what lets that signal move backward through many layers.
-\end{prereqbridge}
-
-\section{Norms, Distance, Similarity, and Regularization}
-
-When the book discusses regularization, representation size, or nearest neighbors, it often refers to norms and distances.
-
-\subsection{Norms}
-
-Two especially common norms are:
-\[
-\|w\|_1 = \sum_{j=1}^{d} |w_j|,
-\qquad
-\|w\|_2^2 = \sum_{j=1}^{d} w_j^2.
-\]
-
-The first adds absolute values. The second adds squared values. These are ways of measuring the size of the coefficient vector. In regularized models, we penalize large norms because we want to discourage overly extreme solutions unless the data truly supports them.
-
-\subsection{Distance}
-
-The Euclidean distance between two vectors $x$ and $x'$ is
-\[
-\|x-x'\|_2 = \sqrt{\sum_{j=1}^{d}(x_j - x_j')^2}.
-\]
-This matters in nearest-neighbor methods, clustering, and geometric intuition about representation spaces.
-
-\subsection{Cosine Similarity}
-
-Cosine similarity between vectors $x$ and $x'$ is
-\[
-\cos(\theta) = \frac{x^\top x'}{\|x\|_2\|x'\|_2}.
-\]
-It measures directional similarity rather than absolute magnitude similarity. This is useful in text retrieval and embedding-based similarity, where the angle between vectors can matter more than their lengths.
-
-\section{Statistics for Evaluation}
-
-The book repeatedly argues that model claims depend on disciplined evidence. That requires a little statistical language.
-
-\subsection{Sample Mean and Sample Standard Deviation}
-
-If repeated runs produce metrics $m_1,\ldots,m_S$, the sample mean is
-\[
-\bar{m} = \frac{1}{S}\sum_{s=1}^{S} m_s.
-\]
-The sample standard deviation is
-\[
-s_m = \sqrt{\frac{1}{S-1}\sum_{s=1}^{S}(m_s - \bar{m})^2}.
-\]
-The mean summarizes typical performance. The sample standard deviation \(s_m\) summarizes instability across runs; this book generally reserves \(\sigma\) for population or noise scales and for named functions such as the sigmoid.
-
-\subsection{Standard Error and Confidence Intuition}
-
-The \textbf{standard error of the mean} is roughly
-\[
-\mathrm{SE} = \frac{s_m}{\sqrt{S}}.
-\]
-This quantity gets smaller as we average more repeated runs, all else equal. A confidence interval uses the standard error to express uncertainty about the mean. The exact formulas depend on assumptions, but the core interpretation is simple: the estimate is not exact, and uncertainty should be reported rather than ignored.
-
-\begin{mathlens}
-The practical lesson is more important than the formula. If one method beats another by a tiny amount and the repeated-run uncertainty is similar in size, then the scientific conclusion should stay cautious.
-\end{mathlens}
-
-\subsection{Confusion Matrix Language}
-
-For binary classification, four counts recur:
-\begin{itemize}[leftmargin=*]
-\item true positives (\(\mathrm{TP}\)),
-\item false positives (\(\mathrm{FP}\)),
-\item true negatives (\(\mathrm{TN}\)),
-\item false negatives (\(\mathrm{FN}\)).
-\end{itemize}
-
-From these counts, several metrics are built:
-\[
-\mathrm{Accuracy} = \frac{\mathrm{TP}+\mathrm{TN}}{\mathrm{TP}+\mathrm{FP}+\mathrm{TN}+\mathrm{FN}},
-\]
-\[
-\mathrm{Precision} = \frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FP}},
-\qquad
-\mathrm{Recall} = \frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FN}}.
-\]
-
-These formulas matter because they reveal which kinds of error the metric is sensitive to. Accuracy can look strong even when recall on a critical minority class is poor. That is why later chapters insist on slice analysis and metric choice tied to the application.
-
-\subsection{Thresholds}
-
-Many probabilistic classifiers produce a score or probability and then turn it into a discrete decision using a threshold. For example, a system may predict class $1$ when
-\[
-P(Y=1 \mid x) > 0.5.
-\]
-But $0.5$ is not sacred. If false negatives are more costly than false positives, a lower threshold may be justified. If automation should be conservative, a higher threshold may be justified. Threshold choice is therefore part of the decision policy, not just a final formatting step.
-
-\subsection{Calibration}
-
-Students should also distinguish probability from frequency in one sample. If a model assigns probability $0.8$ to many similar cases, we hope that about $80\%$ of them truly belong to the positive class. This is the intuition behind calibration.
-
-Calibration matters especially when scores drive downstream action. If a support assistant uses confidence to decide whether to answer directly or escalate to a human, then badly calibrated confidence can become a safety problem, not just a cosmetic modeling problem.
-
-\section{Linear Algebra for Representation Intuition}
-
-Some of the book's deeper modeling chapters use representation language that becomes easier if a few linear-algebra ideas feel natural.
-
-\subsection{Linear Maps}
-
-A matrix $A$ can be read as a linear transformation. When we multiply a vector $x$ by $A$, we get a new vector $Ax$. In machine learning, this often means one representation is being transformed into another:
-\begin{itemize}[leftmargin=*]
-\item raw features become hidden features,
-\item embeddings are projected into a new space,
-\item a classifier turns a representation into class scores.
-\end{itemize}
-
-\subsection{Projection Intuition}
-
-If a vector is projected onto a direction, we are asking how much of the vector lies along that direction. This is one reason dot products are so central: they measure alignment. In a rough geometric sense, linear models ask how strongly an example aligns with a learned direction in feature space.
-
-\subsection{Eigenvectors and Principal Components}
-
-You do not need a full course in spectral methods to read this book, but one intuition is useful. Principal component analysis searches for directions in the data that capture high variance. Those directions are related to eigenvectors of a covariance matrix. The important modeling lesson is not the algebraic machinery itself. It is that high-dimensional data often contains lower-dimensional structure, and linear algebra provides tools for describing it.
-
-\section{Optional Advanced Bridge: Priors, Posteriors, and Latent-Variable Intuition}
-
-Several chapters use Bayesian reasoning and latent-variable models. This section provides the compact mathematical reference for Chapters~\ref{ch:probabilistic-models}, \ref{ch:generative-representations}, and \ref{ch:reliability}. It is not prerequisite material for a first pass through the whole book.
-
-\subsection{Priors and Posteriors}
-
-A \emph{prior} $P(\theta)$ encodes beliefs about a parameter before seeing data. A \emph{likelihood} $P(\text{data} \mid \theta)$ measures how well the parameter explains the observed data. Bayes' theorem combines them into a \emph{posterior}:
-\[
-P(\theta \mid \text{data}) = \frac{P(\text{data} \mid \theta) \, P(\theta)}{P(\text{data})}
-\]
-
-The denominator $P(\text{data}) = \int P(\text{data} \mid \theta) \, P(\theta) \, d\theta$ is called the \emph{evidence} or \emph{marginal likelihood}. It is a normalizing constant that ensures the posterior integrates to one. For many models, this integral is intractable, which motivates approximation methods (variational inference, MCMC).
-
-\subsection{MAP Estimation and Regularization}
-
-\emph{Maximum a posteriori} (MAP) estimation finds the mode of the posterior:
-\[
-\hat{\theta}_{\text{MAP}} = \arg\max_\theta \; P(\text{data} \mid \theta) \, P(\theta)
-\]
-
-Taking the log and expanding:
-\[
-\hat{\theta}_{\text{MAP}} = \arg\max_\theta \; \bigl[\log P(\text{data} \mid \theta) + \log P(\theta)\bigr]
-\]
-
-If $P(\theta) = \mathcal{N}(0, \sigma^2 I)$, then $\log P(\theta) \propto -\frac{1}{2\sigma^2}\|\theta\|^2$, which corresponds to an \(L_2\)-style penalty; the exact coefficient depends on the likelihood model and on whether the data-fit term is summed or averaged. If $P(\theta)$ is a Laplace distribution, the penalty becomes \(L_1\)-style regularization. Regularization is Bayesian prior belief in disguise.
-
-\subsection{Latent Variables and the EM Algorithm}
-
-A \emph{latent variable} $z$ is an unobserved quantity that the model assumes exists. The observed data likelihood becomes:
-\[
-P(x \mid \theta) = \sum_z P(x, z \mid \theta) = \sum_z P(x \mid z, \theta) \, P(z \mid \theta)
-\]
-
-Because the sum (or integral) over $z$ makes direct maximization hard, the \emph{Expectation-Maximization} (EM) algorithm alternates:
+The book uses the following conventions consistently. Where an entry states ``the bridges'' or a chapter label, that is where the convention is established and used.
 
 \begin{itemize}[leftmargin=*]
-\item \textbf{E-step:} Compute $P(z \mid x, \theta^{(t)})$---the posterior over latent variables given current parameters.
-\item \textbf{M-step:} Update $\theta^{(t+1)}$ to maximize the expected complete-data log-likelihood under that posterior.
+\item \textbf{Scalars} are lowercase italic: $n$, $d$, $p$, $\lambda$, $\eta$.
+\item \textbf{Vectors} are lowercase italic, written as columns by default: $x$, $w$, $\theta$. Coordinates are subscripted: $x_j$ is the $j$-th coordinate of $x$.
+\item \textbf{Matrices} are uppercase italic: $X$, $A$, $\Sigma$. Rows index examples and columns index features in a design matrix unless stated otherwise.
+\item \textbf{Random variables} are uppercase italic: $X$, $Y$, $Z$. Realizations are lowercase: $x$, $y$, $z$. Context disambiguates the dual use of $X$ as both a design matrix and a random input.
+\item \textbf{Sets and spaces} use blackboard or calligraphic letters: $\mathbb{R}$, $\mathbb{R}^d$, $\mathcal{D}$ (data-generating distribution), $\mathcal{H}$ (hypothesis class).
+\item \textbf{Estimates and predictions} carry a hat: $\hat{y}$, $\hat{p}$, $\hat{\theta}$, $\hat{R}_n$.
+\item \textbf{Indexing.} The index $i$ ranges over examples ($i=1,\ldots,n$); the index $j$ ranges over features ($j=1,\ldots,d$); the index $k$ ranges over classes ($k=1,\ldots,K$); the index $t$ ranges over time steps.
+\item \textbf{Sample versus population.} Sample quantities use sample notation ($\bar{a}$, $s_m$, $\hat{R}_n$); population or distributional quantities use $\mathbb{E}$, $\mathrm{Var}$, $R$, and named distributions. The symbol $\sigma$ is reserved for the sigmoid function and for population or noise scales; sample standard deviation is written $s_m$ to avoid the clash.
 \end{itemize}
 
-EM never decreases the observed-data log-likelihood (provable via Jensen's inequality), but it can converge to local optima. It underlies Gaussian mixture models, topic models, and many other latent-variable methods discussed in the main text.
+\section{Symbol Table}
 
-\subsection{The Evidence Lower Bound (ELBO)}
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}L{2.0cm}L{4.7cm}L{2.6cm}@{}}
+\toprule
+Symbol & Meaning & Introduced in \\
+\midrule
+$x$ & Input feature vector for one example & Bridge~I \\
+$x_j$ & The $j$-th coordinate of $x$ & Bridge~I \\
+$X$ & Design matrix; rows are examples, columns are features & Bridge~I \\
+$x_i$ & The $i$-th example (row of $X$) & Bridge~I \\
+$y$, $y_i$ & True target for an example & Bridge~II \\
+$\hat{y}$, $\hat{y}_i$ & Predicted output for an example & Ch.~\ref{ch:prediction-loss-decision} \\
+$\hat{p}$, $\hat{p}_i$ & Predicted probability for the positive class & Bridge~II \\
+$w$ & Linear-model weight vector & Bridge~I \\
+$b$ & Bias / intercept scalar & Ch.~\ref{ch:linear-models} \\
+$\theta$ & Generic model parameter vector & Bridge~II \\
+$f_\theta$ & Predictor function with parameters $\theta$ & Bridge~II \\
+$n$ & Number of training examples & Bridges \\
+$d$ & Number of features (input dimension) & Bridge~I \\
+$K$ & Number of classes & Bridge~II \\
+$w^\top x$ & Dot product (weighted sum) of $w$ and $x$ & Bridge~I \\
+$\|x\|_1$ & $\ell_1$ norm: $\sum_j |x_j|$ & Bridge~I \\
+$\|x\|_2$ & $\ell_2$ (Euclidean) norm: $\sqrt{\sum_j x_j^2}$ & Bridge~I \\
+$\|x\|_\infty$ & Max-absolute-value norm: $\max_j |x_j|$ & Bridge~I \\
+$\|A\|_F$ & Frobenius norm of a matrix: $\sqrt{\sum_{ij} A_{ij}^2}$ & Bridge~I \\
+$\sigma(z)$ & Sigmoid function $1/(1+e^{-z})$ & Bridge~II \\
+$\mathrm{softmax}(z)$ & Vector of class probabilities from scores $z$ & Bridge~II \\
+$\log$ & Natural logarithm (base $e$) & Bridge~II \\
+$\exp$, $e^z$ & Exponential function & Bridge~II \\
+$\mathbb{P}$, $P$ & Probability of an event & Bridge~II \\
+$P(Y \mid X)$ & Conditional probability of $Y$ given $X$ & Bridge~II \\
+$\mathbb{E}[Z]$ & Expectation of $Z$ & Bridge~II \\
+$\mathrm{Var}(Z)$ & Variance of $Z$ & Bridge~II \\
+$\mathrm{Cov}(X,Y)$ & Covariance of $X$ and $Y$ & Bridge~II \\
+$X \sim \mathcal{D}$ & $X$ is drawn from distribution $\mathcal{D}$ & Bridge~II \\
+$\ell(y,\hat{y})$ & Pointwise loss on one example & Bridge~II \\
+$R(f)$ & Population risk of predictor $f$ & Bridge~II \\
+$\hat{R}_n(f)$ & Empirical risk on a sample of size $n$ & Bridge~II \\
+$\mathcal{L}(\theta)$ & Training objective as a function of parameters & Bridge~II \\
+$\nabla_\theta \mathcal{L}$ & Gradient of $\mathcal{L}$ with respect to $\theta$ & Bridge~II \\
+$\partial \mathcal{L}/\partial \theta_j$ & Partial derivative with respect to one parameter & Bridge~II \\
+$\eta$ & Learning rate / step size & Bridge~II \\
+$\lambda$ & Regularization strength & Bridge~I, Ch.~\ref{ch:linear-models} \\
+$\Omega(\theta)$ & Regularization penalty (e.g.\ $\|\theta\|_2^2$) & Ch.~\ref{ch:linear-models} \\
+$\tau$ & Decision threshold & Bridge~II, Ch.~\ref{ch:prediction-loss-decision} \\
+$\bar{a}$ & Sample mean of $a_1,\ldots,a_n$ & Bridges \\
+$s_m$ & Sample standard deviation & Ch.~\ref{ch:experiments-claims} \\
+$\mathrm{SE}$ & Standard error of the mean & Ch.~\ref{ch:experiments-claims} \\
+TP, FP, TN, FN & Confusion-matrix counts & Ch.~\ref{ch:prediction-loss-decision} \\
+$:=$, $\leftarrow$ & Definition; assignment / update & Bridges \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-When the E-step is intractable, \emph{variational inference} approximates the true posterior $P(z \mid x, \theta)$ with a simpler distribution $q(z)$. The ELBO provides a lower bound on $\log P(x \mid \theta)$:
-\[
-\log P(x \mid \theta) \geq \mathbb{E}_{q(z)}[\log P(x, z \mid \theta)] - \mathbb{E}_{q(z)}[\log q(z)] = \text{ELBO}
-\]
+\section{Common Formulas}
 
-Maximizing the ELBO simultaneously improves the model fit and brings $q(z)$ closer to the true posterior. Variational autoencoders (Chapter~\ref{ch:generative-representations}) use the ELBO as their training objective.
+The following formulas recur across the book. Each row gives the canonical form used in the text and a chapter pointer.
 
-\section{State-Space Models and Sequential Inference}
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}L{3.2cm}L{4.0cm}L{2.0cm}@{}}
+\toprule
+Name & Formula & Pointer \\
+\midrule
+Linear score & $w^\top x + b$ & Ch.~\ref{ch:linear-models} \\
+Sigmoid & $\sigma(z) = 1/(1+e^{-z})$ & Bridge~II \\
+Softmax & $\mathrm{softmax}(z)_k = e^{z_k}/\sum_\ell e^{z_\ell}$ & Bridge~II \\
+Squared error / MSE & $\frac{1}{n}\sum_i (y_i-\hat{y}_i)^2$ & Bridge~II \\
+Log loss (binary) & $-[y\log \hat{p} + (1-y)\log(1-\hat{p})]$ & Bridge~II \\
+Hinge loss & $\max(0,\, 1 - y\,(w^\top x + b))$ & Ch.~\ref{ch:linear-models} \\
+Cross-entropy (multiclass) & $-\sum_k y_k \log \hat{p}_k$ & Ch.~\ref{ch:optimization-neural-networks} \\
+Empirical risk & $\hat{R}_n(f) = \frac{1}{n}\sum_i \ell(y_i, f(x_i))$ & Bridge~II \\
+Regularized objective & $\hat{R}_n(f_\theta) + \lambda \Omega(\theta)$ & Ch.~\ref{ch:linear-models} \\
+OLS closed form & $\hat{w} = (X^\top X)^{-1} X^\top y$ & Ch.~\ref{ch:linear-models} \\
+Gradient-descent update & $\theta \leftarrow \theta - \eta\,\nabla_\theta \mathcal{L}$ & Bridge~II \\
+Bayes' rule & $P(Y\mid X) = P(X\mid Y)P(Y) / P(X)$ & Bridge~II \\
+Bayes-optimal threshold & $\tau = C_{FP}/(C_{FP}+C_{FN})$ & Bridge~II \\
+KL divergence & $\mathrm{KL}(p\|q) = \sum_z p(z)\log\frac{p(z)}{q(z)}$ & Ch.~\ref{ch:probabilistic-models} \\
+ELBO (qualitative) & $\log P(x) \geq \mathbb{E}_q[\log P(x,z)] - \mathbb{E}_q[\log q(z)]$ & Ch.~\ref{ch:generative-representations} \\
+Hoeffding bound & $P(|\hat{R}_n - R| \geq \epsilon) \leq 2 e^{-2 n \epsilon^2}$ & Ch.~\ref{ch:evaluation-discipline} \\
+Standard error & $\mathrm{SE} = s_m / \sqrt{S}$ & Ch.~\ref{ch:experiments-claims} \\
+Boosting update (additive) & $F_{m}(x) = F_{m-1}(x) + \nu\,h_m(x)$ & Ch.~\ref{ch:structure-beyond-linearity} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-State-space models provide a unified framework for sequential data, connecting classical forecasting methods to modern sequence models.
+\section{Pointers Back to the Bridges}
 
-\subsection{The State-Space Framework}
-
-A state-space model consists of two equations:
-
-\textbf{State transition:} $h_t = f(h_{t-1}, u_t) + \eta_t$
-
-\textbf{Observation:} $y_t = g(h_t) + \epsilon_t$
-
-The hidden state $h_t$ evolves over time according to the transition function $f$. The observation $y_t$ is generated from the hidden state via the observation function $g$. Both steps may include noise ($\eta_t$ and $\epsilon_t$).
-
-\subsection{Special Cases}
-
-\begin{itemize}[leftmargin=*]
-\item \emph{Kalman filter:} $f$ and $g$ are linear, noise is Gaussian. Exact inference (computing $P(h_t \mid y_{1:t})$) is tractable via recursive updates. This is the classical solution for linear dynamical systems.
-\item \emph{Hidden Markov Models:} $h_t$ is discrete (one of $K$ states). Inference uses the forward-backward algorithm. Transition and emission probabilities define the model.
-\item \emph{Exponential smoothing / ETS:} Special cases of linear state-space models where the state captures components such as level, trend, and seasonality.
-\item \emph{ARIMA:} Also admits a state-space form, but the state is typically built from lagged values and forecast-error terms (after differencing), not directly from structural level-trend-seasonal components.
-\item \emph{Recurrent Neural Networks:} The transition function $f$ is a learned neural network. The state $h_t$ is a continuous vector updated by the network at each step. Training uses backpropagation through time; at prediction time the hidden state is updated recursively by the learned transition.
-\end{itemize}
-
-The state-space view makes it clear that all these methods share the same core question: given a sequence of observations, what is the best estimate of the hidden state, and what will the next observation be? The methods differ in how they represent the state and how they perform inference.
-
-\section{A Tiny Bridge to Optimization Practice}
-
-The theory above becomes more useful when tied to the practical questions that appear in the main chapters:
-\begin{itemize}[leftmargin=*]
-\item if training loss falls but validation loss rises, think about overfitting rather than only optimization success,
-\item if gradients vanish or explode, think about scale, architecture, and training stability,
-\item if repeated runs vary widely, think about variance and uncertainty rather than only mean performance,
-\item if a score threshold changes the operational behavior, think about decision policy rather than only model output.
-\end{itemize}
-
-This is why the book does not teach mathematics as a separate ceremonial layer. The point of the symbols is to sharpen judgment about models, evidence, and deployment claims.
-
-\section{How to Use This Appendix}
-
-If a chapter feels mathematically dense, do not stop at the first unfamiliar symbol. Instead, ask three questions:
-\begin{enumerate}[leftmargin=*]
-\item What object is this notation describing: an example, a feature, a weight, a prediction, a loss, a probability, or an update?
-\item Is the formula adding things, comparing things, transforming one quantity into another, or summarizing uncertainty?
-\item What does the formula mean in plain language?
-\end{enumerate}
-
-That habit matters more than speed. A mathematically ambitious reader or later-bachelor reader does not need the book to be simpler. They need the book to make each technical step legible. This appendix exists to support exactly that.
+For the underlying ideas behind these symbols and formulas, see the two mathematical bridges at the start of the book: Bridge~I (Linear Algebra for AI Thinking) for representation, geometry, and norms; Bridge~II (Probability, Risk, and Learning Signals) for probability, loss, empirical risk, and gradients. The bridges are the development; this appendix is the lookup. When a chapter introduces a symbol not listed here, the chapter itself is the authoritative reference.

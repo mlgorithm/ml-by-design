@@ -1,54 +1,54 @@
 \chapter{Generative Representations}
 \label{ch:generative-representations}
 
-The previous chapter treated representations as tools for \emph{understanding}---spaces in which downstream tasks become easier. But a representation can also be used to \emph{generate}: to produce new data points that look like the training data but were never observed. A course-support system that generates realistic synthetic student messages can augment scarce labeled data. A pedestrian detector that generates novel nighttime scenes can fill gaps in its training distribution. And the same latent spaces that enable generation also enable interpolation, anomaly detection, and controllable editing.
+The previous chapter treated representations as tools for \emph{understanding}---spaces that make downstream tasks easier. Representations can also \emph{generate}: produce new data points that resemble the training data but were never observed. A course-support system that generates realistic synthetic student messages can augment scarce labeled data. A pedestrian detector that generates novel nighttime scenes can fill gaps in its training distribution. The same latent spaces that enable generation also enable interpolation, anomaly detection, and controllable editing.
 
-This chapter introduces three families of generative models---variational autoencoders, generative adversarial networks, and diffusion models---each of which learns a latent representation from which new data can be sampled \citep{kingma2014vae,goodfellow2014gan,ho2020ddpm}. The probabilistic foundations from Chapter~\ref{ch:probabilistic-models} motivate VAEs and latent-variable sampling, while GANs introduce adversarial training. The practical evaluation challenge---how do you know if generated data is any good?---runs through all three.
+This chapter introduces three families of generative models---variational autoencoders, generative adversarial networks, and diffusion models. Each learns a latent representation from which new data can be sampled \citep{kingma2014vae,goodfellow2014gan,ho2020ddpm}. The probabilistic foundations from Chapter~\ref{ch:probabilistic-models} motivate VAEs and latent-variable sampling; GANs introduce adversarial training. One practical question runs through all three: how do you know if generated data is any good?
 
 \begin{problemsolvinglens}
-Generation is not an end in itself. Every generative model encodes assumptions about what variation matters and what should be preserved. The design question is not ``can the model generate?'' but ``does what it generates serve the downstream task, and how would we know?''
+Generation is not an end in itself. Every generative model encodes assumptions about which variations matter and which should be preserved. The design question is not ``can the model generate?'' but ``does what it generates serve the downstream task, and how would we know?''
 \end{problemsolvinglens}
 
 \begin{thinkingtool}
-\textbf{Representation for generation.} When evaluating a generative model, ask: what does the latent space \emph{mean}? Can you move in the latent space and predict what changes in the output? If you cannot, the model may still generalize, but it is harder to trust the latent space for controlled generation or interpretation.
+\textbf{Representation for generation.} When evaluating a generative model, ask what the latent space \emph{means}. Can you move through the latent space and predict how the output will change? If not, the model may still generalize, but the latent space becomes harder to trust for controlled generation or interpretation.
 \end{thinkingtool}
 
 \begin{practicalnote}
-\textbf{Depth guide.} In a first course, the core expectation is to compare generative families, explain their objectives at a design level, and evaluate their downstream risks. Training stable GANs, deriving diffusion objectives in full, or building a production generator belongs in an extended project.
+\textbf{Depth guide.} In a first course, the core expectation is to compare generative families, explain their objectives at a design level, and evaluate their downstream risks. Training stable GANs, deriving diffusion objectives in full, or building a production generator belongs in extended projects.
 \end{practicalnote}
 
 \section{From Representation to Generation}
 
-Chapter~\ref{ch:representation-foundation-models} introduced autoencoders: networks that compress an input into a bottleneck representation and then reconstruct it. The bottleneck forces the network to learn a compact representation that preserves the most important structure. But a standard autoencoder's latent space has no particular structure---it is not organized in a way that supports sampling new points. If you pick a random point in the latent space of a trained autoencoder and decode it, the result is usually meaningless noise.
+Chapter~\ref{ch:representation-foundation-models} introduced autoencoders: networks that compress an input into a bottleneck representation and then reconstruct it. The bottleneck forces the network to preserve the most important structure in a compact code. A standard autoencoder's latent space, however, has no particular structure---it is not organized for sampling new points. Pick a random point in the latent space of a trained autoencoder, decode it, and the result is usually meaningless noise.
 
-Generative models impose structure on the latent space so that it \emph{can} be sampled. The three families differ in how they achieve this:
+Generative models impose structure on the latent space so it \emph{can} be sampled. The three families differ in how they achieve this:
 
 \begin{itemize}[leftmargin=*]
-\item \emph{Variational autoencoders (VAEs)} regularize the latent space to be a smooth, continuous distribution from which new points can be sampled and decoded into realistic outputs.
+\item \emph{Variational autoencoders (VAEs)} regularize the latent space into a smooth, continuous distribution. New points can then be sampled from it and decoded into realistic outputs.
 \item \emph{Generative adversarial networks (GANs)} learn a mapping from a simple random distribution to realistic outputs by training a generator to fool a discriminator.
-\item \emph{Diffusion models} learn to reverse a gradual noising process, generating data by starting from pure noise and iteratively denoising.
+\item \emph{Diffusion models} learn to reverse a gradual noising process, starting from pure noise and iteratively denoising it into a data sample.
 \end{itemize}
 
-Each trades off sample quality, diversity, training stability, and computational cost differently.
+Each family trades off sample quality, diversity, training stability, and computational cost differently.
 
 \section{Variational Autoencoders}
 \label{sec:vae}
 
 \subsection{The Idea: Structured Latent Spaces}
 
-A variational autoencoder (VAE) modifies the standard autoencoder in one key way: the encoder does not map an input to a single latent point, but to a \emph{distribution} over latent points. Specifically, the encoder usually outputs the mean $\mu$ and per-coordinate variance $\sigma^2$ of a diagonal Gaussian distribution in latent space.
+A variational autoencoder (VAE) modifies the standard autoencoder in one key way: the encoder maps each input not to a single latent point but to a \emph{distribution} over latent points. The encoder typically outputs the mean $\mu$ and per-coordinate variance $\sigma^2$ of a diagonal Gaussian in latent space.
 
-That design matters because the VAE does not optimize reconstruction alone. During training, it also applies a regularization term that pushes each input's latent distribution toward a simple shared prior, usually a standard Gaussian. This KL pressure discourages the encoder from scattering training examples into isolated, disconnected pockets of latent space. Instead, it encourages a latent space that is smooth and organized: nearby latent points tend to decode to similar outputs, and moving gradually through the latent space tends to produce gradual changes in the reconstruction.
+This design matters because the VAE does not optimize reconstruction alone. Training also applies a regularization term that pulls each input's latent distribution toward a shared prior, usually a standard Gaussian. This KL pressure prevents the encoder from scattering training examples into isolated, disconnected pockets of latent space. Instead, it produces a latent space that is smooth and organized: nearby latent points decode to similar outputs, and gradual movement through the latent space produces gradual changes in the reconstruction.
 
-Once the latent space has this structure, sampling becomes useful rather than arbitrary. A latent point can be sampled from the encoder's distribution during training and passed to the decoder, and after training new data can be generated by sampling from the prior distribution over the latent space. Interpolating between two latent codes also produces a gradual transition between the corresponding outputs.
+Once the latent space has this structure, sampling becomes meaningful rather than arbitrary. During training, a latent point is sampled from the encoder's distribution and passed to the decoder. After training, new data can be generated by sampling from the prior. Interpolating between two latent codes also produces a smooth transition between the corresponding outputs.
 
 \subsection{The VAE Objective}
 
-The VAE is trained to optimize a single objective that balances two goals:
+A VAE is trained on a single objective that balances two goals:
 
-\textbf{Reconstruction.} The decoded output should be close to the original input. This is measured by a reconstruction loss (mean squared error for continuous data, cross-entropy for discrete data), just like a standard autoencoder.
+\textbf{Reconstruction.} The decoded output should match the original input. As with a standard autoencoder, a reconstruction loss measures this---mean squared error for continuous data, cross-entropy for discrete data.
 
-\textbf{Regularization.} The encoder's output distribution should stay close to a simple prior---typically a standard Gaussian $\mathcal{N}(0, I)$. This is measured by the KL divergence between the encoder's output distribution and the prior:
+\textbf{Regularization.} The encoder's output distribution should stay close to a simple prior, typically a standard Gaussian $\mathcal{N}(0, I)$. The KL divergence measures the gap between the two:
 \[
 D_{\text{KL}}\bigl(q(z \mid x) \;\|\; p(z)\bigr)
 \]
@@ -59,43 +59,43 @@ The total loss is:
 \mathcal{L}_{\text{VAE}} = \underbrace{\mathbb{E}_{q(z \mid x)}\bigl[-\log p(x \mid z)\bigr]}_{\text{reconstruction}} + \underbrace{D_{\text{KL}}\bigl(q(z \mid x) \;\|\; p(z)\bigr)}_{\text{regularization}}
 \]
 
-This is the negative \emph{evidence lower bound} (ELBO) used in variational autoencoders \citep{kingma2014vae,rezende2014sgvb}. Minimizing it simultaneously improves reconstruction and keeps the latent space well-organized.
+This is the negative \emph{evidence lower bound} (ELBO) used in variational autoencoders \citep{kingma2014vae,rezende2014sgvb}. Minimizing it improves reconstruction while keeping the latent space organized.
 
 \begin{mathlens}
-For one input, the encoder might output \(\mu=(0.4,-0.2)\) and \(\log\sigma^2=(-1.0,0.2)\). The model samples noise \(\epsilon\sim\mathcal{N}(0,I)\), forms \(z=\mu+\sigma\odot\epsilon\), decodes \(z\), and measures reconstruction loss. The KL term for a diagonal Gaussian can be computed as
+For one input, the encoder might output \(\mu=(0.4,-0.2)\) and \(\log\sigma^2=(-1.0,0.2)\). The model samples noise \(\epsilon\sim\mathcal{N}(0,I)\), forms \(z=\mu+\sigma\odot\epsilon\), decodes \(z\), and measures the reconstruction loss. For a diagonal Gaussian, the KL term reduces to
 \[
 \frac{1}{2}\sum_j \left(\mu_j^2+\sigma_j^2-\log\sigma_j^2-1\right).
 \]
-Large means or very small/large variances increase this penalty, so the encoder is rewarded for using a latent distribution that reconstructs the input while staying close enough to the shared prior to make sampling meaningful.
+Large means or extreme variances inflate this penalty. The encoder is therefore rewarded for choosing a latent distribution that reconstructs the input while staying close enough to the shared prior for sampling to remain meaningful.
 \end{mathlens}
 
 \begin{practicalnote}
-The balance between reconstruction and regularization is controlled by a weighting factor $\beta$ (the ``$\beta$-VAE'' variant). With $\beta = 1$, the objective is the standard ELBO; the two terms are not necessarily equal in scale or contribution. Increasing $\beta$ increases the relative KL pressure and can produce a more structured, disentangled latent space but blurrier reconstructions. Decreasing $\beta$ reduces that pressure and can produce sharper reconstructions but a less organized latent space. In practice, tuning $\beta$ is often necessary to get useful results for the downstream task.
+A weighting factor $\beta$ controls the balance between reconstruction and regularization (the ``$\beta$-VAE'' variant). At $\beta = 1$, the objective is the standard ELBO; even then, the two terms need not be equal in scale or contribution. Larger $\beta$ raises the KL pressure, often producing a more structured, disentangled latent space at the cost of blurrier reconstructions. Smaller $\beta$ does the opposite: sharper reconstructions, less-organized latent space. In practice, tuning $\beta$ is often necessary to get useful results for the downstream task.
 \end{practicalnote}
 
 \subsection{The Reparameterization Trick}
 
-Training a VAE requires backpropagating gradients through the sampling step---but sampling is not a differentiable operation. The \emph{reparameterization trick} resolves this by rewriting the sampling as a deterministic transformation of a noise variable:
+Training a VAE requires backpropagating gradients through the sampling step, but sampling is not differentiable. The \emph{reparameterization trick} fixes this by rewriting the sample as a deterministic transformation of a noise variable:
 \[
 z = \mu(x) + \sigma(x) \odot \epsilon, \quad \epsilon \sim \mathcal{N}(0, I)
 \]
 
-The randomness is isolated in $\epsilon$, which does not depend on the model parameters. Gradients can now flow through $\mu$ and $\sigma$ to the encoder. This trick is what makes VAE training practical with standard backpropagation.
+The randomness now lives entirely in $\epsilon$, which is independent of the model parameters. Gradients flow through $\mu$ and $\sigma$ back to the encoder. This trick makes VAE training practical with standard backpropagation.
 
 \subsection{What VAEs Are Good For}
 
-\textbf{Latent interpolation.} Given two inputs $x_1$ and $x_2$, encode them and interpolate between their posterior means, for example $z_t = (1-t)\mu(x_1) + t\mu(x_2)$, then decode. A well-trained VAE produces smooth transitions: morphing between two faces, transitioning between writing styles, or blending pedestrian poses.
+\textbf{Latent interpolation.} Given two inputs $x_1$ and $x_2$, encode them and interpolate between their posterior means, for example $z_t = (1-t)\mu(x_1) + t\mu(x_2)$, then decode. A well-trained VAE produces smooth transitions: morphing between two faces, shifting between writing styles, or blending pedestrian poses.
 
-\textbf{Anomaly detection.} Inputs that are unlike the training data may have high reconstruction error, low model likelihood or ELBO, or an unusual posterior relative to the learned aggregate posterior. This can make VAEs useful for detecting out-of-distribution inputs, but the score must be validated for the deployment domain---a capability that connects directly to the epistemic uncertainty discussion in Chapter~\ref{ch:probabilistic-models}.
+\textbf{Anomaly detection.} Inputs unlike the training data tend to produce high reconstruction error, low model likelihood or ELBO, or an unusual posterior relative to the learned aggregate posterior. This makes VAEs useful for detecting out-of-distribution inputs, though the score must be validated in the deployment domain---a capability that connects directly to the epistemic uncertainty discussion in Chapter~\ref{ch:probabilistic-models}.
 
-\textbf{Data augmentation.} Sample from the latent space to generate new training examples. Unlike rule-based augmentation (Chapter~\ref{ch:dataset-design}), VAE-based augmentation generates novel examples rather than transforming existing ones. But the same validation discipline applies: augmented data must be evaluated against a real held-out test set.
+\textbf{Data augmentation.} Sampling the latent space generates new training examples. Unlike rule-based augmentation (Chapter~\ref{ch:dataset-design}), VAE-based augmentation produces novel examples rather than transforming existing ones. The same validation discipline still applies: augmented data must be evaluated against a real held-out test set.
 
 \begin{example}[VAE for Student Message Augmentation]
-The course-support team has 200 labeled URGENT messages but needs more to train a reliable classifier. They train a VAE on all 12,000 student messages (ignoring labels). The VAE learns a latent space where similar messages are nearby. The team encodes the 200 URGENT messages, samples new latent points near their encodings (adding small noise), and decodes them. The generated messages resemble real URGENT messages but are not copies. After manual inspection to remove implausible generations, the team adds 150 synthetic URGENT messages to the training set. The classifier's recall on URGENT messages improves from 0.71 to 0.79 on the held-out gold test set.
+The course-support team has 200 labeled URGENT messages but needs more to train a reliable classifier. They train a VAE on all 12,000 student messages, ignoring labels. The VAE learns a latent space where similar messages cluster together. The team encodes the 200 URGENT messages, samples new latent points near their encodings (with small added noise), and decodes them. The generated messages resemble real URGENT messages without being copies. After manual inspection removes implausible generations, the team adds 150 synthetic URGENT messages to the training set. Recall on URGENT messages improves from 0.71 to 0.79 on the held-out gold test set.
 \end{example}
 
 \begin{warningbox}
-VAE-generated samples tend to be blurrier than real data, especially for images. This is a consequence of the Gaussian decoder assumption and the reconstruction loss, which averages over possible outputs. For tasks where sharp, realistic detail matters (e.g., generating training images for a pedestrian detector), GANs or diffusion models may produce better samples. For tasks where diversity and coverage matter more than sharpness (e.g., generating text variations), VAEs are often sufficient.
+VAE-generated samples tend to be blurrier than real data, especially for images. The Gaussian decoder assumption and the reconstruction loss, which averages over possible outputs, are responsible. For tasks where sharp, realistic detail matters---generating training images for a pedestrian detector, for example---GANs or diffusion models often produce better samples. For tasks where diversity and coverage matter more than sharpness, such as generating text variations, VAEs are usually sufficient.
 \end{warningbox}
 
 \section{Generative Adversarial Networks}
@@ -103,36 +103,36 @@ VAE-generated samples tend to be blurrier than real data, especially for images.
 
 \subsection{The Adversarial Idea}
 
-Generative adversarial networks (GANs) take a fundamentally different approach to generation. Instead of learning a latent distribution explicitly, a GAN learns to generate data through a two-player game:
+Generative adversarial networks (GANs) take a different approach. Instead of learning a latent distribution explicitly, a GAN learns to generate data through a two-player game:
 
 \textbf{The generator} $G$ takes a random noise vector $z \sim \mathcal{N}(0, I)$ and produces a synthetic data point $G(z)$.
 
-\textbf{The discriminator} $D$ takes a data point (either real or generated) and outputs the probability that it is real.
+\textbf{The discriminator} $D$ takes a data point---real or generated---and outputs the probability that it is real.
 
-The two networks are trained simultaneously with opposing objectives. The discriminator tries to correctly distinguish real from generated data. The generator tries to produce data that fools the discriminator. Formally:
+The two networks train simultaneously with opposing objectives. The discriminator tries to distinguish real from generated data. The generator tries to fool the discriminator. Formally:
 \[
 \min_G \max_D \; \mathbb{E}_{x \sim p_{\text{data}}}[\log D(x)] + \mathbb{E}_{z \sim p(z)}[\log(1 - D(G(z)))]
 \]
-This is the original minimax GAN objective from \citet{goodfellow2014gan}; many practical GAN variants modify the loss or regularization to improve stability.
+This is the original minimax GAN objective from \citet{goodfellow2014gan}; practical GAN variants modify the loss or regularization to improve stability.
 
-At equilibrium (in theory), the generator produces data indistinguishable from real data, and the discriminator outputs 0.5 for everything.
+At equilibrium, in theory, the generator produces data indistinguishable from real data, and the discriminator outputs 0.5 for everything.
 
 \subsection{Why GANs Produce Sharp Samples}
 
-Unlike VAEs, which optimize a reconstruction loss that averages over uncertainty (producing blurry outputs), GANs are trained by a discriminator that penalizes any detectable difference from real data. This adversarial pressure pushes the generator toward sharp, realistic outputs. For image generation, this difference is visually striking: GAN-generated faces can be nearly photorealistic, while VAE-generated faces are typically smoother and less detailed.
+VAEs optimize a reconstruction loss that averages over uncertainty, producing blurry outputs. GANs instead use a discriminator that penalizes any detectable difference from real data. This adversarial pressure pushes the generator toward sharp, realistic outputs. The visual difference is striking: GAN-generated faces can be nearly photorealistic, while VAE-generated faces are typically smoother and less detailed.
 
 \subsection{Training Instability}
 
-The adversarial training procedure is inherently unstable. The generator and discriminator must stay in balance: if the discriminator becomes too strong, the generator receives no useful gradient signal (it is always detected, so all generated samples look equally bad). If the generator becomes too strong too quickly, the discriminator fails to provide meaningful feedback. Common failure modes include:
+Adversarial training is inherently unstable. The generator and discriminator must stay in balance. If the discriminator becomes too strong, every generated sample is detected and the generator gets no useful gradient signal. If the generator becomes too strong too quickly, the discriminator stops providing meaningful feedback. Common failure modes include:
 
-\textbf{Mode collapse.} The generator learns to produce only a few types of outputs that fool the discriminator, ignoring the diversity of the real data. A face-generating GAN might produce only young female faces; a pedestrian-generating GAN might produce only frontal-view standing poses. The discriminator sees realistic samples but cannot detect that the generator's output lacks diversity.
+\textbf{Mode collapse.} The generator produces only a few types of outputs that fool the discriminator, ignoring the diversity of real data. A face-generating GAN might produce only young female faces; a pedestrian-generating GAN might produce only frontal-view standing poses. The discriminator sees realistic samples but cannot detect the lack of diversity.
 
-\textbf{Oscillation.} The generator and discriminator cycle: the generator finds an exploit, the discriminator catches on, the generator switches to a new exploit. Training loss oscillates without converging.
+\textbf{Oscillation.} The two networks cycle: the generator finds an exploit, the discriminator catches on, the generator switches to a new exploit. Training loss oscillates without converging.
 
-\textbf{Vanishing gradients.} If the discriminator is too confident (outputs near 0 or 1), the gradient signal to the generator vanishes, stalling training.
+\textbf{Vanishing gradients.} An overconfident discriminator (outputs near 0 or 1) provides almost no gradient signal to the generator, stalling training.
 
 \begin{warningbox}
-Mode collapse is insidious because standard training metrics may not detect it. The discriminator loss may converge, the generator loss may decrease, and individual samples may look realistic---but the \emph{distribution} of generated samples may cover only a fraction of the real distribution. Always inspect the diversity of generated samples, not just their quality.
+Mode collapse is insidious because standard training metrics may not detect it. The discriminator loss can converge, the generator loss can decrease, and individual samples can look realistic---yet the \emph{distribution} of generated samples may cover only a fraction of the real distribution. Always inspect the diversity of generated samples, not just their quality.
 \end{warningbox}
 
 \begin{practicalnote}
@@ -140,18 +140,18 @@ Several techniques improve GAN training stability:
 \begin{itemize}[leftmargin=*]
 \item \emph{Wasserstein GAN (WGAN):} Replaces the original objective with the Wasserstein distance, which provides smoother gradients even when the discriminator is strong.
 \item \emph{Spectral normalization:} Constrains the discriminator's Lipschitz constant, preventing it from becoming too sharp.
-\item \emph{Progressive growing:} Starts training at low resolution and gradually increases, giving the generator time to learn coarse structure before fine detail.
-\item \emph{Two-timescale learning rates:} Uses a higher learning rate for the discriminator, keeping it ahead of the generator just enough to provide useful gradients.
+\item \emph{Progressive growing:} Starts at low resolution and gradually increases it, giving the generator time to learn coarse structure before fine detail.
+\item \emph{Two-timescale learning rates:} Uses a higher learning rate for the discriminator to keep it slightly ahead of the generator and provide useful gradients.
 \end{itemize}
-None of these fully solves the stability problem. GAN training requires more monitoring and hyperparameter tuning than standard supervised training.
+None of these fully solves the stability problem. GAN training demands more monitoring and hyperparameter tuning than standard supervised training.
 \end{practicalnote}
 
 \subsection{Conditional Generation}
 
-A \emph{conditional GAN} (cGAN) adds a conditioning input---a class label, a text description, or an image---so the generator produces outputs that match the condition. The generator becomes $G(z, c)$ and the discriminator becomes $D(x, c)$, where $c$ is the condition.
+A \emph{conditional GAN} (cGAN) adds a conditioning input---a class label, a text description, or an image---so the generator produces outputs that match the condition. The generator becomes $G(z, c)$, the discriminator becomes $D(x, c)$, and $c$ is the condition.
 
 \begin{example}[Conditional GAN for Pedestrian Scenes]
-A pedestrian detection team wants to augment its training data with nighttime scenes (an epistemic gap identified in the uncertainty audit). They train a conditional GAN where the condition is ``time of day'' (day, dusk, night). The generator learns to produce synthetic pedestrian scenes conditioned on lighting. Given the condition ``night,'' it generates dark scenes with streetlight illumination and pedestrian silhouettes. The synthetic nighttime scenes are added to the training set, and the detector's nighttime recall improves from 0.62 to 0.74 on real nighttime test frames. The gap between synthetic and real is confirmed by separate evaluation on the real test set.
+A pedestrian detection team wants to augment its training data with nighttime scenes---an epistemic gap identified in the uncertainty audit. They train a conditional GAN where the condition is ``time of day'' (day, dusk, night). Given the condition ``night,'' the generator produces dark scenes with streetlight illumination and pedestrian silhouettes. After adding the synthetic nighttime scenes to the training set, the detector's nighttime recall improves from 0.62 to 0.74 on real nighttime test frames. Separate evaluation on the real test set confirms the gap between synthetic and real.
 \end{example}
 
 \section{Diffusion Models}
@@ -159,13 +159,13 @@ A pedestrian detection team wants to augment its training data with nighttime sc
 
 \subsection{The Denoising Idea}
 
-Diffusion models are a major current family in image and media generation, building on denoising diffusion and score-based generative modeling \citep{ho2020ddpm,song2021score}. Their core idea is surprisingly simple: learn to reverse a gradual noising process.
+Diffusion models are a leading family in image and media generation, building on denoising diffusion and score-based generative modeling \citep{ho2020ddpm,song2021score}. Their core idea is surprisingly simple: learn to reverse a gradual noising process.
 
-\textbf{Forward process (noising).} Start with a real data point $x_0$. Over $T$ steps, add small amounts of Gaussian noise, producing a sequence $x_1, x_2, \ldots, x_T$. At $T$ large enough, $x_T$ is indistinguishable from pure Gaussian noise.
+\textbf{Forward process (noising).} Start with a real data point $x_0$. Over $T$ steps, add small amounts of Gaussian noise to produce a sequence $x_1, x_2, \ldots, x_T$. For $T$ large enough, $x_T$ is indistinguishable from pure Gaussian noise.
 
-\textbf{Reverse process (denoising).} Train a neural network $\epsilon_\theta(x_t, t)$ to predict the noise that was added at each step. To generate new data, start from pure noise $x_T \sim \mathcal{N}(0, I)$ and iteratively denoise: at each step, use the network to predict and remove the noise, gradually revealing a realistic data point.
+\textbf{Reverse process (denoising).} Train a neural network $\epsilon_\theta(x_t, t)$ to predict the noise added at each step. To generate new data, start from pure noise $x_T \sim \mathcal{N}(0, I)$ and iteratively denoise: at each step, the network predicts and removes the noise, gradually revealing a realistic data point.
 
-The training objective is simple: minimize the mean squared error between the predicted noise and the actual noise added at each step:
+The training objective is simple. Minimize the mean squared error between the predicted noise and the actual noise added at each step:
 \[
 \mathcal{L}_{\text{diffusion}} = \mathbb{E}_{t, x_0, \epsilon}\bigl[\|\epsilon - \epsilon_\theta(x_t, t)\|^2\bigr]
 \]
@@ -175,53 +175,53 @@ The training objective is simple: minimize the mean squared error between the pr
 Diffusion models have several advantages over VAEs and GANs:
 
 \begin{itemize}[leftmargin=*]
-\item \emph{Training stability.} The training objective is a regression loss (predict the noise), with no adversarial dynamics. This often makes optimization easier to monitor than GAN training, though architecture, noise schedule, data scale, and compute still matter.
-\item \emph{Sample quality.} By decomposing generation into many small denoising steps, diffusion models can produce extremely detailed, high-quality outputs. Each step makes a small correction, avoiding the single-shot generation challenge of GANs and VAEs.
-\item \emph{Mode coverage.} Diffusion models are often less prone to the classic GAN failure mode where a generator collapses to a few sample types, but coverage is still an empirical question. Rare cases, underrepresented slices, and conditioning failures must be checked directly.
+\item \emph{Training stability.} The training objective is a regression loss---predict the noise---with no adversarial dynamics. Optimization is often easier to monitor than GAN training, though architecture, noise schedule, data scale, and compute still matter.
+\item \emph{Sample quality.} Decomposing generation into many small denoising steps lets diffusion models produce extremely detailed, high-quality outputs. Each step makes a small correction, sidestepping the single-shot generation challenge of GANs and VAEs.
+\item \emph{Mode coverage.} Diffusion models are typically less prone to the classic GAN failure mode in which the generator collapses to a few sample types. Coverage is still an empirical question, though: rare cases, underrepresented slices, and conditioning failures must be checked directly.
 \end{itemize}
 
-The main disadvantage is computational cost. Generation requires running the denoising network for hundreds or thousands of steps (one forward pass per step), making generation much slower than a single-pass GAN or VAE decoder.
+The main disadvantage is computational cost. Generation requires running the denoising network for hundreds or thousands of steps---one forward pass per step---making it much slower than a single-pass GAN or VAE decoder.
 
 \begin{practicalnote}
-Accelerated sampling methods such as DDIM and DPM-Solver reduce the number of denoising steps needed, trading some quality for speed \citep{song2020ddim,lu2022dpmsolver}. In practice, tens of sampling steps may suffice for many uses, compared with the original 1000-step diffusion schedule. During training, implementations usually sample timesteps from that schedule rather than unrolling every denoising step for every example. For applications where generation speed matters, such as real-time augmentation during training, this trade-off is important.
+Accelerated sampling methods such as DDIM and DPM-Solver reduce the number of denoising steps, trading some quality for speed \citep{song2020ddim,lu2022dpmsolver}. Tens of sampling steps often suffice in practice, compared with the original 1000-step schedule. During training, implementations typically sample timesteps from that schedule rather than unrolling every step for every example. For applications where generation speed matters---real-time augmentation during training, for example---this tradeoff is important.
 \end{practicalnote}
 
 \subsection{Guidance: Controlling What Gets Generated}
 
-Diffusion models can be \emph{guided} toward specific outputs using a conditioning signal. \emph{Classifier-free guidance} trains the model both with and without the condition, then amplifies the difference at generation time \citep{ho2022classifierfree}. A guidance scale $w > 1$ pushes the output more strongly toward the condition:
+Diffusion models can be \emph{guided} toward specific outputs through a conditioning signal. \emph{Classifier-free guidance} trains the model both with and without the condition, then amplifies the difference at generation time \citep{ho2022classifierfree}. A guidance scale $w > 1$ pushes the output more strongly toward the condition:
 \[
 \hat{\epsilon} = \epsilon_\theta(x_t, \varnothing) + w \cdot \bigl(\epsilon_\theta(x_t, c) - \epsilon_\theta(x_t, \varnothing)\bigr)
 \]
 
-Higher guidance produces samples that match the condition more faithfully but with less diversity. This is the \emph{quality--diversity trade-off}: strong guidance gives you exactly what you asked for, but the outputs become repetitive. Weak guidance gives diverse outputs that may not match the condition well.
+Higher guidance matches the condition more faithfully but produces less diversity. This is the \emph{quality--diversity tradeoff}: strong guidance gives you exactly what you asked for at the cost of repetitive outputs; weak guidance gives diverse outputs that may not match the condition well.
 
 \begin{example}[Diffusion for Synthetic Training Data]
-A team building a pedestrian detector needs training images of ``pedestrian crossing a wet road at dusk.'' A text-conditioned diffusion model generates 500 such images. With low guidance ($w=2$), the images are diverse---some show the road clearly, others are more abstract---but not all are realistic enough for training. With high guidance ($w=10$), the images are more uniform and realistic, but they lack diversity (similar poses, similar lighting). The team uses medium guidance ($w=5$) and post-filters the outputs, keeping 300 images that pass a visual quality check. These are evaluated against real test frames to measure the sim-to-real gap.
+A team building a pedestrian detector needs training images of ``pedestrian crossing a wet road at dusk.'' A text-conditioned diffusion model generates 500 such images. With low guidance ($w=2$), the images are diverse---some show the road clearly, others are more abstract---but not all are realistic enough for training. With high guidance ($w=10$), the images are more uniform and realistic but lack diversity, with similar poses and similar lighting. The team settles on medium guidance ($w=5$) and post-filters the outputs, keeping 300 images that pass a visual quality check. These are then evaluated against real test frames to measure the sim-to-real gap.
 \end{example}
 
 \subsection{Brief Note: Normalizing Flows and Flow Matching}
 
-Two other generative approaches deserve mention. \emph{Normalizing flows} define an explicit, invertible mapping between a simple distribution (Gaussian) and the data distribution \citep{dinh2017realnvp}. Because the mapping is invertible, exact likelihood computation is possible---unlike VAEs (which use a lower bound) or GANs (which have no likelihood). The constraint is that all transformations must be invertible and have tractable Jacobians, which limits architectural flexibility.
+Two other generative approaches deserve mention. \emph{Normalizing flows} define an explicit, invertible mapping between a simple distribution (typically Gaussian) and the data distribution \citep{dinh2017realnvp}. Because the mapping is invertible, exact likelihood computation is possible---unlike VAEs, which use a lower bound, or GANs, which have no likelihood. The catch is that every transformation must be invertible with a tractable Jacobian, which limits architectural flexibility.
 
-\emph{Flow matching} relaxes this constraint by defining a continuous-time flow from noise to data, trained with a regression objective related to diffusion and continuous-normalizing-flow views \citep{lipman2023flowmatching}. Sampling still typically requires numerically integrating that learned flow over multiple solver steps, but in practice it can use fewer or cheaper steps than standard diffusion sampling while maintaining high sample quality. Flow matching is an active area of research and should be treated as a fast-moving family rather than as a settled recipe.
+\emph{Flow matching} relaxes this constraint by defining a continuous-time flow from noise to data, trained with a regression objective related to diffusion and continuous-normalizing-flow views \citep{lipman2023flowmatching}. Sampling still requires numerically integrating the learned flow over multiple solver steps, but in practice fewer or cheaper steps than standard diffusion sampling can suffice while maintaining high sample quality. Flow matching is an active research area; treat it as a fast-moving family rather than a settled recipe.
 
-Both methods share the theme of this chapter: learning a mapping between a simple latent distribution and a complex data distribution, with the latent space providing structure for generation and interpolation.
+Both methods share this chapter's theme: learning a mapping between a simple latent distribution and a complex data distribution, with the latent space providing structure for generation and interpolation.
 
 \section{Evaluating Generative Models}
 \label{sec:gen-eval}
 
-Evaluating generative models is fundamentally harder than evaluating classifiers. A classifier's output can be compared to a ground-truth label. A generative model's output is a new data point---there is no single ``correct'' answer. Evaluation must assess two properties simultaneously: \emph{quality} (do individual samples look realistic?) and \emph{diversity} (does the model produce the full range of variation in the data?).
+Evaluating generative models is fundamentally harder than evaluating classifiers. A classifier's output can be compared to a ground-truth label. A generative model's output is a new data point with no single ``correct'' answer. Evaluation must assess two properties at once: \emph{quality} (do individual samples look realistic?) and \emph{diversity} (does the model cover the full range of variation in the data?).
 
 \subsection{Automated Metrics}
 
-\textbf{Fr\'{e}chet Inception Distance (FID).} A widely used metric for image generation \citep{heusel2017fid}. FID measures the distance between the distribution of real images and the distribution of generated images in the feature space of a pre-trained Inception network. Lower FID means the generated distribution is closer to the real distribution in that feature space. FID captures both quality (unrealistic images have unusual features) and diversity (a mode-collapsed generator will have a narrower feature distribution), but only through the chosen representation.
+\textbf{Fr\'{e}chet Inception Distance (FID).} A widely used metric for image generation \citep{heusel2017fid}. FID measures the distance between the distribution of real images and the distribution of generated images in the feature space of a pre-trained Inception network. Lower FID means the generated distribution is closer to the real one in that feature space. FID captures both quality (unrealistic images have unusual features) and diversity (a mode-collapsed generator has a narrower feature distribution), but only through the chosen representation.
 
-\textbf{Inception Score (IS).} Measures two properties: each generated image should be confidently classified by an Inception network (quality), and the marginal distribution of predicted labels across generated images should have high entropy (diversity) \citep{salimans2016improved}. Higher IS is better under that proxy. IS has known limitations: it does not compare to the real data distribution, its label-diversity assumption may not match a single-domain dataset, and it can be gamed by producing one very realistic image per predicted class.
+\textbf{Inception Score (IS).} Measures two properties: each generated image should be confidently classified by an Inception network (quality), and the marginal distribution of predicted labels across generated images should have high entropy (diversity) \citep{salimans2016improved}. Higher IS is better under that proxy. IS has known limitations. It does not compare to the real data distribution, its label-diversity assumption may not match a single-domain dataset, and it can be gamed by producing one very realistic image per predicted class.
 
-\textbf{Precision and Recall for generation.} Adapted from classification, \emph{precision} estimates how much generated mass lies near the real data distribution (quality), and \emph{recall} estimates how much of the real data distribution is covered by generated samples (diversity) \citep{kynkaanniemi2019pr}. A mode-collapsed GAN can have high precision but low recall.
+\textbf{Precision and recall for generation.} Adapted from classification: \emph{precision} estimates how much generated mass lies near the real data distribution (quality), and \emph{recall} estimates how much of the real data distribution is covered by generated samples (diversity) \citep{kynkaanniemi2019pr}. A mode-collapsed GAN can have high precision but low recall.
 
 \begin{warningbox}
-All automated metrics for generative models are proxies. FID depends on the choice of feature extractor (Inception was trained on ImageNet, not on your domain). IS does not compare to the real distribution. Precision-recall requires approximate support estimation in feature space, so its result depends on the representation and neighborhood method used. No single number captures whether generated data is ``good enough'' for a given downstream task. Always complement automated metrics with visual inspection and, when possible, downstream task performance.
+All automated metrics for generative models are proxies. FID depends on the choice of feature extractor---Inception was trained on ImageNet, not on your domain. IS does not compare to the real distribution. Precision-recall requires approximate support estimation in feature space, so its value depends on the representation and neighborhood method used. No single number captures whether generated data is ``good enough'' for a given downstream task. Always complement automated metrics with visual inspection and, when possible, downstream task performance.
 \end{warningbox}
 
 \subsection{Human Evaluation}
@@ -229,23 +229,23 @@ All automated metrics for generative models are proxies. FID depends on the choi
 For many applications, human evaluation remains essential. Common protocols include:
 
 \begin{itemize}[leftmargin=*]
-\item \emph{Turing test / real-vs-fake.} Human raters are shown a mix of real and generated samples and asked to identify which are real. The fooling rate measures quality.
-\item \emph{Preference ranking.} Human raters compare outputs from two or more models and state which they prefer. This is useful for comparing models but does not measure absolute quality.
-\item \emph{Task-specific evaluation.} If generated data is used for augmentation, the downstream task metric (e.g., classification accuracy on real test data) is the ultimate evaluation. A generative model that produces beautiful images that do not help the downstream task is not useful.
+\item \emph{Turing test / real-vs-fake.} Raters see a mix of real and generated samples and identify which are real. The fooling rate measures quality.
+\item \emph{Preference ranking.} Raters compare outputs from two or more models and state which they prefer. Useful for comparing models, but it does not measure absolute quality.
+\item \emph{Task-specific evaluation.} When generated data is used for augmentation, the downstream task metric---classification accuracy on real test data, for example---is the ultimate evaluation. A model that produces beautiful images that do not help the downstream task is not useful.
 \end{itemize}
 
 \begin{practicalnote}
-When generated data is used for training (data augmentation or synthetic training), the only evaluation that ultimately matters is downstream performance on a held-out \emph{real} test set. FID and IS are useful for development (comparing model variants), but the decision to ship should be based on whether the generated data actually improves the system it is meant to support.
+When generated data is used for training---data augmentation or synthetic training---the only evaluation that ultimately matters is downstream performance on a held-out \emph{real} test set. FID and IS are useful during development for comparing model variants, but the decision to ship should hinge on whether the generated data actually improves the system it supports.
 \end{practicalnote}
 
 \begin{evidencebox}
-A useful claim audit for generated pedestrian scenes is: \emph{Claim}: synthetic dusk scenes improve the real pedestrian detector under low-light conditions. \emph{Evidence available}: detector performance on a real held-out dusk slice before and after synthetic augmentation. \emph{Missing evidence}: whether gains persist across cameras, weather, and rare occlusions. \emph{Decision}: use synthetic data only if real-slice performance improves without degrading daytime or high-risk cases.
+A useful claim audit for generated pedestrian scenes runs as follows. \emph{Claim}: synthetic dusk scenes improve the real pedestrian detector under low-light conditions. \emph{Evidence available}: detector performance on a real held-out dusk slice before and after synthetic augmentation. \emph{Missing evidence}: whether gains persist across cameras, weather, and rare occlusions. \emph{Decision}: use synthetic data only if real-slice performance improves without degrading daytime or high-risk cases.
 \end{evidencebox}
 
 \section{Chapter Artifact: The Generative Model Audit Card}
 \label{sec:gen-audit}
 
-The chapter artifact is the \emph{generative model audit card}: a structured document that records what the model generates, how it was evaluated, and what failure modes to watch for. It complements the uncertainty audit card from Chapter~\ref{ch:probabilistic-models} and the data design card from Chapter~\ref{ch:dataset-design}.
+The chapter artifact is the \emph{generative model audit card}: a structured document recording what the model generates, how it was evaluated, and what failure modes to watch for. It complements the uncertainty audit card from Chapter~\ref{ch:probabilistic-models} and the data design card from Chapter~\ref{ch:dataset-design}.
 
 \subsection{Generative Model Audit Card Structure}
 
@@ -287,21 +287,21 @@ Misuse risks & What harmful content the model could generate; what safeguards ar
 
 \textbf{Quality metrics.} FID = 28.3 (all conditions), FID = 34.7 (nighttime only, compared to real nighttime frames). Feature extractor: Inception-v3 fine-tuned on campus imagery.
 
-\textbf{Diversity assessment.} Visual inspection of 200 generated nighttime samples shows variation in pedestrian position, pose, and street lighting. However, all generated scenes use the same two camera viewpoints from the training data. Rare events (wheelchair users, cyclists) are absent from generated nighttime scenes.
+\textbf{Diversity assessment.} Visual inspection of 200 generated nighttime samples shows variation in pedestrian position, pose, and street lighting. All generated scenes, however, use the same two camera viewpoints from the training data. Rare events---wheelchair users, cyclists---are absent from generated nighttime scenes.
 
 \textbf{Human evaluation.} Three annotators reviewed 100 generated nighttime scenes alongside 100 real ones. Fooling rate: 68\% (annotators labeled 68\% of generated scenes as ``real''). Inter-rater agreement (Fleiss's kappa): 0.54.
 
-\textbf{Known failure modes.} Generated pedestrians sometimes have distorted limbs at close range. Rain effects are unconvincing (training data has very few rainy nighttime frames). Text on signs and license plates is garbled.
+\textbf{Known failure modes.} Generated pedestrians sometimes have distorted limbs at close range. Rain effects are unconvincing because the training data contains very few rainy nighttime frames. Text on signs and license plates is garbled.
 
 \textbf{Downstream impact.} Adding 2,000 generated nighttime scenes to the pedestrian detector's training set improved nighttime recall from 0.62 to 0.74 on the real nighttime test set. Daytime performance was unchanged ($\pm$0.01).
 
-\textbf{Misuse risks.} The model can generate realistic campus scenes with identifiable buildings. Safeguard: model weights are stored on a restricted server and generation is logged. Generated images are watermarked for internal use only.
+\textbf{Misuse risks.} The model can generate realistic campus scenes with identifiable buildings. Safeguard: model weights are stored on a restricted server, generation is logged, and generated images are watermarked for internal use only.
 
 \end{example}
 
 \section{Comparing the Three Families}
 
-Each generative model family has distinct strengths. The choice depends on the task, the data, and the computational budget.
+Each generative model family has distinct strengths. The right choice depends on the task, the data, and the computational budget.
 
 \begin{table}[t]
 \centering
@@ -336,17 +336,17 @@ Best for & Latent interpolation, anomaly detection, augmentation & Sharp image g
 
 \section{Common Mistakes in Generative Modeling}
 
-Several mistakes recur when building and deploying generative models. The first is evaluating only sample quality and ignoring diversity: a model that produces 100 beautiful but nearly identical images is useless for data augmentation. The second is trusting FID as a definitive quality measure: FID depends on the feature extractor, the sample size, and the data domain, and a low FID does not guarantee that generated data is useful for the downstream task. A third is using generated data for both training and evaluation: if synthetic data is used to augment the training set, the test set must remain real and untouched. A fourth is ignoring the failure modes of the generative model: if the model cannot generate rare events or underrepresented conditions, using its output as training data will not fix the coverage gap it was meant to address. Finally, deploying a generative model without considering misuse---realistic fake images, synthetic text used for deception---is an ethical failure that the generative model audit card is designed to prevent.
+Several mistakes recur when building and deploying generative models. The first is evaluating only sample quality and ignoring diversity: a model that produces 100 beautiful but nearly identical images is useless for data augmentation. The second is trusting FID as a definitive quality measure. FID depends on the feature extractor, the sample size, and the data domain, and a low FID does not guarantee that generated data is useful for the downstream task. The third is using generated data for both training and evaluation. If synthetic data augments the training set, the test set must stay real and untouched. The fourth is ignoring the model's failure modes. If the model cannot generate rare events or underrepresented conditions, using its output as training data will not fix the very coverage gap it was meant to address. Finally, deploying a generative model without considering misuse---realistic fake images, synthetic text used for deception---is an ethical failure that the generative model audit card is designed to prevent.
 
 \section{Looking Ahead}
 
-This chapter introduced three families of generative models and framed generation as a design decision: the choice of model, the conditioning scheme, and the evaluation protocol all shape what the generated data can and cannot contribute to the downstream system. The generative model audit card documents these choices.
+This chapter introduced three families of generative models and framed generation as a design decision. The choice of model, the conditioning scheme, and the evaluation protocol together shape what generated data can and cannot contribute to the downstream system. The generative model audit card documents these choices.
 
-The next chapter shifts from learning representations to learning from interaction---reinforcement learning, where the model's actions change the data it sees, and the design challenge is no longer ``what data should we collect?'' but ``what should the agent do next?''
+This chapter also closes Part~II. Across neural networks, probabilistic models, representation reuse, and generative representations, the unifying problem has been the same: learn structure from a static dataset and report honestly what the resulting model knows and does not know. The next part marks a category shift. In Part~III, ``Learning from Interaction,'' Chapter~\ref{ch:reinforcementlearning} stops asking what data we should collect and starts asking what the agent should \emph{do}---how a system can learn by acting, observing consequences, and updating its policy. Reward design replaces label design, exploration replaces validation, and the data distribution is shaped by the agent itself. The book then returns to predictive learning across modalities in Part~IV with the interaction lens still active.
 
 \section*{Chapter Summary}
 
-Generative models learn to produce new data from latent representations. Variational autoencoders impose a smooth probabilistic structure on the latent space, enabling interpolation and anomaly detection but producing blurrier samples. Generative adversarial networks use adversarial training to produce sharp samples but suffer from training instability and mode collapse. Diffusion models decompose generation into iterative denoising, achieving the highest sample quality at the cost of slow generation. Evaluating generative models requires assessing both quality and diversity; automated metrics (FID, IS) are useful proxies but not definitive. Generated data should always be validated against real held-out data. The generative model audit card documents what the model generates, how it was evaluated, what failure modes exist, and what misuse risks are present.
+Generative models learn to produce new data from latent representations. Variational autoencoders impose smooth probabilistic structure on the latent space, enabling interpolation and anomaly detection but producing blurrier samples. Generative adversarial networks use adversarial training to produce sharp samples but suffer from instability and mode collapse. Diffusion models decompose generation into iterative denoising, achieving the highest sample quality at the cost of slow generation. Evaluating generative models requires assessing both quality and diversity; automated metrics like FID and IS are useful proxies but not definitive. Generated data should always be validated against real held-out data. The generative model audit card documents what the model generates, how it was evaluated, what failure modes exist, and what misuse risks are present.
 
 \begin{studyquestions}
 \item How does a VAE's latent space differ from a standard autoencoder's latent space?
@@ -355,7 +355,7 @@ Generative models learn to produce new data from latent representations. Variati
 \item Why do GANs tend to produce sharper images than VAEs?
 \item What is mode collapse, and why is it hard to detect with standard training metrics?
 \item How do diffusion models decompose generation into many small steps, and why does this help quality?
-\item What is the quality--diversity trade-off in classifier-free guidance?
+\item What is the quality--diversity tradeoff in classifier-free guidance?
 \item Why is FID an imperfect measure of generative quality?
 \item When is downstream task performance a better evaluation metric than FID or IS?
 \item What should a generative model audit card document about failure modes?

@@ -5,25 +5,25 @@
 \chapter{Learning from Interaction: Reinforcement Learning}
 \label{ch:reinforcementlearning}
 
-The previous chapters built systems that learn from labeled examples (supervised learning) or from the structure of the data itself (representation learning). In both cases, the model receives a static dataset and fits a function to it. But many real problems require something more: the system must \emph{act}, observe the consequences of that action, and then decide what to do next. A course-support assistant does not merely predict what a good reply looks like---it sends a reply, and the student's subsequent behavior reveals whether the reply actually helped. A campus shuttle does not merely classify a pedestrian as present or absent---it must decide when to brake, and the outcome depends on what happens over the following seconds.
+This chapter opens Part~III, the book's shortest part and its only categorical departure from the prediction-from-data thread that ran through Parts~I and~II. Until now, every chapter has trained models that fit a function to a static dataset. Many real problems demand more: the system must \emph{act}, observe the consequences, and then decide what to do next. A course-support assistant does not merely predict what a good reply looks like; it sends a reply, and the student's subsequent behavior reveals whether the reply actually helped. A campus shuttle does not merely classify a pedestrian as present or absent; it must decide when to brake, and the outcome depends on what happens over the following seconds.
 
-Reinforcement learning (RL) formalizes this kind of problem. The agent interacts with an environment, receives feedback in the form of rewards, and improves its behavior over time. This chapter introduces the core framework---Markov Decision Processes, value functions, and policy optimization---and then turns to the problem that makes RL hardest in practice: specifying a reward signal that actually captures what we care about. It ends with RLHF, a modern technique that connects RL to the foundation-model workflows introduced earlier in this part, and with an artifact---the Interaction Design Card---that forces practitioners to document the assumptions baked into any RL system before deployment.
+Reinforcement learning (RL) formalizes this kind of problem. An agent interacts with an environment, receives feedback as rewards, and improves its behavior over time. This chapter introduces the core framework---Markov Decision Processes, value functions, and policy optimization---then turns to the problem that makes RL hardest in practice: specifying a reward signal that captures what we actually care about. It closes with RLHF, a modern technique that links RL back to the foundation-model workflows from Part~II, and with an artifact---the Interaction Design Card---that forces practitioners to document the assumptions baked into any RL system before deployment.
 
 \section{Opening Dilemma: When Prediction Is Not Enough}
 
 Throughout this book, we have built systems that \emph{predict}. Given an image, predict whether it contains a pedestrian. Given a document, predict its topic. Given a student's interaction history, predict whether they will complete a course.
 
-But prediction is often only the first step. In the real world, agents must also \emph{act}.
+Prediction is often only the first step. In the real world, agents must also \emph{act}.
 
-Consider two systems we have built:
+Consider two systems we have already built:
 
 \begin{enumerate}
-\item \textbf{Course-support assistant.} It receives a student question: ``Can I submit my assignment one day late?'' The assistant predicts a natural language response. But the prediction task is shallow: many responses are technically fluent yet ineffective. One response might offer a clear summary of the policy, encouraging the student to contact their instructor; another might misquote the deadline and confuse the student. The assistant's goal is not to generate text---it is to \emph{resolve the issue}, and some responses resolve while others escalate. How can the system learn which responses actually work?
+\item \textbf{Course-support assistant.} It receives a student question: ``Can I submit my assignment one day late?'' The assistant predicts a natural language response. The prediction task is shallow, though: many fluent responses are still ineffective. One might offer a clear summary of the policy and encourage the student to contact their instructor; another might misquote the deadline and confuse the student. The assistant's goal is not to generate text but to \emph{resolve the issue}. Some responses resolve, others escalate. How does the system learn which ones actually work?
 
-\item \textbf{Campus shuttle safety system.} The pedestrian detector from Chapter~\ref{ch:vision} flags a person in the shuttle's path. Now comes the hard decision: should the shuttle brake, and if so, when? Braking too early wastes fuel and annoys passengers; braking too late risks collision. The shuttle observes the pedestrian's position and velocity; it must act. The consequences unfold over the next few seconds, making it hard to know which action was ``correct.''
+\item \textbf{Campus shuttle safety system.} The pedestrian detector from Chapter~\ref{ch:vision} flags a person in the shuttle's path. Now comes the hard decision: should the shuttle brake, and if so, when? Braking too early wastes fuel and annoys passengers; braking too late risks a collision. The shuttle observes the pedestrian's position and velocity, then must act. The consequences unfold over the next few seconds, making it hard to know which action was ``correct.''
 \end{enumerate}
 
-Both systems share a structure absent from pure prediction:
+Both systems share a structure that pure prediction lacks:
 \begin{itemize}
 \item The agent observes a \emph{state} (student query content, pedestrian location).
 \item The agent takes an \emph{action} (generates a response, brakes or not).
@@ -35,7 +35,7 @@ This is reinforcement learning (RL): \emph{learning to act by interacting with a
 
 Unlike supervised learning, there is no large labeled dataset of ``correct actions.'' The agent learns through trial and error, guided by rewards or penalties that arrive after decisions are made. This creates new challenges: \emph{credit assignment} (which actions caused which outcomes?), \emph{exploration} (trying new actions to discover better strategies), and \emph{alignment} (ensuring the reward signal captures what we truly care about).
 
-In this chapter, we formalize the RL problem, introduce key concepts and algorithms, and confront the hardest problem in RL: getting the reward signal right.
+This chapter formalizes the RL problem, introduces key concepts and algorithms, and confronts the hardest part of RL: getting the reward signal right.
 
 \begin{figure}[t]
 \centering
@@ -54,7 +54,7 @@ In this chapter, we formalize the RL problem, introduce key concepts and algorit
 \node[below=0.6cm of agent, font=\footnotesize, text width=2.8cm, align=center] {policy $\pi(a|s)$\\value estimates};
 \node[below=0.6cm of env, font=\footnotesize, text width=2.8cm, align=center] {transition $P(s'|s,a)$\\reward $R(s,a)$};
 \end{tikzpicture}
-\caption{The agent--environment loop. At each step the agent observes a state, selects an action according to its policy, and receives a reward and a new state from the environment. The agent's goal is to learn a policy that maximizes cumulative reward.}
+\caption{The agent--environment loop. At each step the agent observes a state, selects an action according to its policy, and receives a reward and a new state from the environment. The agent aims to learn a policy that maximizes cumulative reward.}
 \label{fig:rl-loop}
 \end{figure}
 
@@ -79,7 +79,7 @@ An \emph{episode} is a sequence of states and actions: $s_0, a_0, r_0, s_1, a_1,
 
 \subsection{RL vs.\ Supervised Learning}
 
-The difference between RL and supervised learning becomes clear when we ask: ``How do we get training labels?''
+The difference between RL and supervised learning becomes clear once we ask: where do training labels come from?
 
 \begin{table}[h!]
 \centering
@@ -99,14 +99,14 @@ Passive: fit a function to data & Active: learn by interacting \\
 \label{tab:rl_vs_sl}
 \end{table}
 
-In supervised learning, we assume we have access to a large dataset of correct input-output pairs. The learning problem is \emph{passive}: fit a function that minimizes prediction error on unseen examples.
+Supervised learning assumes a large dataset of correct input-output pairs. The learning problem is \emph{passive}: fit a function that minimizes prediction error on unseen examples.
 
-In RL, the agent must \emph{actively explore} to discover which actions are good. This comes with trade-offs that have no analogue in supervised learning. Exploration can be expensive---a wrong action might cause harm or waste resources. Feedback is delayed---we might not know for weeks whether the student's issue was truly resolved. And the data distribution is not fixed: the agent's own policy determines which states it visits, so a change in behavior changes the training data. These three properties---costly exploration, delayed reward, and non-stationary data---are what make RL fundamentally harder than fitting a function to a static dataset.
+In RL, the agent must \emph{actively explore} to discover which actions are good. This brings tradeoffs absent from supervised learning. Exploration can be expensive: a wrong action might cause harm or waste resources. Feedback is delayed: we may not know for weeks whether the student's issue was truly resolved. And the data distribution is not fixed: the agent's own policy determines which states it visits, so any change in behavior changes the training data. These three properties---costly exploration, delayed reward, and non-stationary data---are what make RL fundamentally harder than fitting a function to a static dataset.
 
 \begin{example}[Course-support assistant, MDP framing]
 Let the state space be the student's query and past interactions: $s \in \mathcal{S}$ = \{encoded query, student profile\}. The action space is a discrete set of templated responses: $a \in \mathcal{A}$ = \{response 1, response 2, $\ldots$\}.
 
-The transition is stochastic and partially observed: the same observed query, profile, and response can lead to different outcomes because hidden student and institutional context matters. The reward is observed hours or days later: did the student report their issue as resolved, or did they escalate to a human advisor? We might define:
+The transition is stochastic and partially observed. Identical query, profile, and response can lead to different outcomes because hidden student and institutional context matters. The reward arrives hours or days later: did the student report their issue resolved, or did they escalate to a human advisor? We might define:
 \[
 R(s, a) = \begin{cases}
 +1 & \text{if issue resolved} \\
@@ -115,16 +115,16 @@ R(s, a) = \begin{cases}
 \end{cases}
 \]
 
-The policy $\pi$ maps each query to a distribution over responses; a deterministic policy always selects the single highest-probability response.
+The policy $\pi$ maps each query to a distribution over responses. A deterministic policy always selects the single highest-probability response.
 \end{example}
 
 \begin{example}[A Tiny Episode as the Chapter Spine]
-Consider a two-state support assistant. In state \(s_0\), a student asks a routine deadline question. The agent can answer directly or escalate to an advisor. Answering directly gives reward \(+1\) if the issue resolves and \(-2\) if the student returns frustrated; escalating gives reward \(0\) but moves the case safely to a human. In one episode, the agent answers directly, receives reward \(-2\), and returns to a similar unresolved state. A value-based learner should reduce the value of answering directly in that state. A policy learner should lower the probability of that action. A reward-design audit should ask whether \(-2\) really captures the harm of a poor automated answer. Keep this small loop in mind as the chapter introduces values, policies, exploration, and reward design.
+Consider a two-state support assistant. In state \(s_0\), a student asks a routine deadline question. The agent can answer directly or escalate to an advisor. Answering directly gives reward \(+1\) if the issue resolves and \(-2\) if the student returns frustrated; escalating gives reward \(0\) but routes the case safely to a human. In one episode, the agent answers directly, receives reward \(-2\), and returns to a similar unresolved state. A value-based learner should reduce the value of answering directly in that state. A policy learner should lower the probability of that action. A reward-design audit should ask whether \(-2\) really captures the harm of a poor automated answer. Keep this small loop in mind as the chapter introduces values, policies, exploration, and reward design.
 \end{example}
 
 \section{Value Functions and Temporal Credit Assignment}
 
-The core insight of RL is that an action's value depends on the \emph{total} future reward it enables, not just immediate reward.
+The core insight of RL is that an action's value depends on the \emph{total} future reward it enables, not just the immediate reward.
 
 \subsection{State and Action Values}
 
@@ -142,11 +142,11 @@ Q^\pi(s, a) = \mathbb{E}_\pi\left[r_0 + \sum_{t=1}^{\infty} \gamma^t r_t \,\big|
 \]
 \end{definition}
 
-Intuitively: $V(s)$ tells us how good it is to be in state $s$, and $Q(s, a)$ tells us how good it is to take action $a$ from state $s$.
+Intuitively, $V(s)$ measures how good it is to be in state $s$, and $Q(s, a)$ measures how good it is to take action $a$ from state $s$.
 
 \subsection{The Bellman Equation}
 
-The key insight is a recursive structure: the value of a state is the immediate reward plus the discounted value of the next state.
+A recursive structure underlies value functions: the value of a state equals the immediate reward plus the discounted value of the next state.
 
 \begin{mathlens}
 \textbf{The Bellman Equation.} The state-value and action-value functions satisfy:
@@ -156,71 +156,72 @@ Let \(P(s', r \mid s, a)\) denote the environment's joint probability distributi
 V^\pi(s) = \sum_a \pi(a|s) \sum_{s', r} P(s', r | s, a) \left[r + \gamma V^\pi(s')\right].
 \]
 
-In words: the value of state $s$ is the sum over all actions $a$ the agent might take (weighted by policy $\pi$) of: the immediate expected reward plus $\gamma$ times the value of the resulting state.
+In words, the value of state $s$ sums over all actions the agent might take (weighted by policy $\pi$): for each action, take the immediate expected reward and add $\gamma$ times the value of the resulting state.
 
 For the Q-function:
 \[
 Q^\pi(s, a) = \sum_{s', r} P(s', r | s, a) \left[r + \gamma \sum_{a'} \pi(a' | s') Q^\pi(s', a')\right].
 \]
 
-This recursive structure is the foundation of all value-based RL algorithms. It says: \emph{don't evaluate an action in isolation; look ahead and account for the states it leads to}.
+This recursive structure is the foundation of all value-based RL algorithms. The lesson: \emph{do not evaluate an action in isolation; look ahead and account for the states it leads to}.
 \end{mathlens}
 
 \subsection{Credit Assignment}
+\label{sec:rl-credit-assignment}
 
-The most difficult question in RL is: \emph{which actions caused which outcomes}?
+The hardest question in RL is: \emph{which actions caused which outcomes}?
 
-Suppose the course-support assistant gives response A, then response B, and days later the issue is resolved. Was it response A that worked? Response B? Both? Neither? The reward signal---``issue resolved''---is a single number at the end of the episode, yet many actions contributed to it.
+Suppose the course-support assistant gives response A, then response B, and days later the issue resolves. Was it response A that worked? Response B? Both? Neither? The reward signal---``issue resolved''---is a single number at the end of the episode, yet many actions contributed to it.
 
 This is the \emph{credit assignment problem}.
 
 \begin{definition}[Temporal Difference Learning]
-\emph{Temporal Difference (TD) learning} addresses credit assignment by bootstrapping: estimate the value of a state using the Bellman equation, comparing the immediate reward plus the estimated value of the next state to the current estimate:
+\emph{Temporal Difference (TD) learning} addresses credit assignment by bootstrapping. Use the Bellman equation to estimate the value of a state, then compare the current estimate to the immediate reward plus the estimated value of the next state:
 \[
 \Delta V(s_t) \propto \left[r_t + \gamma V(s_{t+1}) - V(s_t)\right].
 \]
 
-The quantity $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ is called the \emph{TD error}. If $\delta_t > 0$, the state is better than expected; the agent should increase $V(s_t)$.
+The quantity $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ is the \emph{TD error}. If $\delta_t > 0$, the state turned out better than expected and the agent should increase $V(s_t)$.
 \end{definition}
 
-TD learning is elegant because it updates $V$ at every step, based on immediate feedback, rather than waiting for an episode to finish. It propagates credit backward: if state $s_t$ led to a surprisingly good outcome in $s_{t+1}$, we learn that $s_t$ is valuable.
+TD learning is elegant because it updates $V$ at every step from immediate feedback rather than waiting for the episode to end. It propagates credit backward: if state $s_t$ led to a surprisingly good outcome in $s_{t+1}$, the agent learns that $s_t$ is valuable.
 
 \begin{example}[Shuttle braking, credit assignment]
-Define the reward as $r = +1$ for each time step the shuttle remains safe (no collision) and $r = -100$ for a collision. Under this reward, the value $V(s)$ is the expected cumulative discounted reward from state $s$---roughly, how much safe-operation time the agent expects from here onward.
+Define the reward as $r = +1$ for each time step the shuttle remains safe (no collision) and $r = -100$ for a collision. Under this reward, $V(s)$ is the expected cumulative discounted reward from state $s$---roughly, how much safe-operation time the agent expects from here onward.
 
-The shuttle observes a pedestrian at distance $d = 50$\,m, traveling forward at speed $v = 10$\,m/s. Current estimate: $V(50, 10) = 95$ (many safe steps expected). The shuttle continues without braking. After one second, $d = 40$\,m. The step reward is $r = 1$ (no crash this step), and the new estimate is $V(40, 10) = 90$ (fewer safe steps expected, because the pedestrian is closer). The TD error is:
+The shuttle observes a pedestrian at distance $d = 50$\,m, moving forward at $v = 10$\,m/s. The current estimate is $V(50, 10) = 95$ (many safe steps expected). The shuttle continues without braking. After one second, $d = 40$\,m. The step reward is $r = 1$ (no crash this step), and the new estimate is $V(40, 10) = 90$ (fewer safe steps expected, because the pedestrian is closer). The TD error is:
 \[
 \delta = 1 + 0.99 \times 90 - 95 = 1 + 89.1 - 95 = -4.9.
 \]
 
-Negative error: the outcome was worse than expected. The action of continuing (not braking) led to a state with lower expected return. This signal propagates backward, reducing the estimated value of the original state and making the agent less likely to choose ``continue'' in similar future situations.
+A negative error means the outcome was worse than expected. Continuing (not braking) led to a state with lower expected return. This signal propagates backward, reducing the estimated value of the original state and making the agent less likely to choose ``continue'' in similar future situations.
 \end{example}
 
 \section{From Values to Policies}
 
-We now have tools to estimate how good states and actions are. The next question: \emph{how do we use those estimates to act}?
+We now have tools to estimate how good states and actions are. The next question is how to use those estimates to act.
 
 \subsection{Value-Based Methods}
 
-In value-based methods, we estimate $Q(s, a)$ for all state-action pairs, then use those estimates to construct a policy.
+Value-based methods estimate $Q(s, a)$ for all state-action pairs and then construct a policy from those estimates.
 
 \begin{definition}[Greedy Policy]
 Given estimates $\hat{Q}(s, a)$, the \emph{greedy policy} is:
 \[
 \pi(s) = \arg\max_a \hat{Q}(s, a),
 \]
-i.e., always choose the action with the highest estimated value.
+that is, always choose the action with the highest estimated value.
 \end{definition}
 
 \begin{advancednote}
-\textbf{Q-Learning.} The most widely known value-based algorithm is \emph{Q-learning} \citep{watkins1992}. It is an off-policy algorithm: the agent may explore (taking random actions), but it learns the value of the \emph{greedy policy} (the policy that always picks the best action). The update rule is:
+\textbf{Q-Learning.} The best-known value-based algorithm is \emph{Q-learning} \citep{watkins1992}. Q-learning is off-policy: the agent may explore by taking random actions, but it learns the value of the \emph{greedy policy}---the policy that always picks the best action. The update rule is:
 \begin{enumerate}
 \item Take an action $a$ (possibly exploring), observe reward $r$ and next state $s'$.
 \item Compute the TD target: $y = r + \gamma \max_{a'} \hat{Q}(s', a')$.
 \item Update: $\hat{Q}(s, a) \leftarrow \hat{Q}(s, a) + \alpha (y - \hat{Q}(s, a))$.
 \end{enumerate}
 
-The key idea is the $\max$ in step 2: regardless of which action the agent actually took for exploration, the target uses the value of the \emph{best} next action. This separates the behavior policy (which explores) from the target policy (which is greedy), allowing the agent to learn an optimal policy even while exploring suboptimal actions.
+The key idea is the $\max$ in step 2. Regardless of which action the agent actually took while exploring, the target uses the value of the \emph{best} next action. This separates the behavior policy (which explores) from the target policy (which is greedy), letting the agent learn an optimal policy even while taking suboptimal actions.
 
 For a hand calculation, suppose \(Q(s,a)=0.20\), the observed reward is \(r=1\), \(\gamma=0.9\), the best next-state value is \(\max_{a'}Q(s',a')=0.50\), and the learning rate is \(\alpha=0.1\). The TD target is
 \[
@@ -230,14 +231,14 @@ so the update is
 \[
 Q(s,a)\leftarrow 0.20+0.1(1.45-0.20)=0.325.
 \]
-This table-entry update is what the companion gridworld repeats many times.
+The companion gridworld repeats this table-entry update many times.
 
-For large state spaces (e.g., raw images), $Q$ cannot be stored in a table. Instead, we approximate it with a neural network: $\hat{Q}(s, a) = f_\theta(s, a)$. \citet{mnih2015} demonstrated that this approach---\emph{Deep Q-Networks} (DQN)---could learn to play Atari games directly from pixels, a landmark result that revived interest in deep RL. The key stabilization tricks were experience replay (storing past transitions and sampling from them uniformly) and a target network (a slowly updated copy of $Q$ used to compute targets, preventing the moving-target problem).
+For large state spaces, such as raw images, $Q$ cannot be stored in a table. Instead, we approximate it with a neural network: $\hat{Q}(s, a) = f_\theta(s, a)$. \citet{mnih2015} showed that this approach---\emph{Deep Q-Networks} (DQN)---could learn to play Atari games directly from pixels, a landmark result that revived interest in deep RL. The key stabilization tricks were experience replay (store past transitions and sample from them uniformly) and a target network (a slowly updated copy of $Q$ used to compute targets, which prevents the moving-target problem).
 \end{advancednote}
 
 \subsection{Policy-Based Methods}
 
-Instead of learning $Q$, we can directly learn a policy $\pi_\theta(a | s)$ by optimizing it to maximize expected return.
+Instead of learning $Q$, we can learn a policy $\pi_\theta(a | s)$ directly by optimizing it to maximize expected return.
 
 \begin{mathlens}
 \textbf{Policy Gradient.} The expected cumulative return under policy $\pi_\theta$ is defined over the trajectory distribution \(p_{\pi_\theta}\) induced by that policy and the environment dynamics:
@@ -245,38 +246,37 @@ Instead of learning $Q$, we can directly learn a policy $\pi_\theta(a | s)$ by o
 J(\theta) = \mathbb{E}_{\tau \sim p_{\pi_\theta}}\left[\sum_{t=0}^{\infty} \gamma^t r_t\right].
 \]
 
-Let $\rho_{\pi_\theta}$ denote the (normalized) discounted state-visitation distribution induced by policy $\pi_\theta$. The policy gradient theorem \citep{sutton2000policy} shows that one common state-action form of the gradient is:
+Let $\rho_{\pi_\theta}$ denote the (normalized) discounted state-visitation distribution induced by policy $\pi_\theta$. The policy gradient theorem \citep{sutton2000policy} gives one common state-action form of the gradient:
 \[
 \nabla_\theta J(\theta) = \frac{1}{1-\gamma}\,\mathbb{E}_{s \sim \rho_{\pi_\theta},\, a \sim \pi_\theta(\cdot|s)}\left[\nabla_\theta \log \pi_\theta(a | s) \cdot Q^{\pi_\theta}(s, a)\right].
 \]
-The factor $1/(1-\gamma)$ comes from collapsing the trajectory sum into a state distribution; many practical implementations absorb it into the learning rate and write the expectation alone.
+The factor $1/(1-\gamma)$ comes from collapsing the trajectory sum into a state distribution. Many practical implementations absorb it into the learning rate and write the expectation alone.
 
-In words: increase the log-probability of actions that led to high returns; decrease the log-probability of actions that led to low returns. Note that this gradient does not inherently encourage exploration---it simply reinforces what worked and penalizes what did not. Exploration must be added separately (e.g., by entropy regularization or by maintaining a stochastic policy). Without explicit encouragement to explore, policy gradient methods can converge prematurely to a narrow set of actions.
+In words, increase the log-probability of actions that led to high returns and decrease the log-probability of actions that led to low ones. Note that this gradient does not inherently encourage exploration---it reinforces what worked and penalizes what did not. Exploration must be added separately, for example through entropy regularization or by maintaining a stochastic policy. Without explicit encouragement, policy gradient methods can converge prematurely to a narrow set of actions.
 \end{mathlens}
 
 \begin{example}[Course-support assistant, policy gradient]
 Parameterize the policy as a neural network mapping queries to response probabilities: $\pi_\theta(\text{response} | \text{query}) = \text{softmax}(\text{nn}_\theta(\text{query}))$.
 
-On each interaction, compute the return (did the issue resolve?) and convert it into an estimated advantage \(\hat A(s,a)\), meaning how much better or worse the chosen response was than the policy's usual expectation in that state. Update:
+On each interaction, compute the return (did the issue resolve?) and convert it into an estimated advantage \(\hat A(s,a)\)---how much better or worse the chosen response was than the policy's usual expectation in that state. Then update:
 \[
 \theta \leftarrow \theta + \alpha \nabla_\theta \log \pi_\theta(a_{\text{chosen}} | s) \cdot \hat A(s, a_{\text{chosen}}).
 \]
 
-If the chosen response resolved the issue better than the baseline expected (\(\hat A > 0\)), increase its probability. If it did worse than expected (\(\hat A < 0\)), decrease it. Over time, the policy learns to favor responses that outperform its current default behavior.
+When the chosen response beats the baseline (\(\hat A > 0\)), its probability increases. When it underperforms (\(\hat A < 0\)), it decreases. Over time, the policy learns to favor responses that outperform its current default behavior.
 \end{example}
 
 \subsection{Actor-Critic Methods}
-\label{sec:rl-credit-assignment}
 
 Value-based and policy-based methods have complementary strengths. Actor-critic methods combine them:
 \begin{itemize}
-\item The \emph{actor} is the policy $\pi_\theta$ (which action to take).
-\item The \emph{critic} is the value function $V_\phi$ (how good is this state).
+\item The \emph{actor} is the policy $\pi_\theta$ that decides which action to take.
+\item The \emph{critic} is the value function $V_\phi$ that judges how good a state is.
 \end{itemize}
 
-The training loop works as follows: the actor takes an action, the environment returns a reward and next state, the critic evaluates how much better or worse the outcome was compared to its prediction (the TD error from Section~\ref{sec:rl-credit-assignment}), and the actor adjusts its policy to favor actions that the critic rated positively. Over time, the critic's estimates improve (because it sees more data), and the actor's policy improves (because the critic's signal becomes more accurate).
+The training loop runs as follows. The actor takes an action; the environment returns a reward and the next state; the critic evaluates how much better or worse the outcome was than predicted (the TD error from Section~\ref{sec:rl-credit-assignment}); and the actor adjusts its policy to favor actions the critic rated positively. Over time, the critic's estimates sharpen as it sees more data, and the actor's policy improves as the critic's signal becomes more accurate.
 
-This combination is more stable than either component alone. Pure value-based methods like Q-learning can overestimate action values when combined with function approximation, because the $\max$ operator amplifies approximation errors. Pure policy gradient methods have high variance, because each gradient estimate depends on the noisy return of a single episode. The critic reduces that variance by providing a learned baseline, while the actor avoids the instability of the $\max$ by directly parameterizing the policy.
+This combination is more stable than either component alone. Pure value-based methods like Q-learning can overestimate action values once function approximation enters the picture, because the $\max$ operator amplifies approximation errors. Pure policy gradient methods have high variance, since each gradient estimate depends on the noisy return of a single episode. The critic reduces that variance by providing a learned baseline; the actor avoids the instability of the $\max$ by parameterizing the policy directly.
 
 \begin{decisionbox}
 \textbf{Choosing between value-based, policy-based, and actor-critic:}
@@ -289,52 +289,52 @@ This combination is more stable than either component alone. Pure value-based me
 
 \section{Exploration vs.\ Exploitation}
 
-In supervised learning, we have a static dataset. The learning problem is to fit a function to that data; there is no choice about which data to see.
+In supervised learning, the dataset is static. The learning problem is to fit a function to that data; there is no choice about which data to see.
 
-In RL, the agent chooses what experiences to collect. This introduces a fundamental tension: should the agent \emph{exploit} (choose actions it believes are good) or \emph{explore} (try actions to learn whether they are better)?
+In RL, the agent chooses what experiences to collect. This creates a fundamental tension: should the agent \emph{exploit} (choose actions it believes are good) or \emph{explore} (try actions to learn whether they are better)?
 
 \subsection{The Exploration-Exploitation Trade-Off}
 
 \begin{definition}[Exploration-Exploitation Trade-Off]
-\emph{Exploration} is taking actions primarily to gather information about the environment and improve the policy in the long run. \emph{Exploitation} is taking actions believed to maximize immediate reward based on current knowledge.
+\emph{Exploration} means taking actions primarily to gather information about the environment and improve the policy over the long run. \emph{Exploitation} means taking actions believed to maximize immediate reward given current knowledge.
 
-The agent must balance these: too much exploitation locks in a suboptimal strategy; too much exploration wastes time on actions known to be poor.
+The agent must balance the two. Too much exploitation locks in a suboptimal strategy; too much exploration wastes time on actions already known to be poor.
 \end{definition}
 
 \begin{example}[Shuttle braking]
-Suppose the shuttle has braked in the past, and the pedestrian safely cleared the road. The shuttle ``knows'' braking is safe. But the shuttle has never swerved around the pedestrian. Should it try swerving to see if it is faster? Probably not---the cost of a collision is too high, and braking is known to be safe. But in a different scenario (the shuttle could gently swerve while maintaining a safe stopping distance), exploration might be valuable.
+Suppose the shuttle has braked in the past and the pedestrian safely cleared the road. The shuttle ``knows'' braking is safe. But it has never swerved around the pedestrian. Should it try swerving to see if it is faster? Probably not: the cost of a collision is too high, and braking is known to be safe. In a different scenario---one in which the shuttle could gently swerve while maintaining a safe stopping distance---exploration might be valuable.
 \end{example}
 
 \subsection{Exploration Strategies}
 
 \begin{definition}[Epsilon-Greedy]
-The simplest exploration strategy: with probability $\epsilon$, take a random action; with probability $1 - \epsilon$, take the greedy action $\arg\max_a \hat{Q}(s, a)$. As learning progresses, decay $\epsilon$ toward 0 to shift from exploration to exploitation.
+The simplest exploration strategy. With probability $\epsilon$, take a random action; with probability $1 - \epsilon$, take the greedy action $\arg\max_a \hat{Q}(s, a)$. As learning progresses, decay $\epsilon$ toward 0 to shift from exploration to exploitation.
 \end{definition}
 
 \begin{practicalnote}
-Epsilon-greedy is easy to implement and often effective for problems with small action spaces. For problems where random actions are dangerous (e.g., autonomous driving), use exploration strategies that generate actions closer to the current policy.
+Epsilon-greedy is easy to implement and often effective for problems with small action spaces. When random actions are dangerous (autonomous driving, for example), use exploration strategies that stay closer to the current policy.
 \end{practicalnote}
 
-Epsilon-greedy has a clear limitation: when the agent explores, it chooses a random action with no regard for how informative that action might be. A more principled approach is to explore actions that are \emph{uncertain}---actions we have tried fewer times and therefore know less about.
+Epsilon-greedy has a clear limitation. When the agent explores, it picks a random action without regard for how informative that action might be. A more principled approach explores \emph{uncertain} actions---those tried fewer times and therefore less well understood.
 
 \begin{definition}[Upper Confidence Bound (UCB)]
 Instead of $\arg\max_a \hat{Q}(s, a)$, choose:
 \[
 \arg\max_a \left[\hat{Q}(s, a) + c \sqrt{\frac{\log N}{\text{count}(s, a)}}\right],
 \]
-where $\text{count}(s, a)$ is the number of times action $a$ has been taken in state $s$, and $N=\sum_{a'}\text{count}(s,a')$ is the total number of action selections made from that state. In practice, unseen actions are tried once first, or treated as having an infinite exploration bonus, so the denominator is never zero. The second term is an ``exploration bonus'': actions tried fewer times get an optimism bonus. As an action is tried more, the bonus shrinks.
+where $\text{count}(s, a)$ is the number of times action $a$ has been taken in state $s$, and $N=\sum_{a'}\text{count}(s,a')$ is the total number of action selections made from that state. In practice, unseen actions are tried once first or treated as having an infinite exploration bonus, so the denominator is never zero. The second term is an ``exploration bonus'': actions tried fewer times receive a larger optimism bonus, which shrinks as the action is tried more.
 
-UCB is principled: it balances known good actions with actions that could plausibly be better if we learned more about them.
+UCB is principled. It balances known good actions against actions that could plausibly be better if we learned more about them.
 \end{definition}
 
 \begin{definition}[Thompson Sampling]
-Maintain a posterior distribution over $Q(s, a)$ (e.g., a Bayesian model). At each step, sample from the posterior and act greedily according to the sample. This naturally explores actions that could plausibly be optimal given current uncertainty, and automatically reduces exploration as uncertainty shrinks.
+Maintain a posterior distribution over $Q(s, a)$, for example a Bayesian model. At each step, sample from the posterior and act greedily according to the sample. This naturally explores actions that could plausibly be optimal given current uncertainty, and exploration shrinks automatically as uncertainty drops.
 \end{definition}
 
-Both UCB and Thompson sampling embody the same intuition: \emph{optimism in the face of uncertainty}. Actions we know little about receive the benefit of the doubt, because they might turn out to be better than anything we have tried. As evidence accumulates, the exploration bonus fades and the agent converges on exploitation. This is a more sample-efficient strategy than epsilon-greedy, but it requires maintaining uncertainty estimates, which adds computational cost.
+Both UCB and Thompson sampling embody the same intuition: \emph{optimism in the face of uncertainty}. Actions we know little about get the benefit of the doubt, because they might turn out to be better than anything we have tried. As evidence accumulates, the exploration bonus fades and the agent converges on exploitation. This is more sample-efficient than epsilon-greedy, but it requires maintaining uncertainty estimates, which adds computational cost.
 
 \begin{practicalnote}[Exploration in continuous action spaces]
-All exploration strategies discussed above (epsilon-greedy, UCB, Thompson sampling) assume the action space is discrete: the agent chooses one of a small set of options. For continuous action spaces---such as steering angles in a self-driving car, joint angles in a robot arm, or dosing levels in medical treatment---discrete exploration does not apply directly. Common alternatives include adding Gaussian noise to the policy's output (as in DDPG: deterministic policy gradient plus action noise) or learning a stochastic policy that naturally explores by sampling from a learned distribution (as in SAC: Soft Actor-Critic). The key principle remains: the agent must sometimes take actions that deviate from its current best estimate, in order to discover whether better strategies exist.
+The exploration strategies above (epsilon-greedy, UCB, Thompson sampling) all assume a discrete action space: the agent chooses one of a small set of options. Continuous action spaces---steering angles in a self-driving car, joint angles in a robot arm, dosing levels in medical treatment---rule out discrete exploration. Common alternatives add Gaussian noise to the policy's output (as in DDPG: deterministic policy gradient plus action noise) or learn a stochastic policy that explores by sampling from a learned distribution (as in SAC: Soft Actor-Critic). The principle is the same: the agent must sometimes deviate from its current best estimate to discover whether better strategies exist.
 \end{practicalnote}
 
 \begin{decisionbox}
@@ -348,9 +348,9 @@ All exploration strategies discussed above (epsilon-greedy, UCB, Thompson sampli
 
 \section{Reward Design and Misalignment}
 
-The most overlooked problem in RL is \emph{specifying the reward signal}. We have learned that ``what gets measured gets managed.'' In RL, what gets rewarded gets learned.
+The most overlooked problem in RL is \emph{specifying the reward signal}. The saying ``what gets measured gets managed'' applies with a twist in RL: what gets rewarded gets learned.
 
-If the reward signal is wrong, the agent will optimize the wrong thing.
+A wrong reward signal produces an agent that optimizes the wrong thing.
 
 \subsection{The Reward Design Problem}
 
@@ -364,35 +364,35 @@ Suppose we reward the assistant for ``quick resolution.'' We define:
 R = -\text{(time until student confirms resolution)}.
 \]
 
-The assistant learns to send responses immediately, before carefully reading the query. It generates a generic ``contact your instructor'' response, satisfying some students quickly but leaving others frustrated. The reward signal was optimized, but the true goal---\emph{resolve student issues effectively}---was not.
+The assistant learns to send responses immediately, before carefully reading the query. It produces a generic ``contact your instructor'' reply that satisfies some students quickly but leaves others frustrated. The reward signal was optimized, but the true goal---\emph{resolve student issues effectively}---was not.
 
-A better reward might incorporate: did the student resolve their issue? Did they need human escalation? Did they report the response as helpful? But even this is imperfect, because some students might not report back for days.
+A better reward might combine multiple signals: did the student resolve their issue? Did they need human escalation? Did they report the response as helpful? Even this is imperfect, since some students do not report back for days.
 \end{example}
 
 \begin{failurepattern}[Reward Hacking / Specification Gaming]
-When optimizing an easy-to-measure proxy rather than the true objective, the agent finds adversarial solutions:
+When optimizing an easy-to-measure proxy instead of the true objective, the agent finds adversarial solutions:
 \begin{itemize}
 \item A robot tasked with ``moving fast'' learns to vibrate in place rather than move forward.
 \item A model trained to maximize engagement learns to recommend conspiracy theories.
 \item A recommendation system trained to minimize returns learns to recommend items that customers don't actually want but can't easily return.
 \end{itemize}
 
-Root cause: the reward function is \emph{detached from the true objective}. The agent is not trying to trick us; it is honestly optimizing what we told it to optimize.
+Root cause: the reward function is \emph{detached from the true objective}. The agent is not trying to trick us; it is honestly optimizing the signal we gave it.
 \end{failurepattern}
 
 \begin{definition}[Goodhart's Law (in RL context)]
-``When a measure becomes a target, it ceases to be a good measure.'' In RL, we often optimize a metric we \emph{can} measure (engagement, speed, accuracy on a benchmark). But the true objective is richer and harder to quantify. Once the agent starts optimizing the metric, it diverges from the true goal.
+``When a measure becomes a target, it ceases to be a good measure.'' In RL, we often optimize a metric we \emph{can} measure---engagement, speed, accuracy on a benchmark. The true objective is usually richer and harder to quantify. Once the agent starts optimizing the metric, it diverges from the goal.
 \end{definition}
 
 \subsection{Reward Audit and Honest Reporting}
 
-The solution is a feedback loop: deploy RL systems carefully, monitor what they actually optimize, and iterate on the reward signal.
+The solution is a feedback loop. Deploy RL systems carefully, monitor what they actually optimize, and iterate on the reward signal.
 
 \begin{evidencebox}
 \textbf{Reward audit checklist:}
 \begin{enumerate}
-\item \emph{Agree on the true objective.} Before specifying a reward, ask: what do we actually want? Write it down.
-\item \emph{Specify the reward.} Formalize the objective as a reward function. Document the assumptions.
+\item \emph{Agree on the true objective.} Before specifying a reward, ask what we actually want and write it down.
+\item \emph{Specify the reward.} Formalize the objective as a reward function and document the assumptions.
 \item \emph{Test on simulated data.} Before deployment, visualize what policies the reward would favor. Do they match the true objective?
 \item \emph{Monitor outcomes.} In live operation, track both the reward signal and proxies for the true objective. Did we game the metric or solve the problem?
 \item \emph{Iterate.} If the reward is misaligned, update it and retrain. Reward design is not a one-time task.
@@ -400,26 +400,26 @@ The solution is a feedback loop: deploy RL systems carefully, monitor what they 
 \end{evidencebox}
 
 \begin{warningbox}
-\textbf{Do not ignore partial observability.} Often, the agent observes only part of the state. A student query might not reveal the student's true underlying problem; a pedestrian's position might not reveal their intent. If the reward depends on the hidden part of the state, the agent may fail to learn a reliable policy from the current observations alone. Invest in better sensors, better state representation, or simplify the problem.
+\textbf{Do not ignore partial observability.} The agent often observes only part of the state. A student query may not reveal the student's underlying problem; a pedestrian's position may not reveal their intent. If the reward depends on the hidden part of the state, the agent may fail to learn a reliable policy from current observations alone. Invest in better sensors, a better state representation, or a simpler problem.
 
-Practical workarounds include \emph{frame stacking}---feeding the agent several recent observations rather than just one---and \emph{recurrent policies} that maintain a learned latent state summarising observation history. Both approaches give the agent implicit memory without requiring the full Partially Observable Markov Decision Process (POMDP) formalism.
+Practical workarounds include \emph{frame stacking}---feeding the agent several recent observations instead of one---and \emph{recurrent policies} that maintain a learned latent state summarizing observation history. Both give the agent implicit memory without requiring the full Partially Observable Markov Decision Process (POMDP) formalism.
 \end{warningbox}
 
 \section{RLHF: Aligning Language Models with Human Preferences}
 
-Large language models from Chapter~\ref{ch:representation-foundation-models} are trained on next-token prediction, which does not directly optimize for user satisfaction. A model can be fluent but unhelpful, biased, or unsafe.
+Large language models from Chapter~\ref{ch:representation-foundation-models} are trained on next-token prediction, which does not directly optimize user satisfaction. A model can be fluent but unhelpful, biased, or unsafe.
 
-Reinforcement Learning from Human Feedback (RLHF) is a modern technique that fine-tunes a language model to optimize a learned proxy for human preferences \citep{christiano2017,ouyang2022}. It should not be described as optimizing human values directly. The reward model is itself a model trained from limited comparisons, and PPO is one common historical optimization choice rather than the conceptual essence of preference-based alignment.
+Reinforcement Learning from Human Feedback (RLHF) is a modern technique that fine-tunes a language model to optimize a learned proxy for human preferences \citep{christiano2017,ouyang2022}. It should not be described as optimizing human values directly. The reward model is itself trained from limited comparisons, and PPO is a common historical optimization choice rather than the conceptual essence of preference-based alignment.
 
 \subsection{The RLHF Pipeline}
 
 \begin{enumerate}
 
-\item \textbf{Start with a base model.} A language model (e.g., GPT) pretrained on next-token prediction.
+\item \textbf{Start with a base model.} A language model such as GPT, pretrained on next-token prediction.
 
-\item \textbf{Collect human preferences.} Show annotators pairs of model outputs for the same input, and ask which response is better. Accumulate thousands of preference comparisons.
+\item \textbf{Collect human preferences.} Show annotators pairs of model outputs for the same input and ask which response is better. Accumulate thousands of preference comparisons.
 
-\item \textbf{Train a reward model.} Learn a function $r_\theta(s, a)$ that predicts which of two outputs a human would prefer. This is supervised learning: $s$ is a prompt, $a$ is the model's response, and the label is the human's preference.
+\item \textbf{Train a reward model.} Learn a function $r_\theta(s, a)$ that predicts which of two outputs a human would prefer. This is supervised learning: $s$ is the prompt, $a$ is the model's response, and the label is the human's preference.
 
 \item \textbf{Optimize the policy with PPO.} Use the learned reward model as the RL objective. Run an RL algorithm such as Proximal Policy Optimization \citep[PPO;][]{schulman2017} to fine-tune the language model to maximize the reward model's predictions.
 
@@ -436,48 +436,48 @@ Reinforcement Learning from Human Feedback (RLHF) is a modern technique that fin
 \item Response B: ``The deadline is firm. Late submissions are not accepted.''
 \end{itemize}
 
-Annotators typically prefer A (helpful, open-minded) over B (rigid, unhelpful). After 5,000 comparisons, we have a dataset of preferences.
+Annotators typically prefer A (helpful, open-minded) over B (rigid, unhelpful). After 5,000 comparisons, we have a preference dataset.
 
 \emph{Train reward model:} Learn $r_\theta(\text{prompt}, \text{response})$ to predict which response annotators prefer. This is a binary classification task.
 
-\emph{Finetune with RL:} Use PPO to optimize the language model's policy $\pi_\phi(\text{response} | \text{prompt})$ to maximize $\mathbb{E}_{a \sim \pi_\phi(\cdot | \text{prompt})} [r_\theta(\text{prompt}, a)]$, where \(a\) is the sampled response/action.
+\emph{Fine-tune with RL:} Use PPO to optimize the policy $\pi_\phi(\text{response} | \text{prompt})$ to maximize $\mathbb{E}_{a \sim \pi_\phi(\cdot | \text{prompt})} [r_\theta(\text{prompt}, a)]$, where \(a\) is the sampled response.
 
-The result: the model learns to generate responses that annotators found preferred. The course-support assistant becomes more helpful, more empathetic, and more aligned with the department's goals.
+The model learns to generate responses that annotators preferred. The course-support assistant becomes more helpful, more empathetic, and more aligned with the department's goals.
 \end{example}
 
 \subsection{Challenges in RLHF}
 
 \begin{failurebox}[KL drift]
-When optimizing the reward model, the language model might drift far from the original pretrained model, degrading general-purpose capabilities. Solutions: add a KL divergence penalty to the RL objective:
+When optimizing the reward model, the language model can drift far from the pretrained model and lose general-purpose capabilities. The fix is to add a KL divergence penalty to the RL objective:
 \[
 J = \mathbb{E}[r_\theta(s, a)] - \beta \cdot \text{KL}(\pi_\phi(\cdot | s) \| \pi_{\text{base}}(\cdot | s)),
 \]
-where $\pi_{\text{base}}$ is the original model. The penalty term encourages the fine-tuned model to stay close to the base model.
+where $\pi_{\text{base}}$ is the original model. The penalty pulls the fine-tuned model back toward the base.
 \end{failurebox}
 
 \begin{failurepattern}[Reward model hacking]
-The language model can find edge cases where the reward model gives high scores but the responses are poor (e.g., verbose but evasive answers). This is specification gaming: the model honestly optimizes the learned reward, but the reward model is imperfect.
+The language model can find edge cases where the reward model gives high scores but the responses are poor---verbose but evasive answers, for example. This is specification gaming: the model honestly optimizes the learned reward, but the reward model itself is imperfect.
 
-Mitigation: regularize the reward model to avoid overconfidence; use ensemble reward models; include human feedback loops to identify and correct misalignment.
+Mitigation: regularize the reward model against overconfidence, use ensemble reward models, and include human feedback loops to catch and correct misalignment.
 \end{failurepattern}
 
 \begin{example}[Reward model gaming in RLHF]
-Consider a language model fine-tuned with RLHF to produce helpful responses. During annotation, annotators may have consistently preferred longer, more verbose responses, because thoroughness correlated with helpfulness in the training data. The reward model learns this statistical pattern: longer responses $\rightarrow$ higher predicted preference score. When optimized with RL, the language model discovers it can exploit this pattern by generating unnecessarily lengthy responses that say less per word, even when a short direct answer would be more useful. For instance, a user asks ``What is the capital of France?'' The model generates: ``France is a country located in Western Europe with a rich history spanning many centuries. Throughout its history, France has had various important cities. One such city is Paris, which has served as the center of French cultural and political life for many centuries. Paris is indeed the capital of France.''
+Consider a language model fine-tuned with RLHF to produce helpful responses. During annotation, annotators may have consistently preferred longer, more verbose responses because thoroughness correlated with helpfulness in the training data. The reward model picks up this statistical pattern: longer responses $\rightarrow$ higher predicted preference. When optimized with RL, the language model exploits the pattern, producing unnecessarily lengthy responses that say less per word even when a short direct answer would be more useful. A user asks ``What is the capital of France?'' The model replies: ``France is a country located in Western Europe with a rich history spanning many centuries. Throughout its history, France has had various important cities. One such city is Paris, which has served as the center of French cultural and political life for many centuries. Paris is indeed the capital of France.''
 
-Detecting such gaming requires evaluating on out-of-distribution prompts where verbose responses are clearly suboptimal, checking whether the reward model's scores still correlate with actual human satisfaction in a fresh evaluation sample, and monitoring the model's output statistics (e.g., average response length) during deployment.
+Detecting such gaming requires evaluating on out-of-distribution prompts where verbose responses are clearly suboptimal, checking whether reward-model scores still correlate with actual human satisfaction on a fresh evaluation sample, and monitoring the model's output statistics, such as average response length, during deployment.
 \end{example}
 
 \begin{practicalnote}
-RLHF is computationally expensive (multiple forward/backward passes through both the language model and reward model, for many rollouts). In practice, practitioners often limit the amount of RL fine-tuning to a few thousand optimization steps, keeping compute manageable.
+RLHF is computationally expensive: many rollouts, each with multiple forward and backward passes through both the language model and the reward model. Practitioners often cap RL fine-tuning at a few thousand optimization steps to keep compute manageable.
 \end{practicalnote}
 
 \begin{sanitycheck}
-\textbf{Is RLHF necessary?} No. Supervised fine-tuning on high-quality human demonstrations often works nearly as well as RLHF and is cheaper. Use RLHF when preferences are easier to annotate than demonstrations (e.g., ``which response is better?'' vs.\ ``generate the ideal response''), or when you want to scale human feedback.
+\textbf{Is RLHF necessary?} No. Supervised fine-tuning on high-quality human demonstrations often performs nearly as well and costs less. Use RLHF when preferences are easier to annotate than demonstrations---``which response is better?'' is usually easier than ``generate the ideal response''---or when scaling human feedback is the goal.
 \end{sanitycheck}
 
 \section{The Chapter Artifact: Interaction Design Card}
 
-Just as Chapter~\ref{ch:dataset-design} produced the Data Design Card and Chapter~\ref{ch:optimization-neural-networks} produced the Minimum Credible Neural Training Report, this chapter produces an \emph{Interaction Design Card}: a structured template for documenting an RL system before, during, and after deployment.
+Just as Chapter~\ref{ch:dataset-design} produced the Data Design Card and Chapter~\ref{ch:optimization-neural-networks} produced the Minimum Credible Neural Training Report, this chapter delivers an \emph{Interaction Design Card}: a structured template for documenting an RL system before, during, and after deployment.
 
 \begin{center}
 \framebox{\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
@@ -547,65 +547,87 @@ Just as Chapter~\ref{ch:dataset-design} produced the Data Design Card and Chapte
 \end{minipage}}
 \end{center}
 
-This card forces you to articulate: What are we learning from interaction? Why? What could go wrong? And how will we know? Completing it before building an RL system often reveals gaps in the design.
+The card forces you to articulate four questions: What are we learning from interaction? Why? What could go wrong? And how will we know? Completing it before building an RL system often exposes design gaps.
+
+\begin{example}[Filled Interaction Design Card]
+\textbf{System name:} CampusShuttle-Brake-Assist v0.3 \quad \textbf{Date:} pre-launch review.
+
+\textbf{Decision context.} An autonomous campus shuttle must decide, every 100\,ms, whether to maintain speed, gently slow, or perform an emergency brake when a pedestrian is detected ahead. The system learns from interaction because no static rule covers the joint distribution of pedestrian behavior, road conditions, and approach geometry the shuttle actually faces.
+
+\textbf{State representation.} The agent observes a 20-frame history of the upcoming corridor: pedestrian bounding-box positions and velocities (from the perception stack of Chapter~\ref{ch:vision}), shuttle speed, distance to the nearest detected pedestrian, road-surface estimate, and ambient light. \emph{Missing:} pedestrian intent, occluded pedestrians, weather degradation of the perception model. We approximate Markovian state by stacking the last 20 frames; longer histories did not improve held-out reward in pre-deployment trials.
+
+\textbf{Action space.} Three discrete actions: \texttt{maintain}, \texttt{soft\_brake} (deceleration $0.15g$), and \texttt{hard\_brake} (deceleration $0.45g$). Continuous control is out of scope. Safety constraint: if the perception module's confidence drops below 0.7 for three consecutive frames, the agent is overridden by a fixed conservative policy that selects \texttt{soft\_brake}.
+
+\textbf{Reward signal.} \emph{True objective}: zero pedestrian-contact incidents, minimize unnecessary hard brakes (rider comfort and rear-end collision risk), and meet the schedule. \emph{Formal reward}: per-step
+\[
+r = -100\cdot \mathbb{1}[\text{contact}] - 5\cdot \mathbb{1}[\text{hard\_brake}] - 0.1\cdot \mathbb{1}[\text{soft\_brake}] + 0.05\cdot \mathbb{1}[\text{schedule\_met}].
+\]
+\emph{Misalignment proxies to monitor}: hard-brake rate, soft-brake rate, near-miss rate (defined by the external safety officer), and passenger-comfort survey. \emph{Reward-hacking audits}: weekly review of episodes with anomalously high cumulative reward; manual labeling of 50 such episodes per week to confirm the agent earned them through actual safe behavior rather than through degenerate strategies.
+
+\textbf{Exploration strategy.} Bad exploration is dangerous; the system cannot rehearse crashes. We do \emph{not} explore in production. All exploration happens in (i) a high-fidelity simulator validated against on-route data and (ii) shadow mode on the live route, where the trained policy's chosen action is logged but the actual brake decision is taken by the existing rule-based system. Production policy updates only after passing simulator and shadow-mode acceptance tests.
+
+\textbf{Evaluation plan.} \emph{Pre-deployment:} simulator scenarios graded by an external safety officer (50 hand-designed adversarial scenarios; the system must perform at least as well as the rule-based baseline on all 50, and strictly better on at least 30). \emph{In production:} cumulative reward, contact rate (must be 0), hard-brake rate (target $\leq$ baseline), passenger-comfort survey (target $\geq$ baseline). \emph{Failure detection:} any contact event triggers immediate rollback; a sustained increase in hard-brake rate over 7 days triggers human review.
+
+\textbf{Guardrails and monitoring.} (i) The conservative override policy described above is always available and not learned. (ii) The reward signal is reviewed monthly by the safety officer; reward changes require sign-off from operations, safety, and engineering. (iii) Operations and safety leads can disable the agent remotely and revert to the rule-based system in under 60 seconds. (iv) All decisions are logged; episodes within 24 hours of any near-miss are flagged for human review.
+\end{example}
 
 \section{Common Mistakes}
 
 \begin{failurepattern}[Skipping the baseline policy]
-Jumping straight to RL without first testing a simple heuristic or rule-based policy. A hard-coded ``always brake when distance $< 10$ meters'' might already solve 90\% of shuttle scenarios. Without that baseline, you cannot tell whether the RL agent's complexity is justified or whether it is merely rediscovering simple rules at great computational cost. Mitigation: always deploy and measure a non-learned baseline before investing in RL training.
+Jumping straight to RL without first testing a simple heuristic or rule-based policy. A hard-coded ``always brake when distance $< 10$ meters'' might already solve 90\% of shuttle scenarios. Without that baseline, you cannot tell whether the RL agent's complexity is justified or whether it is just rediscovering simple rules at great computational cost. Mitigation: always deploy and measure a non-learned baseline before investing in RL training.
 \end{failurepattern}
 
 \begin{failurepattern}[Ignoring partial observability]
-The agent observes state $s$, but the reward depends on a hidden part of the state. The agent may fail to learn a reliable policy because it cannot infer the full state from $s$ alone. Cause: insufficient sensor data or poor state representation. Mitigation: invest in better observations, add memory or state estimation, or simplify the problem to make it closer to fully observable.
+The agent observes state $s$, but the reward depends on a hidden part of the state. The agent then fails to learn a reliable policy because it cannot infer the full state from $s$ alone. Cause: insufficient sensor data or poor state representation. Mitigation: invest in better observations, add memory or state estimation, or simplify the problem so it is closer to fully observable.
 \end{failurepattern}
 
 \begin{failurepattern}[Confusing on-policy and off-policy learning]
-On-policy methods (e.g., policy gradient) require data sampled from the current policy. Off-policy methods (e.g., Q-learning) can reuse data from a different behavior policy when the logged data covers the actions and states needed by the target policy; arbitrary data is not automatically valid. Mixing these assumptions causes instability. Cause: misunderstanding when a method is valid. Mitigation: check the algorithm's assumptions; when in doubt, use on-policy methods (they are more forgiving).
+On-policy methods such as policy gradient require data sampled from the current policy. Off-policy methods such as Q-learning can reuse data from a different behavior policy, but only when the logged data covers the actions and states the target policy needs; arbitrary data is not automatically valid. Mixing these assumptions causes instability. Cause: misunderstanding when a method is valid. Mitigation: check the algorithm's assumptions, and when in doubt prefer on-policy methods, since they are more forgiving.
 \end{failurepattern}
 
 \begin{failurepattern}[Inadequate exploration]
-The agent converges to a local optimum and stops exploring. It never discovers better strategies. Cause: exploration decay too aggressive, or exploration too costly. Mitigation: keep exploration longer than you think necessary; design exploration to be safe.
+The agent converges to a local optimum and stops exploring, so it never discovers better strategies. Cause: exploration decay too aggressive, or exploration too costly. Mitigation: keep exploration longer than you think necessary, and design it to be safe.
 \end{failurepattern}
 
 \begin{failurepattern}[Evaluating RL with supervised metrics]
-You train an RL agent and then evaluate it using accuracy, precision, or other supervised metrics. But RL optimizes a different objective (cumulative reward), and a policy that maximizes reward might not maximize accuracy. Cause: misalignment between training and evaluation. Mitigation: evaluate cumulative return together with independent task, safety, and user-outcome metrics aligned with the true objective; do not rely on supervised accuracy alone.
+You train an RL agent and then evaluate it using accuracy, precision, or other supervised metrics. But RL optimizes cumulative reward, and a policy that maximizes reward need not maximize accuracy. Cause: misalignment between training and evaluation. Mitigation: evaluate cumulative return alongside independent task, safety, and user-outcome metrics aligned with the true objective. Do not rely on supervised accuracy alone.
 \end{failurepattern}
 
 \begin{failurepattern}[Non-stationary environments]
-The environment changes over time (e.g., student preferences shift, pedestrian behavior changes), but the learned policy does not adapt. Cause: static offline training. Mitigation: use online learning, with continuous data collection and retraining.
+The environment changes over time---student preferences shift, pedestrian behavior evolves---but the learned policy does not adapt. Cause: static offline training. Mitigation: use online learning with continuous data collection and retraining.
 \end{failurepattern}
 
 \section{Offline Evaluation and the Bandit Bridge}
 
-Two threads from this chapter resurface later in the book under different names, and it is worth flagging them now so the connection is not lost.
+Two threads from this chapter resurface later in the book under different names. It is worth flagging them now so the connection is not lost.
 
-The first thread is \emph{offline evaluation from logged data}. Most of this chapter has assumed the agent can interact freely with its environment: try an action, observe a reward, update. Real deployments rarely allow that. A pedestrian detector cannot rehearse crashes; a course-support assistant cannot route every student into every policy variant to see what works best. Instead, teams have logs: states the system saw, actions it chose under the \emph{old} policy, and outcomes that followed. Estimating how a \emph{new} policy would have behaved, using only those logs, is the problem of off-policy or \emph{counterfactual} evaluation. Chapter~\ref{ch:ranking-recommendation} returns to this under the label of offline ranking evaluation (Section~\ref{sec:ranking-eval}): recommendation systems face exactly the same asymmetry, because past clicks tell us only about items the old policy chose to expose, and any offline metric must correct for that exposure bias (Section~\ref{sec:exposure-bias}). The RL vocabulary of behavior policy, target policy, and importance-weighted returns is the same machinery under another name.
+The first thread is \emph{offline evaluation from logged data}. Most of this chapter has assumed the agent can interact freely with its environment: try an action, observe a reward, update. Real deployments rarely allow that. A pedestrian detector cannot rehearse crashes; a course-support assistant cannot route every student into every policy variant to see what works best. Teams instead have logs: states the system saw, actions it chose under the \emph{old} policy, and outcomes that followed. Estimating how a \emph{new} policy would have behaved using only those logs is the problem of off-policy or \emph{counterfactual} evaluation. Chapter~\ref{ch:ranking-recommendation} returns to this under the label of offline ranking evaluation (Section~\ref{sec:ranking-eval}). Recommendation systems face the same asymmetry: past clicks tell us only about items the old policy chose to expose, and any offline metric must correct for that exposure bias (Section~\ref{sec:exposure-bias}). The RL vocabulary of behavior policy, target policy, and importance-weighted returns is the same machinery under another name.
 
-The second thread is \emph{bandits}. A multi-armed bandit is the simplest reinforcement-learning problem: one state, many actions, stochastic rewards, and the only task is to balance exploration against exploitation. Bandits matter operationally because they fit the regime where real systems most often ``learn from interaction'': low-stakes routing and ranking decisions that happen thousands of times per hour, each producing a fast feedback signal. Chapter~\ref{ch:models-systems} treats this in the ``Bandits, Online Learning, and Adaptive Systems'' section, connecting the explore-exploit tradeoff from this chapter to the deployment question of when a production system should be allowed to adapt its own policy rather than wait for a human-driven retraining cycle.
+The second thread is \emph{bandits}. A multi-armed bandit is the simplest reinforcement-learning problem: one state, many actions, stochastic rewards, and the only task is balancing exploration against exploitation. Bandits matter operationally because they fit the regime where real systems most often ``learn from interaction'': low-stakes routing and ranking decisions that happen thousands of times per hour, each producing a fast feedback signal. Chapter~\ref{ch:models-systems} treats this in the ``Bandits, Online Learning, and Adaptive Systems'' section, connecting this chapter's explore-exploit tradeoff to the deployment question of when a production system should be allowed to adapt its own policy rather than wait for a human-driven retraining cycle.
 
 \begin{practicalnote}
-The practical rule of thumb is simple. Offline evaluation is the question ``would a new policy have been better than the old one, judging only by what we already logged?'' Bandits are the question ``can the system \emph{cheaply try} the new policy on a small fraction of traffic and decide?'' The two are complements: offline evaluation screens candidates; a bandit or A/B deployment confirms them under the real feedback loop.
+The practical rule of thumb is simple. Offline evaluation asks: would a new policy have been better than the old one, judging only by what we already logged? Bandits ask: can the system \emph{cheaply try} the new policy on a small fraction of traffic and decide? The two are complements. Offline evaluation screens candidates; a bandit or A/B deployment confirms them under the real feedback loop.
 \end{practicalnote}
 
 \section{Looking Ahead: From RL to Modalities}
 
-This chapter treated RL as an abstract problem: states, actions, rewards, and policies without specifying what the agent perceives or how it acts in a particular domain. Part III makes that concrete by focusing on \emph{modalities}---vision, language, and structured sequences---where the representation questions from Chapter~\ref{ch:representation-foundation-models} meet the decision-making questions from this chapter.
+This chapter treated RL abstractly---states, actions, rewards, policies---without specifying what the agent perceives or how it acts in a particular domain. Part~IV makes that concrete by focusing on \emph{modalities}: vision, language, and structured sequences, where the representation questions from Chapter~\ref{ch:representation-foundation-models} meet the decision-making questions from this chapter.
 
-The connections are not uniform. Some modalities intersect deeply with RL; others touch it only lightly.
+The connections are uneven. Some modalities intersect deeply with RL; others touch it only lightly.
 
 \begin{itemize}
-\item \textbf{Vision (Chapter~\ref{ch:vision}):} The pedestrian detector produces a perception signal; the braking decision that follows is an RL action. More broadly, deep RL systems that act in visual environments (robotics, autonomous driving, game-playing) require learned visual representations as input to the policy. Chapter~\ref{ch:vision} focuses on the representation side---convolutional architectures, data augmentation, transfer---but the shuttle running case will remind us that perception feeds into action.
+\item \textbf{Vision (Chapter~\ref{ch:vision}):} The pedestrian detector produces a perception signal, and the braking decision that follows is an RL action. More broadly, deep RL systems that act in visual environments (robotics, autonomous driving, game-playing) need learned visual representations as policy inputs. Chapter~\ref{ch:vision} focuses on the representation side---convolutional architectures, data augmentation, transfer---but the running shuttle case is a reminder that perception feeds into action.
 
-\item \textbf{Language (Chapter~\ref{ch:language-grounding}):} This is where RL ideas recur most directly. RLHF, covered in this chapter, is now a standard step in training conversational models. Chapter~\ref{ch:language-grounding} covers the language-modeling foundations (tokenization, attention, generation) that RLHF builds on, and revisits alignment as a design question: what objective should a language system optimize, and who decides?
+\item \textbf{Language (Chapter~\ref{ch:language-grounding}):} This is where RL ideas recur most directly. RLHF, covered in this chapter, is now a standard step in training conversational models. Chapter~\ref{ch:language-grounding} covers the language-modeling foundations---tokenization, attention, generation---that RLHF builds on, and revisits alignment as a design question: what objective should a language system optimize, and who decides?
 
-\item \textbf{Sequences and structured data (Chapter~\ref{ch:audio-time}):} Time series and graph-structured problems are sequential, but most are addressed with supervised methods (forecasting, node classification) rather than RL. The RL connection is thinner here: it arises mainly when the system must \emph{intervene}---for example, deciding when to issue an alert based on a physiological time series---rather than merely predict.
+\item \textbf{Sequences and structured data (Chapter~\ref{ch:audio-time}):} Time series and graph-structured problems are sequential, but most are tackled with supervised methods (forecasting, node classification) rather than RL. The RL connection is thinner here. It arises mainly when the system must \emph{intervene}---deciding when to issue an alert based on a physiological time series, for example---rather than merely predict.
 \end{itemize}
 
-The broader point is that representation learning and RL are complementary but serve different roles. Good representations make RL feasible by compressing high-dimensional observations into useful state descriptions. RL, in turn, provides the learning signal that tells us whether those representations are useful \emph{for acting}, not just for predicting.
+The broader point: representation learning and RL are complementary but play different roles. Good representations make RL feasible by compressing high-dimensional observations into useful state descriptions. RL in turn provides the learning signal that tells us whether those representations are useful \emph{for acting}, not just for predicting.
 
 \section*{Chapter Summary}
 
-Reinforcement learning studies systems that learn to act by interacting with an environment and observing consequences. Unlike supervised learning, an RL agent must explore in order to discover useful actions, which makes evaluation and safety more delicate. Markov Decision Processes formalize the setting through states, actions, transitions, rewards, and policies; value functions such as $V(s)$ and $Q(s,a)$ estimate cumulative future reward, and the Bellman equation gives those estimates their recursive structure. Temporal-difference learning, value-based methods, policy-based methods, and actor-critic methods are different ways to learn useful policies from delayed feedback. The central design risk is reward misspecification: the agent optimizes the reward it is given, not the objective the designer meant. RLHF shows how the same interaction logic now appears in foundation-model workflows, where human preference comparisons train a reward model that guides later policy optimization. The chapter's Interaction Design Card records the state, action, reward, exploration, evaluation, and guardrail assumptions before an RL system is treated as deployable.
+Reinforcement learning studies systems that learn to act by interacting with an environment and observing consequences. Unlike supervised learning, an RL agent must explore to discover useful actions, which makes evaluation and safety more delicate. Markov Decision Processes formalize the setting through states, actions, transitions, rewards, and policies. Value functions such as $V(s)$ and $Q(s,a)$ estimate cumulative future reward, and the Bellman equation gives those estimates their recursive structure. Temporal-difference learning, value-based methods, policy-based methods, and actor-critic methods are different ways to learn useful policies from delayed feedback. The central design risk is reward misspecification: the agent optimizes the reward it is given, not the objective the designer meant. RLHF shows how the same interaction logic now appears in foundation-model workflows, where human preference comparisons train a reward model that guides later policy optimization. The chapter's Interaction Design Card records the state, action, reward, exploration, evaluation, and guardrail assumptions before an RL system is treated as deployable.
 
 \begin{studyquestions}
 \item Consider a system you use regularly (email, social media, navigation). How could it be framed as an RL problem? What is the state? Action? Reward?
@@ -625,7 +647,7 @@ Reinforcement learning studies systems that learn to act by interacting with an 
 \item \exercisetag{Diagnosis}{Intermediate}\textbf{Partial observability.} A student queries the course-support assistant, but the assistant does not know the student's previous interactions. How might this hurt the learned policy? How could you improve the state representation?
 \item \exercisetag{Implementation}{Advanced}\textbf{Q-learning on a grid.} Implement tabular Q-learning for a $4 \times 4$ grid world where the agent starts in one corner and must reach a goal in the opposite corner. Walls block two cells of your choice.
 \begin{enumerate}[label=(\alph*)]
-\item Initialise $Q(s,a) = 0$ for all state--action pairs. Use $\varepsilon$-greedy exploration with $\varepsilon = 0.1$, learning rate $\alpha = 0.1$, and discount $\gamma = 0.99$.
+\item Initialize $Q(s,a) = 0$ for all state--action pairs. Use $\varepsilon$-greedy exploration with $\varepsilon = 0.1$, learning rate $\alpha = 0.1$, and discount $\gamma = 0.99$.
 \item Run 500 episodes. Plot the total reward per episode.
 \item Reduce $\varepsilon$ to $0.01$ after episode 300. Does convergence improve?
 \item Extract the greedy policy from your final Q-table and verify it reaches the goal.

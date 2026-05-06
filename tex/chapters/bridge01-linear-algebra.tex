@@ -19,7 +19,7 @@ Before asking which model family to use, ask how one case is represented, what e
 \textbf{Representation audit.} Before blaming or praising a model, ask four questions: what counts as one example, what each coordinate means, what information has already been discarded, and what notion of similarity the representation makes easy.
 \end{thinkingtool}
 
-Keep the chapter artifact in view from the start. As later sections introduce shapes, weighted scores, geometry, and projection, the intended payoff is a short \emph{representation card}: what one example is, what the coordinates mean, what geometry matters, and what a linear score would mean in plain language.
+Keep the chapter artifact in view from the start. The later sections introduce shapes, weighted scores, geometry, and projection, but the payoff is a short \emph{representation card}: what one example is, what the coordinates mean, what geometry matters, and what a linear score would mean in plain language.
 
 \section*{Opening Case: One Student, One Email, One Image Patch}
 
@@ -31,9 +31,9 @@ Suppose we want to support three different AI tasks:
 \item estimate how many animals appear in a small aerial image crop.
 \end{itemize}
 
-These tasks look different on the surface, but they share one structural step. Each task needs a way to turn one case into a mathematical object that a model can read. A student becomes a list of measurements. An email becomes word counts, sender cues, or contextual embeddings. An image crop becomes pixel intensities or learned feature maps.
+These tasks look different on the surface, but they share a structural step. Each one needs a way to turn one case into a mathematical object that a model can read. A student becomes a list of measurements. An email becomes word counts, sender cues, or contextual embeddings. An image crop becomes pixel intensities or learned feature maps.
 
-That is the first linear-algebra lesson of the book. AI does not begin with magic. It begins with a decision about representation.
+That is the first linear-algebra lesson of the book. AI does not begin with magic; it begins with a decision about representation.
 
 \begin{center}
 \small
@@ -53,7 +53,7 @@ Image counting & Pixel values or local visual features extracted from a small pa
 
 \section*{Vectors Are Organized Descriptions}
 
-A vector is an ordered collection of coordinates. In AI language, a vector is often just one represented example.
+A vector is an ordered collection of coordinates. In AI, a vector is often just one represented example.
 
 For the student-support task, we might record four normalized quantities for one student:
 \[
@@ -73,29 +73,25 @@ where the coordinates mean:
 \item \(0.35\): recent platform inactivity score.
 \end{itemize}
 
-The notation matters less than the interpretation. The vector is not just ``four numbers.'' It is one student expressed through four chosen coordinates. Another representation choice would give a different vector and therefore a different modeling problem.
+The notation matters less than the interpretation. The vector is not just ``four numbers.'' It is one student expressed through four chosen coordinates. A different representation choice would give a different vector and therefore a different modeling problem.
 
 \begin{prereqbridge}
-Read \(x_j\) as ``the \(j\)-th coordinate of the represented example.'' If the notation feels formal, translate it immediately back into the task language: attendance, quiz average, missed assignments, or inactivity.
+Read \(x_j\) as ``the \(j\)-th coordinate of the represented example.'' If the notation feels formal, translate it back into task language right away: attendance, quiz average, missed assignments, or inactivity.
 \end{prereqbridge}
 
-Two practical habits begin here.
-
-First, order matters. Once the first coordinate means attendance and the second means quiz average, we cannot silently swap them later.
-
-Second, scale matters. A coordinate measured from \(0\) to \(1000\) behaves differently from one measured from \(0\) to \(1\). Later chapters on nearest neighbors, regularization, and optimization all depend on this simple point.
+Two practical habits begin here. First, order matters. Once the first coordinate means attendance and the second means quiz average, we cannot silently swap them later. Second, scale matters. A coordinate measured from \(0\) to \(1000\) behaves very differently from one measured from \(0\) to \(1\). Later chapters on nearest neighbors, regularization, and optimization all depend on this simple point.
 
 \section*{Shapes, Batches, and Why Dimension Errors Matter}
 
-A vector has a shape. A dataset has a shape. A batch of images or sequences has a shape. Shape is not bookkeeping. Shape states what counts as one case, what counts as one feature family, and what gets processed together. Misreading shape is one of the most common sources of silent bugs in AI work.
+Vectors, datasets, and batches of images or sequences all have shapes. Shape is not bookkeeping. It states what counts as one case, what counts as one feature family, and what gets processed together. Misreading shape is one of the most common sources of silent bugs in AI code.
 
-Consider three objects that appear across later chapters.
+Three objects that appear across later chapters illustrate the point.
 
 \textbf{One tabular row.} A single student described by four features is a vector $x \in \mathbb{R}^4$. Its shape is $(4,)$: four numbers, one case.
 
 \textbf{A bag-of-words batch.} Suppose we process $32$ emails at once, each represented as a count vector over a vocabulary of $10{,}000$ words. The batch is a matrix of shape $(32, 10000)$: $32$ rows for $32$ cases, $10{,}000$ columns for $10{,}000$ features.
 
-\textbf{A token-by-token embedding sequence.} A sentence tokenized into $T$ tokens, where each token is embedded into $d$ dimensions, forms a matrix of shape $(T, d)$. Here the rows are positions in time or sequence, not independent cases. Transposing would swap that meaning and break any downstream operation that assumes the row is a token position.
+\textbf{A token-by-token embedding sequence.} A sentence tokenized into $T$ tokens, where each token is embedded into $d$ dimensions, forms a matrix of shape $(T, d)$. Here the rows are positions in time, not independent cases. Transposing the matrix swaps that meaning and breaks any downstream operation that assumes a row is a token position.
 
 \begin{table}[t]
 \centering
@@ -124,12 +120,12 @@ A useful mini-checklist before writing any matrix operation:
 \end{itemize}
 
 \begin{failurebox}
-Dimension errors often succeed silently in Python. If a dot product or matrix multiply happens to have compatible shapes because an accidental transpose happens to work numerically, the model will train without error messages but learn from the wrong relationship. Checking what the dimensions mean before the operation---not just checking that the numbers multiply---is how practitioners catch this class of bug.
+Dimension errors often succeed silently in Python. If a dot product or matrix multiply happens to have compatible shapes because an accidental transpose works numerically, the model trains without error messages but learns from the wrong relationship. Checking what the dimensions mean before the operation---not just that the numbers multiply---is how practitioners catch this class of bug.
 \end{failurebox}
 
 \section*{Dot Products Are Weighted Evidence}
 
-Once an example is represented as a vector, the simplest serious model asks a clean question: how much evidence does each coordinate contribute to one score?
+Once an example lives in a vector, the simplest serious model asks a clean question: how much evidence does each coordinate contribute to one score?
 
 That is the job of the dot product. If a weight vector is
 \[
@@ -155,11 +151,11 @@ The point of this arithmetic is not the final decimal. The point is the interpre
 \begin{itemize}[leftmargin=*]
 \item Good attendance pushes the score down because its weight is negative.
 \item Strong quiz performance also pushes the score down.
-\item Missing assignments pushes the score up.
+\item Missing assignments push the score up.
 \item Inactivity also pushes the score up.
 \end{itemize}
 
-In other words, the dot product is a weighted evidence summary.
+In other words, the dot product is a weighted summary of evidence.
 
 \begin{center}
 \small
@@ -184,7 +180,7 @@ Inactivity score & \(0.35\) & \(1.8\) & \(0.630\) \\
 
 \section*{From One Example to Many: Matrices As Datasets}
 
-Once there is more than one example, it is wasteful to write every case separately. A matrix packages many vectors together.
+Once there is more than one example, writing every case separately is wasteful. A matrix packages many vectors together.
 
 Suppose three students are represented as rows:
 \[
@@ -204,7 +200,7 @@ This matrix has shape \(3 \times 4\): three rows, four columns. In the dataset v
 \item shape records how many cases and features are present.
 \end{itemize}
 
-This is one of the most useful sanity checks in practical ML. If a student thinks a dataset has \(n\) examples and \(d\) features, then the design matrix should have \(n\) rows and \(d\) columns. Many beginner bugs are simply shape misunderstandings wearing fancy clothes.
+This is one of the most useful sanity checks in practical ML. If you think a dataset has \(n\) examples and \(d\) features, then the design matrix should have \(n\) rows and \(d\) columns. Many beginner bugs are simply shape misunderstandings dressed up in fancier language.
 
 Matrix multiplication then applies one scoring rule to every row at once:
 \[
@@ -257,7 +253,7 @@ def linear_scores(X, w, b=0.0):
     return scores
 \end{codeexample}
 
-The point of this tiny function is not software convenience. It is to make the mechanism visible. A matrix is not mystical. It is a compact way to store many represented cases, and matrix multiplication applies one structured computation to every row.
+The point of this tiny function is not software convenience. It is to make the mechanism visible. A matrix is not mystical: it is a compact way to store many represented cases, and matrix multiplication applies one structured computation to every row.
 
 \begin{example}[Matrix-Vector Product by Hand]
 Consider three students, each described by two features: attendance rate and number of late submissions. The design matrix and weight vector are
@@ -296,20 +292,20 @@ Xw =
 \end{bmatrix}.
 \]
 
-Student 1's weighted score is \(0.65\). On its own, that number is just a linear score: a later policy would still need thresholds or calibration to translate it into categories such as low, moderate, or high risk. Student 2's score of \(7.10\) is larger because four late submissions dominate. Student 3's score of \(-1.20\) is smaller because solid attendance with no late submissions pushes the score downward.
+Student 1's weighted score is \(0.65\). On its own that number is just a linear score; a later policy would still need thresholds or calibration to translate it into categories such as low, moderate, or high risk. Student 2's score of \(7.10\) is larger because four late submissions dominate. Student 3's score of \(-1.20\) is smaller because solid attendance with no late submissions pushes the score downward.
 
-This is the key idea: the same weight vector \(w\) is applied to every row simultaneously. The matrix does not change the structure of the computation---it only packages it so every student gets scored in one operation.
+The key idea is that the same weight vector \(w\) is applied to every row at once. The matrix does not change the structure of the computation---it only packages the computation so every student is scored in one operation.
 \end{example}
 
 \section*{Sparse, Dense, and Missingness as Representation Facts}
 
 Representations are not only numeric. They differ in density, noise, and missingness, and those differences change how models behave.
 
-A \emph{sparse} representation has many zero coordinates. A bag-of-words vector for one email drawn from a vocabulary of $50{,}000$ words will usually have fewer than $200$ nonzero entries. Most words in the vocabulary simply do not appear in that message. Sparsity is not a deficiency of the representation. It is information: a coordinate being zero means the corresponding feature is absent.
+A \emph{sparse} representation has many zero coordinates. A bag-of-words vector for one email drawn from a vocabulary of $50{,}000$ words usually has fewer than $200$ nonzero entries because most vocabulary words simply do not appear in that message. Sparsity is not a deficiency; it is information. A zero coordinate means the corresponding feature is absent.
 
-A \emph{dense} representation has very few zeros. A learned word embedding of dimension $300$ will typically have all $300$ coordinates populated with small but nonzero values. Dense representations are compact and support smooth geometric operations like cosine similarity, but they offer no inherent interpretability for individual coordinates.
+A \emph{dense} representation has very few zeros. A learned word embedding of dimension $300$ typically populates all $300$ coordinates with small but nonzero values. Dense representations are compact and support smooth geometric operations like cosine similarity, but they offer no inherent interpretability for any individual coordinate.
 
-A \emph{partially observed} representation has coordinates that are missing for structural reasons, not random ones. A student record may have quiz scores for seven of ten weeks because a student joined late. A sensor trace may be missing every other reading because the device transmits on an alternating schedule. In each case, the absence of a value carries information about the process that generated the data.
+A \emph{partially observed} representation has coordinates missing for structural reasons, not random ones. A student record may have quiz scores for seven of ten weeks because the student joined late. A sensor trace may be missing every other reading because the device transmits on an alternating schedule. In each case, the absence of a value carries information about the process that generated the data.
 
 \begin{table}[t]
 \centering
@@ -343,19 +339,19 @@ Imputed \(0\) & The original value was missing, but the model is being shown a z
 \end{tabular}
 \end{center}
 
-Those encodings are not interchangeable. Treating unknown as zero can make a model learn that absence of a record is the same as poor performance.
+Those encodings are not interchangeable. Treating unknown as zero can teach a model that the absence of a record is the same as poor performance.
 
 Three practical lessons follow.
 
-\emph{Sparse representations support fast inner products but can break distance-based methods.} If most of two vectors' coordinates are zero, their Euclidean distance is dominated by the dimensions where both are nonzero---or by the few nonzero dimensions of one but not the other. Cosine similarity can handle this better in some cases, but neither operation treats ``both missing this word'' and ``both present on this word'' the same way.
+\emph{Sparse representations support fast inner products but can break distance-based methods.} If most coordinates of two vectors are zero, their Euclidean distance is dominated by the dimensions where both are nonzero---or by the few nonzero dimensions where only one is present. Cosine similarity sometimes handles this better, but neither operation treats ``both missing this word'' and ``both present on this word'' the same way.
 
-\emph{Dense embeddings lose interpretability at the coordinate level.} A single coordinate of a word embedding does not mean anything human-readable. The space as a whole may encode meaning geometrically, but the coordinates individually do not.
+\emph{Dense embeddings lose interpretability at the coordinate level.} A single coordinate of a word embedding does not mean anything human-readable. The space as a whole may encode meaning geometrically; the individual coordinates do not.
 
-\emph{Missingness in tabular data is often not random.} Imputing a missing value with a mean or zero often treats the missing entry as if it were typical, absent, or otherwise uninformative under the chosen coding. But if the value is missing because the student dropped before week eight, or because a sensor was offline after a power failure, the imputation can inject a different kind of distortion. Later chapters on reliability and deployment return to this point. For now, the lesson is that ``missing'' is a value in the representation, not an error to be erased before modeling.
+\emph{Missingness in tabular data is often not random.} Imputing a missing value with a mean or zero treats the missing entry as if it were typical, absent, or otherwise uninformative under the chosen coding. But if the value is missing because the student dropped out before week eight, or because a sensor was offline after a power failure, the imputation injects a different kind of distortion. Later chapters on reliability and deployment return to this point. For now, the lesson is that ``missing'' is a value in the representation, not an error to be erased before modeling.
 
 \section*{Geometry: Distance, Similarity, and Scale}
 
-Once cases live in vectors, geometry starts to matter. The geometry is not a picture drawn after the fact. It is part of the model.
+Once cases live in vectors, geometry starts to matter. The geometry is not a picture drawn after the fact; it is part of the model.
 
 If two represented students are
 \[
@@ -386,7 +382,7 @@ Cosine similarity asks a different question. Instead of asking whether the vecto
 \[
 \cos(\theta) = \frac{x^\top z}{\|x\|_2 \|z\|_2}.
 \]
-This is useful when overall scale should matter less than pattern. In language or embedding-style problems, two long vectors can represent similar meaning even if one is globally larger than the other.
+This is useful when overall scale should matter less than pattern. In language or embedding-style problems, two long vectors can represent similar meaning even when one is globally larger than the other.
 
 \begin{example}[Distance and Cosine Can Rank Neighbors Differently]
 Suppose a short document is represented by counts of two words:
@@ -403,11 +399,11 @@ so \(a\) is closer. Cosine similarity gives
 \[
 \cos(q,a)=1,\qquad \cos(q,b)=\frac{4}{\sqrt{2}\sqrt{10}}\approx 0.89.
 \]
-Cosine still prefers \(a\), but for a different reason: \(a\) points in exactly the same direction as \(q\), even though it is larger in magnitude. If a third candidate were \(c=[10,10]^\top\), Euclidean distance would call it far away while cosine would call it identical in direction. The right geometry depends on whether amount or pattern should matter.
+Cosine still prefers \(a\), but for a different reason: \(a\) points in exactly the same direction as \(q\), even though it is larger in magnitude. If a third candidate were \(c=[10,10]^\top\), Euclidean distance would call it far away while cosine would call it identical in direction. The right geometry depends on whether amount or pattern is what matters.
 \end{example}
 
 \begin{failurebox}
-Distance-based methods can fail for a boring reason: one coordinate dominates because it is measured on a much larger numeric scale. If age is stored in years but income is stored in dollars, then raw Euclidean distance mostly measures income. That is not a property of the world. It is a property of the chosen units.
+Distance-based methods can fail for a boring reason: one coordinate dominates because it lives on a much larger numeric scale. If age is stored in years but income in dollars, raw Euclidean distance mostly measures income. That is not a property of the world; it is a property of the chosen units.
 \end{failurebox}
 
 \section*{Norms, Size, and Regularization Intuition}
@@ -419,27 +415,27 @@ A norm measures the size of a vector. Two common norms are
 \|w\|_2 = \sqrt{\sum_{j=1}^{d} w_j^2}.
 \]
 
-Later chapters use these ideas for regularization. The reason is simple. A model with very large coefficients can become brittle, overly reactive, or too willing to fit accidental quirks in the training data. Penalizing large coefficient size is one way of expressing a preference for simpler behavior unless the data strongly demands otherwise.
+Later chapters use these ideas for regularization. The reason is simple: a model with very large coefficients tends to be brittle, overly reactive, and too willing to fit accidental quirks in the training data. Penalizing coefficient size expresses a preference for simpler behavior unless the data strongly demands otherwise.
 
-Students should not hear the word \emph{regularization} and think only ``extra term in the objective.'' The modeling question is more useful:
+The word \emph{regularization} should mean more than ``extra term in the objective.'' The useful modeling question is:
 
 \begin{quote}
-How much coefficient size, complexity, or sensitivity are we willing to tolerate before we think the fit has become unstable?
+How much coefficient size, complexity, or sensitivity are we willing to tolerate before the fit becomes unstable?
 \end{quote}
 
 \section*{Linear Maps, Projections, and Fitting}
 
 A linear map is a rule that transforms one vector into another while preserving weighted-sum structure. In AI terms, it is a structured feature transformation.
 
-This matters because many models do not work directly on the raw input. They work on transformed coordinates. Even when later chapters discuss embeddings or learned internal layers, one recurring question survives:
+This matters because many models do not act directly on the raw input. They act on transformed coordinates. Even when later chapters discuss embeddings or learned internal layers, one recurring question survives:
 
 \begin{quote}
-What transformation is making the relevant structure easier to see?
+What transformation makes the relevant structure easier to see?
 \end{quote}
 
-Projection is the cleanest first fitting intuition. Suppose the world is more complicated than the model class we have allowed. Then training is often not finding the truth exactly. It is finding the closest allowed approximation under a chosen notion of error.
+Projection is the cleanest first fitting intuition. When the world is more complicated than the model class we have allowed, training is often not about finding the truth exactly. It is about finding the closest allowed approximation under a chosen notion of error.
 
-That is the useful least-squares picture. A linear model does not win because it captures every detail of reality. It wins when the best projection into the linear family is already good enough for the task.
+That is the useful least-squares picture. A linear model does not win by capturing every detail of reality; it wins when the best projection into the linear family is already good enough for the task.
 
 \begin{mathlens}
 For the simplest projection onto a one-dimensional direction \(u\) with \(\|u\|_2=1\), the fitted point is
@@ -466,7 +462,7 @@ That is the algebraic version of geometric fitting: once a vector has been proje
 \end{mathlens}
 
 \begin{advancednote}
-Students often hear that linear models are ``simple'' and stop there. A better statement is that linear models define a restricted hypothesis class with very transparent geometry. That restriction is sometimes a weakness, but it is also what makes the class interpretable, diagnosable, and often surprisingly competitive.
+Students often hear that linear models are ``simple'' and stop there. A better statement is that linear models define a restricted hypothesis class with very transparent geometry. The restriction is sometimes a weakness, but it is also what makes the class interpretable, diagnosable, and often surprisingly competitive.
 \end{advancednote}
 
 \begin{example}[Projection in One Dimension]
@@ -489,16 +485,16 @@ r = [2-3,\; 4-3,\; 6-3] = [-1,\; 1,\; 3].
 SS(3) = (-1)^2 + 1^2 + 3^2 = 1 + 1 + 9 = 11.
 \]
 
-The sum of squares rose from \(8\) to \(11\) when we moved away from the mean. Any other constant will produce a sum of squares no smaller than \(8\). In coefficient terms, the best constant is \(4\). In geometric terms, the data vector \([2,4,6]\) projects onto the constant-model class as \([4,4,4]\), the unique member of that class that sits closest to the data under squared error.
+The sum of squares rose from \(8\) to \(11\) when we moved away from the mean. Any other constant produces a sum of squares no smaller than \(8\). In coefficient terms, the best constant is \(4\). In geometric terms, the data vector \([2,4,6]\) projects onto the constant-model class as \([4,4,4]\), the unique member of that class that sits closest to the data under squared error.
 
-This is the geometry of least-squares fitting in miniature. The model class (all constant functions) is a restricted family. Training finds the member of that family that is closest to the target values. The residuals \([-2, 0, 2]\) are orthogonal to the constant direction---they average to zero, meaning no constant shift can reduce the error further.
+This is the geometry of least-squares fitting in miniature. The model class---all constant functions---is a restricted family. Training finds the member of that family closest to the target values. The residuals \([-2, 0, 2]\) are orthogonal to the constant direction: they average to zero, so no constant shift can reduce the error further.
 \end{example}
 
 \section*{Linear Separability and What a Hyperplane Can Actually Express}
 
-A linear score $w^\top x + b$ divides the input space by the boundary $w^\top x + b = 0$. One side has positive score, the other has negative score, and points with score exactly zero lie on the boundary itself. In two dimensions, that boundary is a line. In three dimensions, it is a plane. In $d$ dimensions, it is a hyperplane.
+A linear score $w^\top x + b$ divides the input space by the boundary $w^\top x + b = 0$. One side has positive score, the other negative score, and points with score exactly zero lie on the boundary itself. In two dimensions, that boundary is a line; in three dimensions, a plane; in $d$ dimensions, a hyperplane.
 
-Understanding what a hyperplane can and cannot separate gives a concrete reason for why later chapters need trees, kernels, and neural nonlinearities. Without this picture, ``nonlinearity matters'' can sound like folklore. With it, the limitation becomes a specific geometric fact.
+Understanding what a hyperplane can and cannot separate gives a concrete reason for why later chapters need trees, kernels, and neural nonlinearities. Without this picture, ``nonlinearity matters'' sounds like folklore. With it, the limitation becomes a specific geometric fact.
 
 \textbf{A case where a line succeeds.} Consider four points in two dimensions:
 \[
@@ -541,19 +537,19 @@ Suppose $(0,0)$ and $(1,1)$ are class A, and $(1,0)$ and $(0,1)$ are class B. An
 \label{fig:linear-separability}
 \end{figure}
 
-The XOR pattern is not a contrived puzzle. It represents the general situation where the decision depends on an \emph{interaction} between features: being at position $(0,0)$ and being at position $(1,1)$ belong to the same class not because of either coordinate alone, but because of the combination. A linear model working on raw coordinates cannot represent that.
+The XOR pattern is not a contrived puzzle. It is the general situation where the decision depends on an \emph{interaction} between features: $(0,0)$ and $(1,1)$ belong to the same class not because of either coordinate alone, but because of their combination. A linear model working on raw coordinates cannot represent that.
 
-This is the geometric reason why interaction features, kernel methods, tree splits, and neural nonlinearities matter. Each one extends the expressible boundary beyond the flat hyperplane. Trees do it by recursive axis-aligned cuts. Kernel methods do it by implicitly working in a richer feature space. Neural networks do it by composing nonlinear transformations.
+This is the geometric reason interaction features, kernel methods, tree splits, and neural nonlinearities matter. Each extends the expressible boundary beyond a flat hyperplane: trees by recursive axis-aligned cuts, kernel methods by implicitly working in a richer feature space, and neural networks by composing nonlinear transformations.
 
 \begin{advancednote}
-The formal study of which problems linear models can solve is part of the theory of VC dimension and linear dichotomies. For this book, the geometric picture is enough: a hyperplane is a powerful tool when the relevant decision boundary is roughly flat in the feature space, and a poor tool when the boundary requires reasoning about feature interactions.
+The formal study of which problems linear models can solve falls under the theory of VC dimension and linear dichotomies. For this book, the geometric picture is enough: a hyperplane is a powerful tool when the relevant decision boundary is roughly flat in the feature space, and a poor tool when the boundary requires feature interactions.
 \end{advancednote}
 
 \section*{Low-Dimensional Structure}
 
-Real datasets often have many coordinates but fewer truly important directions. In image, language, and tabular problems alike, some features overlap, some move together, and some mostly repeat what others already say.
+Real datasets often have many coordinates but fewer genuinely important directions. In image, language, and tabular problems alike, some features overlap, some move together, and some mostly repeat what others already say.
 
-The practical lesson is not that every dataset can be compressed aggressively. The lesson is that high ambient dimension does not always mean high effective complexity. This intuition later supports PCA, embeddings, representation learning, and transfer learning.
+The practical lesson is not that every dataset can be compressed aggressively. It is that high ambient dimension does not always mean high effective complexity. This intuition later supports PCA, embeddings, representation learning, and transfer learning.
 
 \begin{mathlens}
 A projection onto an allowed subspace is a linear map. For a unit direction \(u\), define
@@ -567,7 +563,7 @@ P_u(P_u(x))=P_u(x).
 That idempotence is the algebraic version of geometric compression: once the allowed direction has been kept, projecting again does not change the answer.
 \end{mathlens}
 
-Students do not need a full singular-value-decomposition treatment here. They do need the idea that useful structure can live in fewer directions than the raw coordinate count suggests.
+A full singular-value-decomposition treatment is not needed here. What students do need is the idea that useful structure can live in fewer directions than the raw coordinate count suggests.
 
 \subsection*{Eigendecomposition and SVD: A Preview}
 
@@ -606,15 +602,15 @@ Main representation risk & State the most likely mismatch between representation
 If this card cannot be written clearly, later model debates are usually premature.
 
 \begin{example}[Diverse Representation: Spam Email Filtering]
-Task: determine whether an incoming email is spam. Each row in the dataset is one email. The coordinates are chosen features: word frequencies from a bag-of-words model, sender reputation score, number of links in the message, and header flags (all-caps subject, suspicious domains, etc.).
+The task is to decide whether an incoming email is spam. Each row of the dataset is one email. The coordinates are chosen features: word frequencies from a bag-of-words model, a sender reputation score, the number of links in the message, and header flags (all-caps subject, suspicious domains, and so on).
 
-With a vocabulary of 50 words and 5 numeric features (reputation, link count, and three binary flags), the representation lives in $\mathbb{R}^{55}$. The first 50 coordinates are term frequencies. Coordinates 51–55 are the numeric metadata.
+With a vocabulary of 50 words and 5 numeric features (reputation, link count, and three binary flags), the representation lives in $\mathbb{R}^{55}$. The first 50 coordinates are term frequencies; coordinates 51 through 55 are the numeric metadata.
 
-A critical note on representation choice: the bag-of-words representation discards word order entirely. The sequence ``Nigerian prince has offer'' and ``offer has prince Nigerian'' both map to the same vector because only counts matter, not position. This is already a modeling decision. We are saying that detecting spam does not require understanding syntax or sequence, only statistics of presence and absence. That choice is often reasonable for spam (many phishing emails do repeat the same words in any order), but it would fail for sentiment analysis (``not good'' means something very different from ``good not''). Filling out a representation card before choosing a model family makes such assumptions visible.
+A critical note on representation choice: the bag-of-words representation discards word order entirely. ``Nigerian prince has offer'' and ``offer has prince Nigerian'' both map to the same vector because only counts matter, not position. This is already a modeling decision: we are saying that detecting spam does not require understanding syntax or sequence, only statistics of presence and absence. That choice is often reasonable for spam (many phishing emails repeat the same words in any order), but it fails for sentiment analysis (``not good'' means something very different from ``good not''). Filling out a representation card before choosing a model family makes such assumptions visible.
 \end{example}
 
 \begin{example}[Representation Card Row for an Image Patch]
-For a simple image task, one example might be a \(32 \times 32\) image patch. The raw coordinates are pixel intensities, or three color channels for each pixel. What is lost depends on preprocessing: resizing may blur small objects, cropping may remove context, and converting to grayscale discards color. The geometry matters locally: nearby pixels and small translations are meaningful, while arbitrary coordinate swaps are not. A linear score on raw pixels would mostly detect fixed templates; a convolutional model is introduced later because it can ask repeated local questions across the image.
+For a simple image task, one example might be a \(32 \times 32\) image patch. The raw coordinates are pixel intensities, with three color channels per pixel. What is lost depends on preprocessing: resizing may blur small objects, cropping may remove context, and converting to grayscale discards color. The geometry matters locally---nearby pixels and small translations are meaningful, while arbitrary coordinate swaps are not. A linear score on raw pixels mostly detects fixed templates; a convolutional model, introduced later, can instead ask repeated local questions across the image.
 \end{example}
 
 \section*{Common Mistakes}
@@ -629,9 +625,9 @@ For a simple image task, one example might be a \(32 \times 32\) image patch. Th
 
 \section*{Looking Ahead}
 
-This bridge supplied the geometric language of representation: vectors, matrices, weighted scores, distance, and projection. The next bridge adds the uncertainty language that makes those scores trainable and interpretable: probability, loss, empirical risk, and gradient signals. Together they prepare the main text, where Chapter 1 turns those mathematical objects into a defensible learning problem.
+This bridge supplied the geometric language of representation: vectors, matrices, weighted scores, distance, and projection. The next bridge adds the uncertainty language that makes those scores trainable and interpretable---probability, loss, empirical risk, and gradient signals. Together they prepare the main text, where Chapter 1 turns these mathematical objects into a defensible learning problem.
 
-The SVD preview above gives just enough eigendecomposition intuition to prepare for PCA, embeddings, and matrix factorization in later chapters. The full machinery appears when those topics demand it.
+The SVD preview above gives just enough eigendecomposition intuition for PCA, embeddings, and matrix factorization in later chapters. The full machinery returns when those topics demand it.
 
 \begin{chaptersummary}
 \item Linear algebra matters in AI because representation is already part of the model.
