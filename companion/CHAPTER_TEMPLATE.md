@@ -101,6 +101,7 @@ Good chapter-level defaults:
 - Chapter 13: language
 - Chapter 14: audio, time, and prediction-time realism
 - Chapter 15: ranking, recommendation, and exposure
-- Chapter 16: experiments and scientific claims
-- Chapter 17: reliability
-- Chapter 18: models to systems
+- Chapter 16: tabular data
+- Chapter 17: experiments and scientific claims
+- Chapter 18: reliability
+- Chapter 19: models to systems

@@ -80,9 +80,10 @@ The source tree keeps historical directory names such as `ch02b`, `ch04b`, and `
 | 13 | `ch08` | Language: Context and Grounding |
 | 14 | `ch09` | Sequential and Structured Data |
 | 15 | `ch09a` | Ranking, Recommendation, and Exposure |
-| 16 | `ch10` | Experiments, Error Analysis, and Scientific Claims |
-| 17 | `ch11` | Reliability: Bias, Robustness, Privacy, and Safety |
-| 18 | `ch12` | From Models to Systems |
+| 16 | `ch09b` | Tabular Data: The Modality You Will Actually Meet |
+| 17 | `ch10` | Experiments, Error Analysis, and Scientific Claims |
+| 18 | `ch11` | Reliability: Bias, Robustness, Privacy, and Safety |
+| 19 | `ch12` | From Models to Systems |
 
 ### Ten-Week Course
 
@@ -100,13 +101,13 @@ This path is the default recommendation for a first serious undergraduate course
    Focus: embeddings, transfer, generative representations, reinforcement learning
 6. `Week 6`: Chapter 12
    Focus: invariance, augmentation, shortcut learning, deployment-camera realism
-7. `Week 7`: Chapters 13, 14, and 15
-   Focus: context, grounding, prediction-time realism, ranking and exposure
-8. `Week 8`: Chapter 16
+7. `Week 7`: Chapters 13, 14, 15, and 16
+   Focus: context, grounding, prediction-time realism, ranking, exposure, and tabular leakage
+8. `Week 8`: Chapter 17
    Focus: experiments, ablations, repeated runs, claim audit
-9. `Week 9`: Chapter 17
+9. `Week 9`: Chapter 18
    Focus: reliability, subgroup checks, robustness, privacy, safety
-10. `Week 10`: Chapter 18
+10. `Week 10`: Chapter 19
     Focus: systems, selective prediction, monitoring, rollback, ownership
 
 ### Twelve-Week Course
@@ -121,9 +122,9 @@ This path leaves more room for exercises, mini-projects, and companion-code labs
 6. `Week 6`: Chapters 9, 10, and 11
 7. `Week 7`: Chapter 12
 8. `Week 8`: Chapters 13 and 14
-9. `Week 9`: Chapter 15
-10. `Week 10`: Chapter 16
-11. `Week 11`: Chapters 17 and 18
+9. `Week 9`: Chapters 15 and 16
+10. `Week 10`: Chapter 17
+11. `Week 11`: Chapters 18 and 19
 12. `Week 12`: capstone presentations, synthesis, or review
 
 ## Chapter Dependencies
@@ -136,10 +137,10 @@ Use these dependencies when compressing or expanding the course:
 - `Chapter 4` should come before most nonlinear model chapters because it establishes features and linear baselines.
 - `Chapters 5 and 6` can be paired as structure and dataset-design foundations.
 - `Chapters 7, 8, 9, 10, and 11` form the models-and-representations block.
-- `Chapters 12, 13, 14, and 15` can be taught as a modality and interaction block once Chapters 1 to 9 are in place.
-- `Chapter 16` should precede Chapters 17 and 18.
-- `Chapter 17` should precede or accompany Chapter 18.
-- `Chapter 18` works best as the capstone chapter, not as an isolated systems appendix.
+- `Chapters 12, 13, 14, 15, and 16` can be taught as a modality and interaction block once Chapters 1 to 11 are in place.
+- `Chapter 17` should precede Chapters 18 and 19.
+- `Chapter 18` should precede or accompany Chapter 19.
+- `Chapter 19` works best as the capstone chapter, not as an isolated systems appendix.
 
 ## What To Emphasize By Chapter
 
@@ -158,9 +159,10 @@ Use these dependencies when compressing or expanding the course:
 - `Chapter 13`: use the grounded support-assistant case throughout.
 - `Chapter 14`: keep the chapter centered on what is legally known at prediction time.
 - `Chapter 15`: emphasize exposure bias and feedback loops.
-- `Chapter 16`: force students to bound claims rather than celebrate score gains.
-- `Chapter 17`: teach reliability as one pipeline question, not four side topics.
-- `Chapter 18`: keep the unit of analysis at the system level rather than the model level.
+- `Chapter 16`: make tabular leakage, calibration, and schema drift operational rather than incidental preprocessing.
+- `Chapter 17`: force students to bound claims rather than celebrate score gains.
+- `Chapter 18`: teach reliability as one pipeline question, not four side topics.
+- `Chapter 19`: keep the unit of analysis at the system level rather than the model level.
 
 ## Companion Code Use
 
@@ -289,16 +291,17 @@ Best for:
 Pattern:
 
 - compress some middle chapters slightly
-- spend more time on the modality and systems arc, especially printed Chapters 13 to 18
+- spend more time on the modality and systems arc, especially printed Chapters 13 to 19
 - require a final experiment claim sheet, reliability review card, and system readiness brief
 
 ## Risks To Watch In Teaching
 
 - students may default to model shopping instead of problem framing
 - students may confuse fluency with grounding in Chapter 13
-- students may treat Chapter 16 as research reporting style instead of scientific control
-- students may hear Chapter 17 as ethics commentary instead of technical reliability analysis
-- students may revert to model-only thinking in Chapter 18 unless the course keeps the system boundary visible
+- students may treat Chapter 16 as generic supervised learning instead of tabular deployment discipline
+- students may treat Chapter 17 as research reporting style instead of scientific control
+- students may hear Chapter 18 as ethics commentary instead of technical reliability analysis
+- students may revert to model-only thinking in Chapter 19 unless the course keeps the system boundary visible
 
 ## Definition Of A Successful Course Use
 

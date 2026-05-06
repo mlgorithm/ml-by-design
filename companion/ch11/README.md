@@ -1,4 +1,4 @@
-# Chapter 17 Companion: Reliability: Bias, Robustness, Privacy, and Safety (`ch11`)
+# Chapter 18 Companion: Reliability: Bias, Robustness, Privacy, and Safety (`ch11`)
 
 This chapter supports the reliability perspective of the book.
 

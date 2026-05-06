@@ -3,7 +3,7 @@
 
 Most of the machine learning a working practitioner does is tabular. Risk scoring at a bank, churn prediction at a telecom, fraud detection at a payment processor, demand forecasting at a retailer, early-warning systems at a university---each of these starts from a table of rows and columns. The deployment target is rarely an image or a sentence. It is a row: one customer, one transaction, one student, one sensor reading. The model's job is to turn that row into a score, a class, or a number.
 
-The previous chapters in Part~III each defined a modality through what made it difficult: vision struggled with invariance, language with context, audio and forecasting with the prediction-time boundary, ranking with exposure. Tabular data has its own difficulties, and they are usually \emph{not} the ones a fresh deep-learning enthusiast expects. The columns are heterogeneous. Many entries are missing, and the missingness is itself signal. Categorical features need encoding choices that can leak the label through the back door. The dominant baseline---a gradient-boosted tree ensemble---outperforms most neural alternatives on most benchmarks, often without much tuning. Calibration is poor by default. The data drifts in deployment because the world the table describes is changing while the schema stays the same.
+The previous chapters in Part~IV each defined a modality through what made it difficult: vision struggled with invariance, language with context, audio and forecasting with the prediction-time boundary, ranking with exposure. Tabular data has its own difficulties, and they are usually \emph{not} the ones a fresh deep-learning enthusiast expects. The columns are heterogeneous. Many entries are missing, and the missingness is itself signal. Categorical features need encoding choices that can leak the label through the back door. The dominant baseline---a gradient-boosted tree ensemble---outperforms most neural alternatives on most benchmarks, often without much tuning. Calibration is poor by default. The data drifts in deployment because the world the table describes is changing while the schema stays the same.
 
 This chapter treats tabular data as a modality in its own right rather than the implicit default for all the machinery introduced earlier. Trees and ensembles already appeared in Chapter~\ref{ch:structure-beyond-linearity}; calibration appeared in Chapter~\ref{ch:prediction-loss-decision} and Chapter~\ref{ch:probabilistic-models}; data design appeared in Chapter~\ref{ch:dataset-design}. Here those threads are pulled together for the modality where they pay off most directly. By the end of the chapter, you should be able to defend a tabular pipeline---feature encoding, model family, validation split, calibration, monitoring---against the specific failure modes that haunt tabular ML in practice.
 
@@ -38,7 +38,7 @@ This heterogeneity is why tree-based models do well on tabular data. A tree can 
 
 In tabular ML, a missing value is not always noise. It is often signal. ``Income field blank'' may mean the customer declined to disclose, which correlates with risk. ``Last login date null'' may mean the user has never logged in, which is a strong feature for churn. ``Lab grade missing'' may mean the student did not take the lab, which is precisely the behavior an early-warning model should pick up.
 
-This contrasts sharply with images and audio, where missingness is rare and usually corresponds to a sensor failure to be discarded. In tabular data, imputing missing values to the column mean and discarding the missingness flag throws away information that a tree-based model would have happily split on. The right baseline treatment is usually to impute \emph{and} retain a binary indicator that records whether the value was originally missing.
+This contrasts with fixed benchmark tensors for images and audio, where a missing pixel block or absent audio sample often indicates acquisition failure rather than an ordinary feature value. Streaming and sensor systems are different: dropped frames, clipped audio, and missing readings can themselves be informative and should be represented explicitly. Tabular data starts closer to that second regime. Imputing missing values to the column mean and discarding the missingness flag throws away information that a tree-based model would have happily split on. The right baseline treatment is usually to impute \emph{and} retain a binary indicator that records whether the value was originally missing.
 
 \subsection{Dominant Baselines}
 
@@ -177,22 +177,28 @@ is estimated from rows that exclude row $i$ entirely. Naive encoding violates th
 
 \subsection{Out-of-Fold Target Encoding}
 
-The standard fix is out-of-fold encoding. Split the training data into $K$ folds. For each fold, compute the per-category target mean using \emph{only the rows in the other $K-1$ folds}, then write that mean to the held-out fold. The result is an encoded column where each row's value was estimated without using its own label.
+The standard fix is out-of-fold encoding. Split the training data into folds that match the evaluation protocol. For independent and identically distributed rows, ordinary cross-validation folds are enough. For repeated students, customers, patients, or time-ordered rows, the folds must be group-aware, temporal, or rolling-origin folds. For each fold, compute the per-category target mean using \emph{only the legal training rows for that fold}, then write that mean to the held-out fold. The result is an encoded column where each row's value was estimated without using its own label or illegal future/group information.
 
 \begin{codeexample}[caption={Out-of-fold target encoding (binary classification)}]
 import numpy as np
 from sklearn.model_selection import KFold
 
-def oof_target_encode(category, y, n_splits=5, smoothing=10.0, seed=0):
+def oof_target_encode(category, y, splitter=None, groups=None,
+                      n_splits=5, smoothing=10.0, seed=0):
     """Return a target-encoded column with no within-row leakage.
+
+    The default KFold splitter is appropriate only for iid rows. For grouped
+    or time-ordered data, pass a GroupKFold, TimeSeriesSplit, or rolling
+    splitter that matches the deployment evaluation.
 
     smoothing pulls small-group estimates toward the global mean, an
     empirical-Bayes shrinkage that controls variance for rare categories.
     """
     encoded = np.zeros_like(y, dtype=float)
     global_mean = y.mean()
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
-    for train_idx, val_idx in kf.split(category):
+    if splitter is None:
+        splitter = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    for train_idx, val_idx in splitter.split(category, y, groups):
         cat_train = category[train_idx]
         y_train = y[train_idx]
         # group sums and counts on the training portion only
@@ -220,7 +226,7 @@ Suppose four students from section A had labels $\{1, 1, 0, 1\}$ (1 = failed to 
 Out-of-fold encoding is different. Suppose row 1 (section A, label 1) is in fold 1; the other three section-A rows are in fold 2. When fold 1 is the validation fold, the section-A mean is computed from $\{1, 0, 1\} = 0.667$. When fold 2 is validation, fold 1 contributes $\{1\}$ and the section-A mean from fold 1 alone is $1.0$, so each row in fold 2 gets the encoding $1.0$. With smoothing of $10$ and a global mean of $0.571$, the smoothed encodings shrink toward the global mean for the small-group case. The model now sees an encoded feature that is informative but does not directly reveal the row's own label.
 
 \begin{warningbox}
-The leakage in naive target encoding is invisible from the cross-validation score alone. The CV score on a leaked encoder will be high because the leak is the same in train and validation folds. Only deployment performance, or a held-out fold whose target is hidden during encoding, exposes the gap. Always implement out-of-fold encoding, and compare the CV score to a holdout split that was excluded before any feature engineering happened.
+The leakage in naive target encoding is invisible from the cross-validation score alone. The CV score on a leaked encoder will be high because the leak is the same in train and validation folds. Only deployment performance, or a held-out fold whose target is hidden during encoding, exposes the gap. Always implement out-of-fold encoding with a splitter that matches the deployment claim, and compare the CV score to a holdout split that was excluded before any feature engineering happened.
 \end{warningbox}
 
 \section{Tabular-Specific Leakage Patterns}
@@ -397,7 +403,7 @@ The recurring tabular mistakes are not exotic. They are familiar enough that eac
 
 \section{Looking Ahead}
 
-This chapter treated tabular data as a modality with its own concerns: heterogeneous columns, informative missingness, target-encoding leakage, calibration discipline, schema drift in deployment. Most of the discipline that Part~IV will systematize is born in the tabular setting, because tabular ML lives closest to operational decisions and gets the largest blast radius from sloppy validation. Chapter~\ref{ch:experiments-claims} will turn the cross-validation discipline of this chapter into a more general theory of evidence and confidence intervals for ML claims. Chapter~\ref{ch:reliability} will turn the shift-monitoring stack into a reliability framework that applies to all modalities. Chapter~\ref{ch:models-systems} will turn the tabular design card into the broader artifact of an ML system specification, with versioned data contracts and rollout protocols. The themes of Part~IV are general; tabular is the modality where the cost of getting them wrong is most directly visible in the deployed product.
+This chapter treated tabular data as a modality with its own concerns: heterogeneous columns, informative missingness, target-encoding leakage, calibration discipline, schema drift in deployment. Most of the discipline that Part~V will systematize is born in the tabular setting, because tabular ML lives closest to operational decisions and gets the largest blast radius from sloppy validation. Chapter~\ref{ch:experiments-claims} will turn the cross-validation discipline of this chapter into a more general theory of evidence and confidence intervals for ML claims. Chapter~\ref{ch:reliability} will turn the shift-monitoring stack into a reliability framework that applies to all modalities. Chapter~\ref{ch:models-systems} will turn the tabular design card into the broader artifact of an ML system specification, with versioned data contracts and rollout protocols. The themes of Part~V are general; tabular is the modality where the cost of getting them wrong is most directly visible in the deployed product.
 
 \section*{Chapter Summary}
 

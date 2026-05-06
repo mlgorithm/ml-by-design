@@ -138,6 +138,20 @@ What to provide privately:
 
 Instructor-only focus:
 
+- target-encoding leakage and legal split design
+- tabular design cards
+- schema drift, missingness drift, and calibration failure
+
+What to provide privately:
+
+- one strong tabular design card with row identity, time boundary, and operating point
+- one leaked target-encoding example and its corrected split-aware version
+- one schema-drift or missingness-drift diagnosis with grading notes
+
+### Chapter 17
+
+Instructor-only focus:
+
 - claim bounding
 - slice diagnosis
 - ablation and repeated-run reasoning
@@ -148,7 +162,7 @@ What to provide privately:
 - one experiment claim sheet with scoring notes
 - one example where aggregate performance hides deployment-relevant failure
 
-### Chapter 17
+### Chapter 18
 
 Instructor-only focus:
 
@@ -161,7 +175,7 @@ What to provide privately:
 - one annotated subgroup-metrics example
 - one mitigation tradeoff example that improves one dimension while leaving another unresolved
 
-### Chapter 18
+### Chapter 19
 
 Instructor-only focus:
 

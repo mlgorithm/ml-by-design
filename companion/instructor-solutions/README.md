@@ -15,9 +15,10 @@ This directory contains instructor-facing solution drafts for selected companion
 | Printed chapter | Source folder | Needed instructor support |
 |---|---|---|
 | 3 | `ch02b` | evaluation-plan examples, leakage diagnoses, grading notes |
-| 16 | `ch10` | experiment claim sheets, ablation/slice rubrics, weak-vs-strong claims |
-| 17 | `ch11` | reliability review cards, subgroup/privacy/safety misconception notes |
-| 18 | `ch12` | system readiness briefs, launch/no-launch examples, rollback rubrics |
+| 16 | `ch09b` | tabular design cards, target-encoding leakage cases, schema-drift diagnostics |
+| 17 | `ch10` | experiment claim sheets, ablation/slice rubrics, weak-vs-strong claims |
+| 18 | `ch11` | reliability review cards, subgroup/privacy/safety misconception notes |
+| 19 | `ch12` | system readiness briefs, launch/no-launch examples, rollback rubrics |
 
 ## Package Standard
 
