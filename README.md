@@ -6,7 +6,9 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19341954.svg)](https://doi.org/10.5281/zenodo.19341954)
 [![Edition: v0.9 Public Draft](https://img.shields.io/badge/Edition-v0.9%20Public%20Draft-orange)](CHANGELOG.md)
 
-— [Read the PDF](ml-by-design.pdf) · [DOI](https://doi.org/10.5281/zenodo.19341954) · [Adopt in your course](companion/instructor-guide.md) · [Cite this book](#cite-this-book) · [Report errata](ERRATA.md) · [Changelog](CHANGELOG.md)
+— [Read the PDF](ml-by-design.pdf) · [Latest release on Zenodo](https://doi.org/10.5281/zenodo.20232975) · [Adopt in your course](companion/instructor-guide.md) · [How to cite](#how-to-cite) · [Report errata](ERRATA.md) · [Changelog](CHANGELOG.md)
+
+**DOIs.** Latest release v0.9: [`10.5281/zenodo.20232975`](https://doi.org/10.5281/zenodo.20232975). Concept DOI (always resolves to latest): [`10.5281/zenodo.19341954`](https://doi.org/10.5281/zenodo.19341954). Cite the version DOI for reproducibility; use the concept DOI for general references.
 
 ## Why this book
 

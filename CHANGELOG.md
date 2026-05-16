@@ -12,6 +12,8 @@ Each release is tagged in git and minted as a new version on Zenodo. The concept
 
 ## [0.9.0] — 2026-05-15 — Public Draft / Open Review Edition
 
+**Zenodo:** version DOI [`10.5281/zenodo.20232975`](https://doi.org/10.5281/zenodo.20232975) · [record page](https://zenodo.org/records/20232975)
+
 Renamed and repositioned the planned 1.0.x release as a **Public Draft v0.9 / Open Review Edition** for community review and classroom use. The first stable release will remain v1.0, after the review period.
 
 ### Added
@@ -32,3 +34,4 @@ Renamed and repositioned the planned 1.0.x release as a **Public Draft v0.9 / Op
 - All 32 companion scripts (17 minimal + 15 practical) execute successfully with `requirements.txt`.
 
 [0.9.0]: https://github.com/mlgorithm/ml-by-design/releases/tag/v0.9.0
+[0.9.0-zenodo]: https://doi.org/10.5281/zenodo.20232975
