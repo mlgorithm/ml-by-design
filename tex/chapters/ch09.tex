@@ -1,13 +1,39 @@
 \chapter{Sequential and Structured Data: Prediction-Time Realism}
 \label{ch:audio-time}
 
-Audio, time series, multimodal streams, and graph-structured data look like different domains, but they share one modeling obligation: the system must state what information is allowed to influence the prediction. \emph{Prediction-time realism} means only information truly available at the moment of prediction may shape it. An audio classifier cannot rely on future frames that do not yet exist at inference time. A forecasting model cannot quietly borrow tomorrow's values while claiming to predict today. A multimodal or graph-based system cannot silently use relationships, modalities, or context unavailable to the deployed workflow. This chapter starts with audio and forecasting because they make the timing boundary vivid, then extends the same audit to multimodal and graph-structured settings. Before choosing a representation or architecture, it pins down the decision moment, the allowed context, the forecast horizon when one exists, the latency budget, and the structured inputs that are permitted. Only then do spectrograms, lag features, sequence models, fusion strategies, graph message passing, and backtesting become meaningful. By the end of the chapter, you should be able to frame a structured prediction task around the decision moment and defend an evaluation plan that respects the information boundary.
+A campus energy-demand forecaster reports an MAE of $4.2$\,kW on the holdout, beating the persistence baseline by twelve percent. It ships. Within a month, the deployed forecasts are erratic and consistently late by an hour. The post-mortem traces it to a feature that the holdout had access to but the deployed model does not: the meteorological service issues a revised hourly weather observation twenty minutes after the hour begins, and the training and holdout pipelines had silently grabbed the revision. The deployed pipeline only has the original. The model was forecasting the present, not the future.
 
-The chapter's organizing habit is a \emph{prediction-time audit}: a short written check of what information is operationally available and permitted at prediction time, what future information is forbidden, what relationships or modalities are permitted, and how much delay the system can tolerate. Keep two running cases in view throughout the chapter. The first is a streaming wake-word detector that must fire within a fraction of a second after hearing a target phrase. The second is a one-hour-ahead electricity-demand forecaster for a campus energy system. One consumes audio, the other numeric measurements, but the same practical question governs both: what information was really available when the decision had to be made? These two cases give the chapter its spine. Audio makes representation and latency vivid. Forecasting does the same for horizon, baselines, and \emph{backtesting}---rolling evaluation forward the way the deployed system will actually be refreshed. The later multimodal and graph sections pose the same question in a broader form: what additional sources of context are legitimately available, and what would make them spurious, stale, incomplete, or leaky? Those sections also return to \emph{regime change}, a shift in how the process behaves, and \emph{concept drift}, where the relationship the model tracks changes over time.
+Audio streams, time series, multimodal feeds, and graph-structured data all carry that same trap. Information arrives in time, and the system must decide what part of it is actually allowed to influence a prediction.
 
-A short prediction-time audit serves one purpose: it fixes the boundary of the claim before architecture enters the story. Once the decision moment, allowed context, forbidden future information, permitted relational context, and latency budget are written down, the rest of the chapter can ask a more interesting question: what representation, memory choice, and evaluation protocol stay faithful to that boundary? The next section makes that shared constraint explicit before splitting into domain-specific details.
+This chapter develops one habit for that decision: a short written audit of what the deployed model can legitimately see when it must act. The audit fixes the decision moment, the allowed context, the forecast horizon if there is one, the latency budget, and the relational or multimodal inputs that are permitted. Once that boundary is on paper, representation, sequence architecture, fusion, and evaluation become technical questions rather than open invitations to leakage.
 
-\section{Two Domains, One Audit}
+\section{Problem-Solving Technique: The Prediction-Time Audit}
+
+Treat every sequential or structured task as a claim about a specific moment in time. The model is allowed to use only what was available and permitted then; everything else belongs to an easier problem than the one the deployed system must solve.
+
+\textbf{Prediction-time audit.} Before choosing a representation or model family, write down four things: the exact moment a decision must be issued, the context allowed at that moment, the information forbidden because it does not yet exist, and the latency the workflow can absorb. Architecture choices that violate any of the four are not solving the deployed problem.
+
+A useful diagnostic: if a sequential result feels too strong for the application, the first place to look is the audit, not the model. Most ``surprisingly good'' baselines on streaming or forecasting tasks are quietly using information their deployed siblings will not have.
+
+\begin{decisionbox}
+\textbf{Core path through the chapter.} On a first serious pass, keep the spine narrow: the prediction-time audit, the audio and forecasting running cases, basic lag and window features, leakage taxonomy, backtesting, and the sequential design card. Backpropagation through time and its spectral analysis, the multimodal contrastive Extension, and the graph-structured Extension matter because they extend the audit to harder regimes---they should not crowd out the first goal of producing one honest audit and one honest backtest for a streaming or forecasting problem.
+\end{decisionbox}
+
+\section{Opening Dilemma: When Tomorrow Sneaks Into Today}
+
+Suppose a campus energy team asks for an hour-ahead electricity-demand forecast. The first draft of the experiment joins historical load with weather observations, picks a model, and reports a strong test-set error. The result looks usable. Then someone asks a simple question: which weather report did the model see for each forecast hour?
+
+If the answer is ``the report we now know was correct,'' the experiment was never the deployed problem. At the moment a one-hour-ahead forecast must be issued---say, the top of the hour---the team only has the weather report that existed then, which may be hours stale and is sometimes revised the next day. A model that quietly used revised weather has solved an easier task. Its strong error number does not transfer.
+
+The audio side of the chapter exposes the same trap in a faster regime. A wake-word detector that classifies a one-second clip after the fact is a different system from one that must fire within a fraction of a second while the speaker is still talking. Both are nominally classifying short audio; only one of them is solving the deployed problem.
+
+\begin{quote}\itshape
+Prediction-time realism is not an evaluation footnote. It is a modeling commitment that decides which models even count as candidates.
+\end{quote}
+
+Two running cases carry the audit through the rest of the chapter. The first is a streaming wake-word detector that must fire within a fraction of a second of hearing a target phrase. The second is the one-hour-ahead electricity-demand forecaster above. Audio makes representation and latency vivid; forecasting does the same for horizon, baselines, and \emph{backtesting}---the rolling, replay-style evaluation that the deployed refresh schedule actually demands. The multimodal and graph sections later in the chapter pose the same question in a broader form: which additional sources of context are legitimately available, and what would make them spurious, stale, incomplete, or leaky? Those sections also return to \emph{regime change}---a shift in how the underlying process behaves---and \emph{concept drift}, where the relationship the model tracks changes over time. Both terms are easier to feel after the audit is in hand; they appear at the moment they bite, not in this opening.
+
+\section{Where the Audit Applies}
 
 With that shared constraint in place, the audio and forecasting examples are easier to teach when kept in one frame rather than treated as unrelated mini-courses. Table~\ref{tab:prediction-time-two-cases} shows why.
 
@@ -148,9 +174,7 @@ Now compute short-window frequency summaries. Early windows show strong energy n
 \emph{A spectrogram is not the sound itself; it is a task-shaped lens on the sound.}
 \end{center}
 
-\begin{mathlens}
 If the analysis window has duration $T$, time localization improves as $T$ shrinks, while frequency resolution improves as $T$ grows. The intuition is simple: short windows catch brief events but smear stable frequencies; long windows separate frequencies cleanly but blur when they occurred. Window choice is therefore a task choice: onset detection prefers timing, tone or harmonic analysis prefers frequency precision.
-\end{mathlens}
 
 \begin{example}[Window Choice Depends on the Decision]
 For the running wake-word case, short windows preserve consonant onsets and brief timing cues that matter for fast detection. Longer windows can smear those cues even when they yield cleaner frequency estimates. The right representation is therefore tied not only to the signal, but to the timing of the action the system must take.
@@ -160,26 +184,36 @@ For the running wake-word case, short windows preserve consonant onsets and brie
 
 Short windows give better time localization but blur frequency precision. Longer windows improve frequency resolution but blur timing. This tradeoff matters because tasks value timing and frequency detail differently. A transient command and a slowly changing tone are not equally well served by the same window.
 
-\begin{advancednote}
 The short-time Fourier transform can be written schematically for a length-\(L\) window and frequency bin \(k\) as
 \[
 S(t,k) = \left| \sum_n x[n]\,w[n-t]\,e^{-i2\pi kn/L} \right|^2,
 \]
 where $x[n]$ is the waveform, $w$ is a local window, and \(k\) indexes the discrete frequency bin. The key idea is not the formula itself but the fact that local frequency analysis depends on both a signal and a windowing choice.
-\end{advancednote}
 
-\begin{mathlens}
 If a window has length $L$ and the step size is $s<L$, then adjacent windows overlap by $L-s$ samples. For example,
 \begin{align*}
 W_t &= (y_t,\ldots,y_{t+L-1}), \\
 W_{t+s} &= (y_{t+s},\ldots,y_{t+s+L-1}),
 \end{align*}
 so the overlap fraction is \((L-s)/L\). If a random split puts one overlapping window in train and the next in test, the test example already contains much of the same raw signal. That is why overlapping windows from one continuous segment should usually stay in the same temporal block or group.
-\end{mathlens}
 
 \subsection{Helpful but Incomplete}
 
 Spectrograms are attractive because they let audio borrow architectural ideas developed for images. But they also hide structure. Phase information is often compressed or ignored. Windowing can smear sharp events. Reverberation and background noise can distort the display. As elsewhere in the book, the representation is never neutral. The same design logic reappears in forecasting: lags and horizons are the forecasting analogue of windows and frequencies, deciding which temporal structure is preserved and at what scale.
+
+\begin{example}[A Wake-Word Spotter, End to End]
+The pieces from this section---sampling rate, window length, mel spectrogram, prediction-time audit---become concrete when assembled into one pipeline. Consider a ``hey campus'' detector that must classify $1$-second audio clips and decide within $200$ ms of audio arrival.
+
+\textbf{Input pipeline.} The microphone delivers a raw waveform at $16{,}000$ Hz, so a $1$-second clip is $16{,}000$ samples. A short-time Fourier transform with $25$ ms windows hopping every $10$ ms yields about $100$ frames per second. Each frame is reduced to $40$ mel-filter-bank energies, log-magnitude. The result is a $(100\times 40)$ tensor per clip: roughly the size of a small image.
+
+\textbf{Model.} A small CNN treats the spectrogram as that image. Layer by layer: $2$D conv ($32$ channels, $3{\times}3$, ReLU) $\rightarrow$ max-pool $2{\times}2$ $\rightarrow$ $2$D conv ($64$ channels, $3{\times}3$, ReLU) $\rightarrow$ max-pool $2{\times}2$ $\rightarrow$ flatten $\rightarrow$ dense $64$ $\rightarrow$ sigmoid. About $30$k parameters; comfortably under $50$ ms inference on a Raspberry Pi, which leaves room inside the $200$ ms budget for spectrogram computation and post-processing.
+
+\textbf{Training.} Positive examples are $1$-second clips containing the wake word. Negatives are random ambient audio and decoy keywords (``hey campers,'' ``hey calculus,'' etc.) that share onsets with the target. The class imbalance is severe---perhaps $1$ positive per $10{,}000$ seconds of background audio---so the loss must reflect it. Focal loss or explicit class weighting usually beats plain binary cross-entropy on this problem.
+
+\textbf{Evaluation.} Two metrics are needed, not one. The first is wake-word recall on a held-out test set of positive clips. The second is the streaming false-alarm rate: the number of spurious wakes per hour of background audio, measured by running the model on overlapping windows of a long unlabeled stream. The two metrics differ because deployment applies the model continuously to overlapping windows; a single per-clip recall says nothing about how many false wakes appear in eight hours of background chatter. A typical target is fewer than $0.5$ false alarms per hour of streaming audio at greater than $95\%$ wake-word recall, with the operating threshold tuned on a separate streaming validation stream.
+
+\textbf{Why this is the simplest ``real'' pipeline.} Every architectural detail---the $25$ ms window, the $40$ mel bands, the $30$k-parameter CNN, the streaming evaluation, the operating threshold---is a modeling choice. Each connects back to the prediction-time audit at the top of the chapter: the choices commit the system to a particular notion of allowed context, latency budget, and acceptable failure mode.
+\end{example}
 
 \section{Time Series as Evolving Process}
 
@@ -261,7 +295,23 @@ A sequential model does not merely read one item after another. It preserves the
 
 \subsection{Hidden Markov Models and Structured State}
 
-Earlier sequence models such as hidden Markov models treat the system as evolving through hidden states that generate observations. These models remain conceptually useful because they force explicit reasoning about latent state, transitions, and uncertainty \citep{rabiner1989}.
+Hidden Markov Models (HMMs) make the latent-state assumption explicit: at each time step, the observation depends on an unobserved discrete state, and the states form a Markov chain. The joint decomposition
+\[
+p(x_{1:T}, s_{1:T}) \;=\; p(s_1) \prod_{t=2}^{T} p(s_t \mid s_{t-1}) \; \prod_{t=1}^{T} p(x_t \mid s_t)
+\]
+makes maximum-likelihood inference and learning tractable through the forward-backward algorithm (for posterior inference over states) and the Baum-Welch / EM algorithm (for parameter learning from unlabeled sequences). HMMs are still the right tool when the state space is genuinely discrete and small---phoneme decoding in classical speech recognition, copy-number-variation detection in genomics, regime detection in financial time series---and they remain a useful sanity check before fitting a more expressive RNN to a problem that may not actually need one \citep{rabiner1989}.
+
+\begin{advancednote}
+\textbf{HMM inference: forward-backward in one paragraph.} The forward variable $\alpha_t(s) = p(x_{1:t}, s_t = s)$ admits the recursion
+\[
+\alpha_t(s) \;=\; p(x_t \mid s) \sum_{s'} p(s \mid s')\, \alpha_{t-1}(s'),
+\]
+with base case $\alpha_1(s) = p(s_1 = s)\, p(x_1 \mid s)$. The backward variable $\beta_t(s) = p(x_{t+1:T} \mid s_t = s)$ admits a parallel recursion that runs from $t = T$ down to $t = 1$. Their product gives the smoothed posterior over states:
+\[
+p(s_t = s \mid x_{1:T}) \;\propto\; \alpha_t(s)\, \beta_t(s).
+\]
+This is the forward-backward algorithm. Replacing the sum in the forward step with a max (and keeping pointers to the argmax) gives the Viterbi algorithm for the most likely state sequence. The Baum-Welch algorithm is the EM update that re-estimates the transition matrix $p(s \mid s')$ and the emission distributions $p(x \mid s)$ from the smoothed posteriors as soft assignments. All three algorithms run in $O(T K^2)$ time, where $K$ is the number of states---linear in sequence length, quadratic in the discrete state count. The full derivations live in Chapter~\ref{ch:probabilistic-models}, alongside the broader latent-variable / EM machinery they belong to.
+\end{advancednote}
 
 \subsection{Recurrent Models and LSTMs}
 
@@ -271,7 +321,6 @@ Recurrent neural networks process sequences step by step, updating a hidden stat
 
 Transformers matter in sequential work for the same reason they matter in language: they allow more flexible access to distant context than a purely recurrent hidden state. With enough data and compute, that flexibility helps with long-range dependencies \citep{vaswani2017}.
 
-\begin{practicalnote}
 The evolution of sequence models reflects a progression in how context is stored and accessed:
 \begin{itemize}[leftmargin=*]
   \item \textbf{Hidden Markov Models} maintain a discrete hidden state with fixed transition probabilities. They model uncertainty explicitly but struggle with long-range dependencies because the state space must be enumerated.
@@ -280,15 +329,60 @@ The evolution of sequence models reflects a progression in how context is stored
   \item \textbf{Transformers} replace recurrent state updates during training with attention over positions, allowing any token to attend to any other without information passing through intermediate steps. This makes long-range context easier to model in parallel, though autoregressive decoding at inference time can still proceed token by token and positional information must be encoded explicitly.
 \end{itemize}
 Each architecture solves a memory limitation of its predecessor, at the cost of additional assumptions or computation.
-\end{practicalnote}
 
 \begin{example}[A Toy Memory Contrast]
 Consider a toy task: output \texttt{1} at the current step only if the tone heard \emph{eight} steps earlier matches the tone heard now; otherwise output \texttt{0}. A short-window model that sees only the last three steps cannot solve this task for the right reason, because the decisive information lies outside its memory. A recurrent model may solve it if its hidden state preserves the earlier tone reliably. A transformer-style model can compare the current step directly with the earlier relevant step. The lesson is not that one architecture is always better. The task is really a question about memory access.
 \end{example}
 
-\begin{mathlens}
+\begin{advancednote}
+\textbf{Backpropagation through time, and why long-range learning is hard.} A vanilla RNN maintains a hidden state evolving as
+\[
+h_t \;=\; \tanh(W_h h_{t-1} + W_x x_t + b),
+\qquad
+\hat y_t \;=\; W_y h_t.
+\]
+Training minimizes a loss $L = \sum_t L_t(\hat y_t, y_t)$ over the sequence. By the chain rule, the gradient of $L_T$ with respect to a parameter affecting $h_t$ involves a product of Jacobians of the recurrence:
+\[
+\frac{\partial L_T}{\partial h_t} \;=\; \frac{\partial L_T}{\partial h_T}\prod_{k=t+1}^{T}\frac{\partial h_k}{\partial h_{k-1}}
+\;=\; \frac{\partial L_T}{\partial h_T}\prod_{k=t+1}^{T} W_h^\top\,\mathrm{diag}(1 - h_k^2),
+\]
+using $\partial \tanh(z)/\partial z = 1 - \tanh^2(z)$ entrywise. The gradient back to step $t$ is the product of $T - t$ Jacobians. If the largest singular value of $W_h^\top \mathrm{diag}(1 - h_k^2)$ is below $1$, the product shrinks geometrically in $T - t$---this is the \emph{vanishing-gradient} problem, and it is why a plain RNN cannot learn the eight-step memory task above. If the largest singular value is above $1$, the product blows up, producing the symmetric \emph{exploding-gradient} pathology. LSTMs and GRUs were designed around this: their gated update $c_t = f_t \odot c_{t-1} + i_t \odot \tilde c_t$ has Jacobian $\partial c_t/\partial c_{t-1} = \mathrm{diag}(f_t)$, which the network can learn to set near $1$ where information must persist, providing a near-identity gradient pathway. The same equations are the formal reason transformers learn long-range dependencies more easily: there is no $\prod$ of Jacobians to contract through---attention reaches $t - h$ in one step.
+
+\begin{codeexample}
+import numpy as np
+
+def rnn_forward(x, W_h, W_x, b, h0):
+    """Run a vanilla tanh RNN forward and keep the hidden states."""
+    T, d = len(x), len(h0)
+    h    = np.zeros((T + 1, d))
+    h[0] = h0
+    for t in range(T):
+        h[t + 1] = np.tanh(W_h @ h[t] + W_x * x[t] + b)
+    return h                                          # (T+1, d)
+
+def rnn_grad_norm(W_h, h, t, T):
+    """Largest singular value of the product of Jacobians from step t to T."""
+    J = np.eye(W_h.shape[0])
+    for k in range(t + 1, T + 1):
+        D = np.diag(1.0 - h[k] ** 2)                  # 1 - tanh^2
+        J = J @ (W_h.T @ D)
+    return np.linalg.norm(J, 2)                       # spectral norm
+
+# Watch the gradient norm shrink (or blow up) as T grows.
+rng = np.random.default_rng(0)
+for spectral_radius in [0.6, 1.0, 1.4]:
+    W = rng.standard_normal(size=(4, 4))
+    W = W * spectral_radius / np.linalg.norm(W, 2)    # rescale to target radius
+    h = rnn_forward(np.zeros(40), W, 0.0, 0.0, rng.standard_normal(4))
+    norms = [rnn_grad_norm(W, h, t=0, T=T) for T in (5, 10, 20, 40)]
+    print(f"radius={spectral_radius}  ||J||@T=5,10,20,40 = {np.round(norms, 4)}")
+# radius=0.6   norms decay toward 0       (vanishing)
+# radius=1.0   norms stay roughly bounded (marginal regime)
+# radius=1.4   norms grow rapidly         (exploding)
+\end{codeexample}
+\end{advancednote}
+
 Suppose a predictor retains only the last $m$ observations, so its state at time $t$ is a function of $(y_{t-m+1},\ldots,y_t)$. If the correct output at time $t+1$ depends on $y_{t-h}$ with $h>m$, then two sequences that agree on the last $m$ steps but differ at $y_{t-h}$ produce the same state yet require different outputs. No model with only $m$-step memory can solve that task perfectly in all cases. This is the formal reason horizon and memory length must be matched to the task.
-\end{mathlens}
 
 \begin{example}[Which Past Matters?]
 For keyword spotting, the last second of audio matters most. For electricity demand, the same hour on previous days matters strongly. For clinical monitoring, sudden short-term changes may matter more than long-run averages. Different tasks reward different notions of memory.
@@ -390,7 +484,6 @@ The random split looks best because nearby windows share almost the same recent 
 
 The same logic appears in audio. A wake-word detector evaluated with the same speakers, rooms, and devices mixed across train and test can look strong for the wrong reason. If deployment requires new speakers or new microphones, the honest split should separate those conditions too. The lesson is not ``always use one specific split''; it is ``use the split that matches the real prediction story.''
 
-\begin{evidencebox}
 Evidence for a sequential model should answer at least these questions:
 \begin{itemize}[leftmargin=*]
 \item Was the split chronological or otherwise faithful to deployment?
@@ -398,7 +491,6 @@ Evidence for a sequential model should answer at least these questions:
 \item Does the model beat a realistic naive baseline?
 \item What happens under noise, latency limits, or regime shift?
 \end{itemize}
-\end{evidencebox}
 
 \subsection{Backtesting Regimes and Horizon-Specific Claims}
 
@@ -459,11 +551,8 @@ Processes change. Speakers swap microphones. Consumption patterns shift across s
 
 For the demand-forecast case, drift may come from new building schedules, extreme weather, or policy changes that alter campus energy usage. For the wake-word case, drift may come from microphone replacements, firmware updates, background-noise shifts, or changing speaking habits. Sequential systems therefore need not just a one-time evaluation but a plan for noticing when the old prediction-time assumptions stop matching the new world.
 
-\begin{advancednote}
 Many sequential deployments are partly monitoring problems. The system must detect drift, report it, and possibly trigger retraining or fallback behavior. This connects to the later chapters on experiments, reliability, and end-to-end systems.
-\end{advancednote}
 
-\begin{practicalnote}
 Detecting drift in practice requires monitoring, not just awareness. Common strategies include:
 \begin{itemize}[leftmargin=*]
   \item \textbf{Performance monitoring}: track the primary metric on incoming labeled data (or a sample); a sustained decline signals possible drift.
@@ -471,7 +560,6 @@ Detecting drift in practice requires monitoring, not just awareness. Common stra
   \item \textbf{Prediction-distribution monitoring}: if the model's output distribution changes (e.g., it starts predicting one class far more often), the relationship between inputs and targets may have shifted.
 \end{itemize}
 No single signal is definitive. Combining performance, input, and output monitoring provides the most robust early warning.
-\end{practicalnote}
 
 \section{Classical Forecasting Toolkit}
 \label{sec:classical-forecasting}
@@ -488,9 +576,7 @@ where $\alpha \in (0, 1)$ controls how fast the model forgets old data. The fore
 
 \textbf{Holt's method} adds a trend component $b_t$, and \textbf{Holt-Winters} adds seasonality $s_t$ (additive or multiplicative). Holt-Winters is the classical workhorse for data with trend and seasonal patterns, and it requires no training data beyond the series itself.
 
-\begin{practicalnote}
 Exponential smoothing has very few parameters ($\alpha$, $\beta$ for trend, $\gamma$ for seasonality) and fits in seconds. Within its home regime---univariate series with level, trend, or seasonal structure and a scalar point forecast as the deployment target---it is a strong naive baseline. If a complex model cannot beat Holt-Winters on that kind of data, the complexity is not justified. The reverse caveat also applies: intermittent or zero-inflated demand, count or event processes, high-dimensional exogenous forecasting, and tasks where the deployment target is a distribution, an interval, or a multi-series forecast lie outside exponential smoothing's design envelope and often need Croston's method, count-time-series models, or structural or multivariate alternatives.
-\end{practicalnote}
 
 \subsection{ARIMA Models}
 
@@ -540,13 +626,11 @@ Neural sequence models (RNNs, Transformers) are better when:
 
 \subsection{Connection to HMMs and State-Space Models}
 
-Exponential smoothing and ARIMA are both special cases of \emph{state-space models}: models with a hidden state that evolves over time and generates the observed data. The Hidden Markov Models discussed earlier in this chapter are also state-space models, with discrete hidden states. All of these methods share a common structure: infer a hidden state from past observations, then use it to predict the future.
+Exponential smoothing, ARIMA, HMMs, and RNNs all maintain some notion of evolving internal state, but they differ substantially in how that state is parameterized, learned, and updated. Exponential smoothing carries a scalar level (and possibly a trend and seasonal index) updated by a fixed linear rule. ARIMA carries a vector of recent values and errors updated by a fitted autoregressive-moving-average recursion. An HMM carries a discrete latent state with learned transition and emission distributions. An RNN carries a continuous learned hidden vector updated by a nonlinear gating function. This chapter treats them as alternative tools that exchange parameter-economy for expressiveness, not as instances of one master framework. A reader wanting the full state-space treatment---explicit latent variables with forward-backward inference and EM learning---should consult Chapter~\ref{ch:probabilistic-models}, which develops HMMs and their learning algorithms in the broader Bayesian / latent-variable register.
 
-This state-space perspective unifies classical forecasting with models that maintain a recursive hidden state, including HMMs and many RNNs. Transformers provide a different memory mechanism: instead of updating one latent state recursively, they attend over a context window of past representations. The difference lies not only in how state is represented, but in whether memory is carried forward through recursive filtering or retrieved through attention over context.
+Transformers provide a different memory mechanism altogether: instead of updating one latent state recursively, they attend over a context window of past representations. The difference is not only how state is represented, but whether memory is carried forward through recursive filtering or retrieved through attention over context.
 
-\begin{thinkingtool}
-\textbf{State-space unification.} When choosing a sequence model, ask: what is the hidden state, how does it evolve, and how does it generate observations? Exponential smoothing has a scalar state (the level). ARIMA has a vector state (recent values and errors). An RNN has a learned vector state. A Transformer has an attended context window. The question is not ``which architecture is best?'' but ``what state representation does the task require?''
-\end{thinkingtool}
+\textbf{The practical takeaway.} When choosing a sequence model, ask: what is the hidden state, how does it evolve, and how does it generate observations? Exponential smoothing has a scalar state (the level). ARIMA has a vector state (recent values and errors). An HMM has a discrete latent state. An RNN has a learned vector state. A Transformer has an attended context window. The question is not ``which architecture is best?'' but ``what state representation does the task require, and at what parameter-and-data cost?''
 
 \subsection{Modern Sequence Models and Calibrated Forecast Intervals: Pointers}
 
@@ -589,6 +673,10 @@ For the one-hour-ahead campus demand forecaster, the decision time is the top of
 
 \section{Extension: When Modalities Combine}
 \label{sec:multimodal-extension}
+
+\begin{practicalnote}
+\textbf{Page-budget warning.} This Extension is the length of a short chapter. On a first pass through this chapter, skip directly to the Looking Ahead section and return here when working on a problem with two or more modalities. The contrastive-loss derivation, the joint-embedding examples, and the late-fusion vs.\ early-fusion design discussion are graduate-level project content, not first-course material.
+\end{practicalnote}
 
 Real-world systems rarely operate on a single data type. A campus security system combines video feeds (vision) with audio alerts. A course-support assistant handles text queries but may also process uploaded screenshots or diagrams. A medical system combines lab values (tabular), clinical notes (text), and imaging (vision). The question is not whether to combine modalities but how, without losing the audit discipline developed in Chapters~\ref{ch:vision}--\ref{ch:audio-time}. The same prediction-time question still governs the design: which modalities are legitimately available at the decision moment, how reliably are they aligned, and what does an honest evaluation of the combined system look like?
 
@@ -683,13 +771,13 @@ Chapter~\ref{ch:representation-foundation-models} introduced cosine similarity, 
 
 The canonical example is CLIP \citep{radford2021clip}. CLIP trains a vision encoder $f_\mathrm{img}$ and a text encoder $f_\mathrm{txt}$ jointly on a large collection of image-caption pairs. For a batch of $N$ pairs $\{(x_i, t_i)\}_{i=1}^N$, both encoders produce $\ell_2$-normalized embeddings $u_i = f_\mathrm{img}(x_i)$ and $v_i = f_\mathrm{txt}(t_i)$. The training loss makes the matched pair $(u_i, v_i)$ a higher cosine similarity than any of the $N-1$ mismatched pairs $(u_i, v_j)$ for $j \ne i$. The same constraint is applied symmetrically: each text caption is also pulled toward its matching image and away from the others.
 
-\begin{mathlens}
+\begin{advancednote}
 The InfoNCE contrastive loss \citep{oord2018cpc} writes this asymmetry down precisely. With a temperature $\tau>0$, the image-to-text loss for example $i$ is
 \[
 \mathcal{L}^{\mathrm{i}\to\mathrm{t}}_i \;=\; -\,\log\!\frac{\exp(u_i^\top v_i / \tau)}{\sum_{j=1}^{N}\exp(u_i^\top v_j / \tau)}.
 \]
-The denominator runs over all texts in the batch, treating every non-matching caption as a negative. The text-to-image loss $\mathcal{L}^{\mathrm{t}\to\mathrm{i}}_i$ is identical with the roles of $u$ and $v$ swapped. CLIP-style training minimizes the average $\tfrac{1}{2}(\mathcal{L}^{\mathrm{i}\to\mathrm{t}} + \mathcal{L}^{\mathrm{t}\to\mathrm{i}})$ over the batch. The temperature $\tau$ controls how peaked the softmax is; smaller $\tau$ enforces sharper separation between matches and non-matches but is harder to optimize.
-\end{mathlens}
+The denominator runs over all texts in the batch, treating every non-matching caption as a negative. The text-to-image loss $\mathcal{L}^{\mathrm{t}\to\mathrm{i}}_i$ is identical with the roles of $u$ and $v$ swapped. CLIP-style training minimizes the average $\tfrac{1}{2}(\mathcal{L}^{\mathrm{i}\to\mathrm{t}} + \mathcal{L}^{\mathrm{t}\to\mathrm{i}})$ over the batch. The temperature $\tau$ controls how peaked the softmax is; smaller $\tau$ enforces sharper separation between matches and non-matches but is harder to optimize. Chapter~\ref{ch:representation-foundation-models} introduces the same loss in a single-view (anchor/positive/negative) setting; the form above is the cross-modal version, with images playing the role of anchors for texts and vice versa.
+\end{advancednote}
 
 \subsubsection*{Worked Example: Contrastive Loss on Two Pairs}
 
@@ -708,17 +796,13 @@ For pair $2$,
 \]
 The text-to-image direction is computed analogously, reading down the columns. Imagine instead that the encoders produced an indecisive matrix with $S_{ii} = 0.5$ on the diagonal and $S_{ij} = 0.5$ off-diagonal: then every cell of the softmax would be $1/2$, and the loss would be $-\log 0.5 \approx 0.693$ in every direction. The gradient flowing back through the encoders would push matched pairs up and mismatched pairs down, gradually reshaping both spaces so the diagonal dominates. \emph{That is the entire training signal.} No labels are required beyond the assertion that $(x_i, t_i)$ describe the same content, and that assertion comes for free from web data where images and captions co-occur.
 
-\begin{practicalnote}
 The number of negatives matters. With only two pairs in a batch the matched/mismatched contrast is weak; the loss can be small even with mediocre embeddings. CLIP's strength comes partly from very large batches---thousands of pairs---so each matched caption is contrasted against thousands of distractors at once. If you cannot afford large batches, techniques like memory queues \citep{he2020moco} or carefully curated hard negatives can recover some of the signal.
-\end{practicalnote}
 
 \subsubsection*{Why a Shared Geometry Emerges}
 
 Two consequences follow from this objective and matter for downstream use. First, the two encoders end up producing vectors that live on the same unit sphere and are interchangeable as similarity queries: an image embedding can be compared directly to a text embedding by cosine similarity, even though they came from different networks and different raw inputs. Second, the geometry inherits the structure that text and images jointly carry. Captions about cats and images of cats share a region; captions about dogs and images of dogs share another. This is what makes \emph{zero-shot classification} work: to classify a new image into one of $k$ candidate classes, embed each class name as text (e.g., ``a photo of a \{cat, dog, car\}''), embed the image, and pick the class whose text embedding has the highest cosine similarity with the image. No labeled training data for the new task is needed, because the joint embedding space already knows what those words mean visually.
 
-\begin{claimdefense}
 A successful CLIP-style joint embedding supports the safe claim that a matching caption tends to be the nearest neighbor of its image in cosine similarity, on data drawn from the training distribution. It does not support the unsafe claims that the model knows what cats are, that nearby vectors in embedding space share any specific human-interpretable concept, or that the geometry transfers cleanly to medical, scientific, or rare domains underrepresented in web-scale pretraining. The joint space encodes the co-occurrence structure of the training data, not the meaning of the words.
-\end{claimdefense}
 
 \subsection{Multimodal Evaluation}
 
@@ -785,9 +869,7 @@ CLIP-style training tends to work cleanly when the two modalities co-occur abund
 Multimodal models can generate confident, grammatically correct text that describes image features not actually present. If a model is asked to caption an image of a dog wearing a collar and harness, and the harness is partially occluded, the model may still confidently generate ``The dog is wearing a red harness'' even when the color is invisible. In deployment, treat multimodal text generation as a signal that requires human verification, not a ground-truth report of what is visible.
 \end{warningbox}
 
-\begin{practicalnote}
 A pragmatic approach to multimodal grounding is to test alignment on held-out data with known ground truth. For CLIP-style models, build a small set of image--text pairs where similarity should be high (matching pairs) and low (mismatched pairs), then measure precision and recall of the alignment. Report both image-to-text and text-to-image recall at $k$; they can disagree, and the smaller of the two is usually the more honest summary. This reveals whether embeddings transfer to your domain before deploying on unseen data.
-\end{practicalnote}
 
 \subsection{Running Cases}
 
@@ -800,6 +882,10 @@ The two running cases introduced in this chapter can be extended to multimodal s
 
 \section{Extension: Beyond Grids and Sequences: Graph-Structured Data}
 \label{sec:graph-extension}
+
+\begin{practicalnote}
+\textbf{Page-budget warning.} This Extension is also short-chapter length. On a first pass, skip directly to the chapter's Common Mistakes and Looking Ahead sections; return here when working on graph-structured data. The GCN closed form, the message-passing toy graph, and the complexity analysis are graduate-level project content.
+\end{practicalnote}
 
 The prediction-time audit extends one more step. Not all data fits naturally into grids (images), sequences (audio, text), or tables. Some data is fundamentally relational: social networks (who follows whom), molecular structures (atoms and bonds), knowledge graphs (entities and relationships), citation networks (papers citing papers), supply chains (supplier dependencies). The structure of these relationships is a graph, and the topology carries information that flat or sequential representations discard. The same discipline still applies: the graph must be the one the deployed system is actually allowed to know at prediction time, not a future-completed or retrospectively cleaned version of the relationship structure.
 
@@ -817,13 +903,11 @@ h_v^{(\ell+1)} = \text{COMBINE}\left( h_v^{(\ell)}, \text{AGGREGATE}\left( \{ h_
 where AGGREGATE pools messages from neighbors (e.g., sum, mean, max) and COMBINE updates the node's state (e.g., via a neural network). After $k$ layers, each node's representation can depend on aggregated information from its $k$-hop neighborhood, though different neighborhoods may still collapse to the same representation if the aggregation is not expressive enough.
 \end{definition}
 
-\begin{mathlens}
 The same idea written more compactly: at round $k+1$, every node $v$ updates by aggregating its neighbors' current states and combining the aggregate with its own state,
 \[
 h_v^{(k+1)} \;=\; \phi\!\left( h_v^{(k)},\ \mathrm{AGG}\bigl(\{\, h_u^{(k)} : u \in \mathcal{N}(v) \,\}\bigr) \right),
 \]
 where $\mathcal{N}(v)$ is the neighborhood of $v$ (excluding $v$ itself, by convention), $\mathrm{AGG}$ is a permutation-invariant aggregator (sum, mean, max, or a learned attention-weighted sum), and $\phi$ is a small learnable function (typically a linear layer plus a nonlinearity). Permutation invariance matters because the neighbors of $v$ have no canonical ordering: if the model's prediction depended on the order in which neighbors were listed, two equivalent representations of the same graph would produce different outputs. The aggregator choice is therefore not cosmetic. Sum-aggregation is more expressive than mean (it preserves degree information), but mean is more numerically stable for nodes with very different degrees; max keeps the most active feature per dimension and discards the rest.
-\end{mathlens}
 
 The key design choices in a graph neural network are:
 
@@ -866,13 +950,11 @@ After two rounds, $A$'s embedding has heard from $B$ (round $1$) and from $B$'s 
 
 This simple example exposes three things at once. First, the sum aggregator preserves degree: $C$'s round-$1$ embedding is larger than $A$'s in part because $C$ has two neighbors and $A$ has one. If we had used \emph{mean} aggregation, the $C-A$ asymmetry would be smaller. Second, the embeddings spread out as rounds increase, which is initially desirable: nearby nodes start to look meaningfully similar. Third---the warning we will return to---if we keep adding rounds, all four embeddings will keep moving toward a graph-wide average and eventually become hard to tell apart. That is over-smoothing, which we revisit below.
 
-\begin{practicalnote}
 In practice, the weights $W$ and $W'$ are learnable matrices that map from the layer-$k$ feature dimension to the layer-$(k+1)$ feature dimension, and the features are vectors rather than scalars. Sometimes a bias vector is added inside the nonlinearity. The arithmetic structure of the toy example---combine self with aggregate, then transform---is unchanged.
-\end{practicalnote}
 
 \subsubsection*{Graph Convolutional Networks: Normalized Aggregation}
 
-A particularly clean special case fixes the aggregator to be a symmetric-normalized sum.
+A particularly clean special case fixes the aggregator to be a symmetric-normalized sum. The matrix form below packages the same per-node operation --- sum over self plus neighbors, scale each contribution by the inverse square root of the relevant degrees, then transform and squash --- in a single line that implementations can call directly.
 
 \begin{definition}[Graph Convolutional Network (GCN)]
 A graph convolutional layer \citep{kipf2017gcn} updates node features as
@@ -883,6 +965,41 @@ where $\tilde{A} = A + I$ is the adjacency matrix with self-loops added, $\tilde
 \end{definition}
 
 GCN is the simplest GNN that most students should recognize by name. It is a particular choice of aggregator (symmetric normalization) and combine function (linear plus nonlinearity). Other widely used variants include GraphSAGE (sample neighbors and apply a learnable aggregator), GAT (attention-weighted aggregation, so each neighbor's contribution is reweighted by a learned compatibility score), and message-passing neural networks (MPNNs) for molecules, which add edge features into the message function. They differ mostly in what AGG and $\phi$ look like; the aggregate-and-combine skeleton is the same.
+
+The whole forward pass is a few lines of numpy. The next snippet implements a two-layer GCN on a five-node toy graph and prints the layer-1 and layer-2 node embeddings.
+
+\begin{codeexample}
+import numpy as np
+
+def gcn_forward(A, X, W_list):
+    # A: (n, n) adjacency; X: (n, d_in); W_list: list of weight matrices
+    n = A.shape[0]
+    A_tilde = A + np.eye(n)                   # add self-loops
+    d_tilde = A_tilde.sum(axis=1)             # node degrees (with self-loop)
+    D_inv_sqrt = np.diag(1.0 / np.sqrt(d_tilde))
+    A_hat = D_inv_sqrt @ A_tilde @ D_inv_sqrt # symmetric-normalized adjacency
+    H = X
+    for W in W_list:
+        H = A_hat @ H @ W                     # aggregate then transform
+        H = np.maximum(H, 0)                  # ReLU
+    return H
+
+# Toy graph: 0-1-2-3-4 with one extra edge 0-2
+A = np.array([[0,1,1,0,0],
+              [1,0,1,0,0],
+              [1,1,0,1,0],
+              [0,0,1,0,1],
+              [0,0,0,1,0]], dtype=float)
+X  = np.eye(5)                                 # one-hot node features
+W1 = np.random.RandomState(0).randn(5, 4) * 0.5
+W2 = np.random.RandomState(1).randn(4, 2) * 0.5
+H2 = gcn_forward(A, X, [W1, W2])
+print(H2.round(3))   # (5, 2) final node embeddings
+\end{codeexample}
+
+The function is the same expression as the GCN definition above. The two structural steps---symmetric-normalized aggregation $\hat A H^{(\ell)}$ and learned transform $W^{(\ell)}$---are visible as the two operations inside the for-loop. A node-classification head simply puts a small linear-plus-softmax on top of the final $H$; a graph-classification head pools across the rows of $H$ first.
+
+For a graph with $|V|$ nodes, $|E|$ edges, and feature dimension $d$, one GCN layer costs $O(|E| d + |V| d^2)$ time and $O(|V| d + |E|)$ memory. The first term is the sparse aggregation $\hat A H^{(\ell)}$, which touches every edge once and pays $d$ per touch. The second term is the dense transform $H^{(\ell)} W^{(\ell)}$, which is independent of the graph and dominated by the matrix multiplication. The linearity in $|E|$ is what makes GCNs scale to graphs that adjacency-as-dense-matrix methods cannot touch; the practical bottleneck on large graphs is usually memory for the activations, not edges. Stacking $L$ layers multiplies both terms by $L$ and gives each node access to its $L$-hop neighborhood---which is also why $L$ is usually small.
 
 \subsection{When Graph Structure Matters}
 
@@ -938,9 +1055,7 @@ Before deploying a graph neural network, ask whether the graph itself is reliabl
 \end{itemize}
 \end{decisionbox}
 
-\begin{practicalnote}
 Before training a graph neural network, always establish a non-relational baseline. Train a logistic regression or simple neural network on node features alone. If the graph model's improvement is small relative to split variability, run-to-run variability, or operational cost, the gain may not justify the added complexity, debugging effort, and deployment risk. A large, stable gain across splits, seeds, and important slices is stronger evidence that relational structure matters. The threshold is task-specific; the habit is to weigh the gain against the uncertainty and the cost of using the graph.
-\end{practicalnote}
 
 \subsection{Limitations and Pitfalls}
 
@@ -951,9 +1066,7 @@ Beyond over-smoothing, graph neural networks come with two more practical limita
   \item \textbf{The graph is an assumption}: The observed graph is treated as ground truth, but it is really a modeling choice. If the graph is missing important edges, includes spurious ones, or encodes the wrong relationships for the task, the model cannot overcome that. Audit the graph structure before auditing the model.
 \end{itemize}
 
-\begin{advancednote}
-Heterogeneous graphs, where nodes and edges have different types, require extended message passing. A bank transaction network might have ``person'' nodes and ``account'' nodes with different features, and edges representing different transaction types. Heterogeneous graph neural networks learn type-specific aggregation functions. The audit grows more complex: the graph structure includes edge types, and representation learning must respect that structure. Do not assume a standard GNN designed for homogeneous graphs will work well without modification.
-\end{advancednote}
+The treatment above assumes the graph is \emph{homogeneous}: every node and every edge has the same type. Many real graphs are not. A bank transaction network has ``person'' nodes and ``account'' nodes with different features, and edges representing different transaction types. Heterogeneous graph neural networks extend the message-passing recipe by learning type-specific aggregation functions, so a person--account edge contributes differently from an account--account edge. The audit grows correspondingly: the graph structure now includes edge types, and the representation must respect that structure. A standard GNN designed for homogeneous graphs is unlikely to work well on a heterogeneous one without modification.
 
 \section{Common Mistakes in Sequential Modeling}
 
@@ -963,11 +1076,23 @@ The same mistake reappears when deployment constraints are treated as an afterth
 
 \section{Looking Ahead}
 
-This chapter treated sequences as processes, so evaluation had to respect prediction time. The next chapter shifts from one prediction at a time to ranked lists, where exposure, position, and feedback loops become part of the modeling problem. A later chapter extends the same discipline to experimental claims themselves: once the protocol stops cheating through time, we still have to ask what any score actually justifies and which rival explanations survive.
+The prediction-time audit fixed what a sequential model is allowed to see, but it did not say what a strong result \emph{means}. A model that respects the boundary can still report numbers that overstate what the experiment actually justifies---through cherry-picked baselines, ablations that test the wrong thing, or claims about generalization that the data design cannot support.
 
-\section*{Chapter Summary}
+The next chapter takes up one important kind of structured data---ranked recommendations---where this same prediction-time discipline takes a distinctively counterfactual shape: what would users have clicked on items they were never shown? Chapter~\ref{ch:ranking-recommendation} treats exposure-aware evaluation as the central evidence problem of ranking systems, and Chapter~\ref{ch:tabular} closes Part~IV with the modality you will actually meet most often in practice.
 
-Structured prediction begins with the information boundary, not with an architecture name. Once time matters, the model must respect horizon, allowed context, latency, and the difference between past information and forbidden future leakage. Once several modalities or graph relationships matter, the model must also state which sources are available, reliable, and permitted at the decision moment. Classical forecasting methods---exponential smoothing, ARIMA, and their seasonal variants---remain essential baselines: transparent, fast, and often competitive with neural approaches on univariate series. The state-space perspective unifies classical and neural sequence models under a common framework of hidden-state inference. Audio, forecasting, multimodal systems, and graph-structured data differ in signal type, but they share one discipline: choose a representation that preserves the right structure, evaluate under the same information boundary as deployment, and test realism through baselines, noise, drift, missing context, and deployment constraints.
+Later, Chapter~\ref{ch:experiments-claims} returns to evaluation more broadly: what counts as evidence for a machine-learning claim, and what would make that evidence collapse? It treats the experiment itself as a designed object that has to be defended. Chapter~\ref{ch:reliability} widens the question one more step, asking whether a system whose evidence is honest is also reliable enough to deploy under shift, subgroup variation, privacy exposure, and motivated attack.
+
+\begin{chaptersummary}
+\item Sequential and structured tasks are governed by a prediction-time boundary: the deployed system can use only information that was available and permitted at the decision moment, and any experiment that crosses the boundary is solving an easier problem than the one being shipped.
+\item The chapter's organizing habit is a prediction-time audit---decision moment, allowed context, forbidden future information, allowed relational context, latency budget---written before a model family is chosen.
+\item Task shape comes before model family. Transcription, keyword spotting, speaker verification, forecasting, anomaly detection, and multimodal or graph prediction pose different questions to time, even when they share a raw signal.
+\item Audio is a representation problem before it is an architecture problem: the time-frequency view, the choice of analysis window, and the invariance the task needs all sit upstream of model selection.
+\item Classical forecasting baselines---naive seasonal repetition, exponential smoothing, Holt-Winters, ARIMA---are not historical curiosities; they are transparent, fast, and often competitive with neural sequence models on univariate series, which makes them the right reference points for any claim.
+\item Splits and evaluation must respect time. Random splits mix past and future and routinely produce optimistic results; chronological splits, rolling-origin backtesting, and replay evaluation are how the experiment learns to behave like the deployed refresh.
+\item Multimodal and graph extensions inherit the same audit. The new question is not whether a fusion strategy or message-passing scheme exists; it is whether the additional modality or relational structure is available, reliable, and permitted at the decision moment, and whether a simpler baseline already captures most of its value.
+\item The state-space perspective unifies exponential smoothing, ARIMA, HMMs, and RNNs as hidden-state inference under different assumptions about transition and observation structure, which makes the apparent diversity of sequence methods easier to navigate.
+\item Sequential modeling is already about modeling. Choosing a representation, a horizon, an allowed-context window, and a latency budget are not pre-modeling chores; they are the central modeling decisions, and the architecture follows from them.
+\end{chaptersummary}
 
 \begin{studyquestions}
 \item Why should a sequential model be judged partly by what information was available at prediction time?

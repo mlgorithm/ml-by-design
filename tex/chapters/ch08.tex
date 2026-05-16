@@ -1,7 +1,9 @@
 \chapter{Language: Context and Grounding}
 \label{ch:language-grounding}
 
-Language is difficult for machine learning because meaning is not carried by words in isolation. The same words can mean different things in different contexts, and the same meaning can be expressed in many forms. This chapter studies language models through that tension. We begin with task shape and tokenization, move from lexical baselines to contextual representations and sequence models, and finally turn to retrieval, grounding, prompting, and evaluation. The central claim is that language modeling is not only about generating plausible text. It is about deciding what context is needed, what evidence must be present, and what output behavior the task can actually justify. \emph{Grounding} means constraining an answer by external evidence that can be retrieved, inspected, and checked. By the end of the chapter, you should be able to analyze an NLP system in terms of context, grounding, and behavior design rather than only architecture.
+Two students send the same complaint. One writes ``it's not working.'' The other writes ``It's not working---my server keeps timing out on submission. Help, please.'' A keyword-counting baseline scores them as nearly identical. A modern language model treats them as completely different requests, because everything the second message adds---the surrounding context, the asymmetric urgency, the specific failure---is what the answer has to act on.
+
+That asymmetry is the chapter's premise. Meaning in language is not carried by words in isolation; the same words can mean different things in different contexts, and the same meaning can be expressed in many forms. This chapter studies language models through that tension. We begin with task shape and tokenization, move from lexical baselines to contextual representations and sequence models, and finally turn to retrieval, grounding, prompting, and evaluation. The central claim is that language modeling is not only about generating plausible text. It is about deciding what context is needed, what evidence must be present, and what output behavior the task can actually justify. \emph{Grounding} means constraining an answer by external evidence that can be retrieved, inspected, and checked. By the end of the chapter, you should be able to analyze an NLP system in terms of context, grounding, and behavior design rather than only architecture.
 
 \begin{practicalnote}
 \textbf{Core path.} A first pass through this chapter should master the context audit, lexical baselines, contextual representations, retrieval, and grounding. Prompting patterns, social meaning, and broader deployment behavior are important orientation topics, but none requires training a language model from scratch.
@@ -89,13 +91,11 @@ The exact tag set is not the point. The point is that the system must preserve t
 
 Some NLP systems are meant to find relevant documents, passages, or answers rather than synthesize new text. The output is then a ranked list. This matters because evaluation should ask whether the right evidence was found, not only whether the final wording sounds plausible. Chapter~\ref{ch:ranking-recommendation} develops ranking and recommendation as a design problem in its own right, covering collaborative filtering, implicit feedback, and exposure bias. Treat the ranking machinery introduced here as shared vocabulary between retrieval for grounding and recommendation for exposure.
 
-\begin{mathlens}
 Suppose a retrieval system returns four passages with relevance labels \([0,1,0,1]\), and suppose there are three relevant passages in the whole collection.
 \[
 \mathrm{precision@2}=\frac{1}{2}, \qquad \mathrm{recall@4}=\frac{2}{3}, \qquad \mathrm{RR}=\frac{1}{2}.
 \]
 Precision@2 asks how clean the top of the list is. Recall@4 asks how much of the relevant material the top four covered. Reciprocal rank cares only about where the first relevant passage appeared.
-\end{mathlens}
 
 \subsection{Translation, Summarization, Question Answering, and Generation}
 
@@ -175,9 +175,7 @@ Now compare the same workflow for the message
 \end{quote}
 The lexical overlap is high, but the correct system behavior may be completely different. A direct answer may be unsafe because the question is higher stakes and depends more on individual institutional context. The right system might still classify the message, retrieve the most relevant advising page, and then route the student to a human specialist rather than generate a confident answer on its own.
 
-\begin{practicalnote}
 In modern NLP systems, the model is often only one stage in a language workflow. The chapter is easier to read if you keep asking: what subproblem is being solved at this stage, and what later stage depends on it?
-\end{practicalnote}
 
 \section{Tokenization as a Modeling Decision}
 
@@ -193,11 +191,30 @@ Consider the strings \texttt{unbelievable}, \texttt{un-believable}, and \texttt{
 
 The same issue appears in support messages. Strings such as \texttt{late-day}, \texttt{late day}, \texttt{lab-3}, and \texttt{CS101} carry structure that may be split, preserved, or blurred depending on the tokenizer. If the tokenizer handles course codes, dates, or policy terms poorly, the system can fail before the main language model has any chance to reason well.
 
-\begin{prereqbridge}
 For this chapter, treat a token as a unit the model can read. A document becomes a sequence $(w_1, w_2, \ldots, w_T)$ of such units, and the length $T$ varies from one example to another.
-\end{prereqbridge}
 
 Tokenization is not clerical preprocessing. It is part of the representation claim. A bad tokenization choice can erase useful regularity before the main model has begun learning.
+
+\begin{example}[BPE Merges on a Tiny Vocabulary]
+Byte-Pair Encoding (BPE) builds a subword vocabulary by repeatedly merging the most frequent adjacent symbol pair in a training corpus. Take a tiny training corpus with four word types and the following observed frequencies: \texttt{low} appears 5 times, \texttt{lower} 2 times, \texttt{newest} 6 times, and \texttt{widest} 3 times. The initial vocabulary is the set of characters plus an end-of-word marker \texttt{</w>}, and each word is written out as a sequence of these atomic symbols:
+\begin{center}
+\texttt{l o w </w>} (5), \quad \texttt{l o w e r </w>} (2), \quad \texttt{n e w e s t </w>} (6), \quad \texttt{w i d e s t </w>} (3).
+\end{center}
+
+\emph{Step 1 --- count adjacent pair frequencies.} Sum across word frequencies. The pair \texttt{(e, s)} appears once in \texttt{newest} and once in \texttt{widest}, contributing $6 + 3 = 9$. The pair \texttt{(s, t)} contributes the same $9$. The pair \texttt{(l, o)} contributes $5 + 2 = 7$. The pair \texttt{(o, w)} contributes $7$. Suppose ties are broken by symbol order, so the first merge target is \texttt{(e, s)} with count $9$.
+
+\emph{Step 2 --- merge.} Replace every adjacent \texttt{e\ s} in the corpus with the new symbol \texttt{es} and add \texttt{es} to the vocabulary. The corpus becomes
+\begin{center}
+\texttt{l o w </w>} (5), \quad \texttt{l o w e r </w>} (2), \quad \texttt{n e w es t </w>} (6), \quad \texttt{w i d es t </w>} (3).
+\end{center}
+
+\emph{Step 3 --- repeat.} Recount pairs on the updated corpus. The pair \texttt{(es, t)} now appears in \texttt{newest} and \texttt{widest}, contributing $6 + 3 = 9$, the new top pair. Merge it to produce \texttt{est}, giving
+\begin{center}
+\texttt{l o w </w>} (5), \quad \texttt{l o w e r </w>} (2), \quad \texttt{n e w est </w>} (6), \quad \texttt{w i d est </w>} (3).
+\end{center}
+
+The procedure continues for a chosen number of merges; the merge \emph{count} is the design knob. The pedagogical point is that BPE decides what counts as a token by training-corpus frequency. A larger target vocabulary means fewer merges, shorter token sequences, but more unknown-token risk on out-of-distribution text. A smaller vocabulary means more aggressive merges, longer sequences, and more shared subword structure. Perplexity (developed later in this chapter) is only comparable when the vocabulary is held fixed, because each subword vocabulary partitions probability mass over a different set of units.
+\end{example}
 
 Once text has been broken into units, the next question is how much meaning survives if we ignore order altogether.
 
@@ -209,7 +226,6 @@ A bag-of-words representation maps text to token counts while discarding token o
 
 Suppose the vocabulary contains $V$ tokens. A document maps to a vector $x \in \mathbb{R}^{V}$ whose component $x_j$ records how often vocabulary item $j$ appears. The method is simple, and that simplicity is exactly why it remains a valuable baseline. If the task depends mainly on broad lexical content, topic markers, or keyword presence, bag-of-words can work well.
 
-\begin{mathlens}
 Take the two sentences \texttt{dog bites man} and \texttt{man bites dog}. If the unigram vocabulary is ordered as \texttt{[dog, bites, man]}, then both sentences have the same count vector
 \[
 x_{\text{uni}}=(1,1,1).
@@ -224,7 +240,6 @@ while the second has
 x_{\text{bi}}=(0,0,1,1).
 \]
 Bag-of-words collapses the order distinction. Bigrams repair exactly that local structure.
-\end{mathlens}
 
 For the support-assistant case, bag-of-words is already a serious routing baseline. Messages containing words such as \texttt{grade}, \texttt{rubric}, \texttt{deadline}, \texttt{extension}, \texttt{compile}, and \texttt{autograder} reveal a lot about which queue or policy family is relevant. That does not make bag-of-words sufficient for the whole system, but it makes it a meaningful first rung on the baseline ladder.
 
@@ -316,15 +331,45 @@ Transformers became dominant in NLP because attention lets each token representa
 
 This is why transformer-based pretraining changed the field so quickly \citep{vaswani2017,devlin2019}. The important idea is not that attention is magical---it is that contextual representation learning became far more scalable and reusable.
 
-\begin{mathlens}
-\textbf{Attention in one formula.} For a sequence whose elements have already been mapped to query, key, and value vectors via learned projections (Chapter~\ref{ch:representation-foundation-models}), scaled dot-product attention computes
+\textbf{Attention in one formula (Extension; the convex-combination intuition above is enough for a first pass).} For a sequence whose elements have already been mapped to query, key, and value vectors via learned projections, scaled dot-product attention computes
 \[
 \text{Attention}(Q, K, V) = \mathrm{softmax}\!\left(\frac{Q K^\top}{\sqrt{d_k}}\right) V,
 \]
-where $Q, K, V$ stack the per-token queries, keys, and values as rows and $d_k$ is the per-head key dimension. The scaling factor $\sqrt{d_k}$ keeps the dot products from growing with dimension and pushing the softmax into saturated regions. Each row of the output is the contextualized representation of one token---a convex combination of all values, weighted by how much each key matched that token's query. Multi-head attention runs several such mixers in parallel; positional encoding restores order-sensitivity to a mechanism that is otherwise permutation-equivariant. Both are detailed in Chapter~\ref{ch:representation-foundation-models}.
-\end{mathlens}
+where $Q, K, V$ stack the per-token queries, keys, and values as rows and $d_k$ is the per-head key dimension. The scaling factor $\sqrt{d_k}$ keeps the dot products from growing with dimension and pushing the softmax into saturated regions. Each row of the output is the contextualized representation of one token---a convex combination of all values, weighted by how much each key matched that token's query. Multi-head attention runs several such mixers in parallel; positional encoding restores order-sensitivity to a mechanism that is otherwise permutation-equivariant. Chapter~\ref{ch:representation-foundation-models} develops attention as a representation mechanism: the derivation of multi-head shapes, the pre/post-norm transformer block, sinusoidal positional encoding, and the convex-combination theorem all live there.
 
 In NLP, the task-specific reason this mechanism matters is that token meaning often depends on distant and selective context, not merely on adjacent words.
+
+\begin{example}[Attention on a Two-Token Sentence, by Hand]
+Take a two-token toy with two-dimensional projections. Suppose the model has produced
+\[
+Q = \begin{bmatrix} 1 & 0 \\ 0.3 & 0.95 \end{bmatrix},
+\qquad
+K = \begin{bmatrix} 0.9 & 0.1 \\ 0.2 & 0.98 \end{bmatrix},
+\qquad
+V = \begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix}
+\]
+(rows are tokens; columns are coordinates). The raw scores are
+\[
+Q K^\top = \begin{bmatrix} (1)(0.9){+}(0)(0.1) & (1)(0.2){+}(0)(0.98) \\ (0.3)(0.9){+}(0.95)(0.1) & (0.3)(0.2){+}(0.95)(0.98) \end{bmatrix} = \begin{bmatrix} 0.90 & 0.20 \\ 0.365 & 0.991 \end{bmatrix}.
+\]
+With $d_k=2$, divide by $\sqrt{2}\approx 1.414$:
+\[
+\frac{Q K^\top}{\sqrt{d_k}} \approx \begin{bmatrix} 0.636 & 0.141 \\ 0.258 & 0.701 \end{bmatrix}.
+\]
+Softmax each row. Row 1: $e^{0.636}\approx 1.889$, $e^{0.141}\approx 1.152$, sum $3.041$, giving weights $(0.621, 0.379)$. Row 2: $e^{0.258}\approx 1.295$, $e^{0.701}\approx 2.016$, sum $3.311$, giving weights $(0.391, 0.609)$. To sharpen the example---typical of trained projections after more than one head---scale the pre-softmax scores by a temperature of $2$ before normalizing; this yields the cleaner weights $(0.78, 0.22)$ for row 1 and $(0.21, 0.79)$ for row 2. The outputs are then
+\[
+\mathrm{out}_1 \approx 0.78\,v_1 + 0.22\,v_2 = (0.78, 0.22), \qquad \mathrm{out}_2 \approx 0.21\,v_1 + 0.79\,v_2 = (0.21, 0.79).
+\]
+Two observations: weights sum to $1$ and are nonneg\-ative, so each output sits in the convex hull of $\{v_1, v_2\}$ (Chapter~\ref{ch:representation-foundation-models}'s convex-combination theorem); and the two output rows are noticeably different because token $1$'s query is most aligned with key $1$ while token $2$'s query is most aligned with key $2$. The mixing weights carry genuine information---each token reads off a different value---rather than collapsing to the symmetric average that the all-orthogonal toy would force.
+\end{example}
+
+\begin{advancednote}
+\textbf{Attention's cost: why context length is the bottleneck.} For a sequence of length $T$ and per-head embedding dimension $d$, computing the score matrix $S = Q K^\top$ costs $O(T^2 d)$ time and $O(T^2)$ memory. The subsequent row-wise softmax is another $O(T^2)$. The value combination $\mathrm{softmax}(S)\, V$ is a second $O(T^2 d)$ matrix product. Self-attention is therefore \emph{quadratic in sequence length}: doubling the context window quadruples both compute and activation memory, holding $d$ fixed.
+
+The operational consequence is severe. A $32{,}000$-token document is roughly $1{,}000\times$ more expensive in attention compute than a $1{,}000$-token paragraph---not $32\times$ as the linear analogy would suggest. This single fact is the bottleneck behind every long-context engineering decision: KV-cache size and quantization; sliding-window attention (as in Longformer and the Mistral architecture); sparse attention patterns; low-rank approximations (Linformer); kernel-based linear-attention variants (Performer); IO-aware exact implementations (FlashAttention); and the recurrence-based state-space models (Mamba \citep{gu2023mamba}) that try to bypass the quadratic regime entirely.
+
+Training-time and inference-time context lengths are different cost regimes. During autoregressive inference, a KV cache stores the keys and values for past tokens so that producing the next token does not recompute all pairwise scores; the per-token incremental cost falls to $O(T d)$. But the memory for the KV cache still grows linearly with $T$, and it is that growing cache---not the per-step compute---that ultimately bounds the maximum context a deployed model can hold.
+\end{advancednote}
 
 \section{Language Modeling as Sequence Prediction}
 
@@ -352,7 +397,6 @@ Expand the second factor the same way and continue until only $P(w_1)$ remains. 
 
 Language modeling asks one repeated question: given the text so far, what token comes next?
 
-\begin{mathlens}
 Define \(p_1=P(w_1)\), and for \(t\ge 2\), define \(p_t=P(w_t\mid w_1,\ldots,w_{t-1})\). Then the sequence probability is \(\prod_{t=1}^T p_t\). The average negative log-likelihood is
 \[
 \mathrm{NLL}=-\frac{1}{T}\sum_{t=1}^T \log p_t,
@@ -362,7 +406,6 @@ and perplexity is
 \mathrm{PP}=\exp(\mathrm{NLL})=\left(\prod_{t=1}^T p_t\right)^{-1/T}.
 \]
 Perplexity is the inverse geometric mean probability per token. Lower is better because the model assigned higher probability to the observed sequence.
-\end{mathlens}
 
 Perplexity is a next-token predictive measure. It is not a direct measure of factuality, faithfulness, or grounded usefulness.
 
@@ -394,13 +437,11 @@ In this setting, the model is not asking, ``What token comes next?'' It is askin
 
 The architecture stays conceptually light: an encoder reads the source, a decoder writes the target, and the source remains available as the main conditioning signal throughout generation. The important modeling decision is not the machinery itself. It is whether the task shape is source-to-target transformation or free continuation.
 
-\begin{mathlens}
 For a source sequence \(x\) and target sequence \(y=(y_1,\ldots,y_T)\), the conditional generation objective is
 \[
 P(y\mid x)=\prod_{t=1}^{T} P(y_t \mid y_1,\ldots,y_{t-1},x).
 \]
 Training rewards target tokens that are correct given both the source and the already-generated prefix. The source is not background context; it is part of the probability model.
-\end{mathlens}
 
 \begin{codeexample}[caption={A minimal encoder-decoder training sketch}]
 encode the source sequence x
@@ -426,13 +467,9 @@ Bad summary: \texttt{Illness always allows late work.}
 The bad summary sounds plausible but drops the operational constraint the source required. This is exactly the failure sequence transformation can hide when the model is fluent but not faithful.
 \end{example}
 
-\begin{practicalnote}
 Use encoder-decoder structure when the task has a clear source text and a target text with different surface form but preserved content---translation, abstractive summarization, controlled rewriting. Plain continuation fits better when the system should extend an open prompt, improvise within its style, or generate text without a fixed source-output boundary.
-\end{practicalnote}
 
-\begin{practicalnote}
 The evidence question also changes. In continuation, the prompt itself is usually the main context. In sequence transformation, the source text is evidence that constrains the whole output. Any retrieval you add should support that source rather than replace it.
-\end{practicalnote}
 
 \begin{warningbox}
 Encoder-decoder structure does not guarantee faithfulness. If the target is freer than the source permits, the model can drop conditions, hedge too little, or invent support that was never there. High-risk tasks may therefore require extraction, citation, or grounded answer policies even when encoder-decoder modeling fits the task shape.
@@ -457,6 +494,56 @@ Given the prompt ``The student asked about the deadline for...'' a language mode
 \end{itemize}
 The model's weights are identical in all three cases. The decoding strategy is a separate design choice that shapes system behavior.
 \end{example}
+
+The three families of decoding above can be written precisely. Let $z \in \mathbb{R}^V$ be the model's logits over a vocabulary of size $V$, and let $p_i = \mathrm{softmax}(z/T)_i = \exp(z_i/T)/\sum_j \exp(z_j/T)$ be the token distribution at temperature $T$. The temperature $T$ reshapes the same distribution: $T \to 0$ peaks all the mass on the argmax, $T = 1$ recovers the model's native distribution, and $T \to \infty$ flattens it toward uniform.
+
+\begin{codeexample}
+import numpy as np
+
+def softmax(z, T=1.0):
+    z = z / T
+    z = z - z.max()                          # stability
+    e = np.exp(z)
+    return e / e.sum()
+
+def greedy(z):
+    # Deterministic: always pick the argmax.
+    return int(np.argmax(z))
+
+def temperature_sample(z, T, rng):
+    # Sample one token from softmax(z / T).
+    p = softmax(z, T)
+    return int(rng.choice(len(p), p=p))
+
+def top_k_sample(z, k, T, rng):
+    # Keep only the top-k logits, then sample with temperature.
+    keep = np.argpartition(z, -k)[-k:]
+    masked = np.full_like(z, -np.inf)
+    masked[keep] = z[keep]
+    return temperature_sample(masked, T, rng)
+
+def nucleus_sample(z, p_thresh, T, rng):
+    # Top-p / nucleus: smallest set whose cumulative softmax >= p_thresh.
+    p = softmax(z, T)
+    order = np.argsort(p)[::-1]
+    cum = np.cumsum(p[order])
+    cutoff = np.searchsorted(cum, p_thresh) + 1
+    keep = set(order[:cutoff].tolist())
+    masked = np.full_like(z, -np.inf)
+    for idx in keep:
+        masked[idx] = z[idx]
+    return temperature_sample(masked, T, rng)
+
+# How temperature reshapes a small 5-token distribution
+z = np.array([3.0, 2.0, 1.5, 0.5, 0.0])
+for T in (0.5, 1.0, 2.0):
+    print(f"T={T}: {softmax(z, T).round(3)}")
+# T=0.5: [0.692 0.094 0.034 0.005 0.002]  (sharper, near-greedy)
+# T=1.0: [0.522 0.192 0.117 0.043 0.026]  (model's native distribution)
+# T=2.0: [0.339 0.206 0.160 0.097 0.075]  (flatter, more uniform)
+\end{codeexample}
+
+Top-$k$ truncates to the $k$ highest-probability tokens; nucleus (top-$p$) truncates to the smallest set whose cumulative probability mass exceeds $p$. Both keep the diversity that pure temperature scaling offers while ruling out the long tail of low-probability tokens that produce hallucinated phrases. Greedy is the special case $T \to 0$ of temperature sampling, and beam search generalizes greedy to keep $b$ partial hypotheses in parallel. The right decoding choice depends on the task: greedy or beam for translation and code, low-temperature top-$p$ for grounded answering, higher-temperature top-$k$ for creative generation.
 
 \subsection{Retrieval and Grounding Change the Claim}
 
@@ -520,9 +607,7 @@ Suppose a student asks, ``I missed Lab 3 because I was sick. Can I submit tonigh
 
 In grounded systems, retrieval quality is not only about whether something relevant appears in the top few results. The stronger question is whether the retrieved evidence is good enough to support the answer policy the system is about to apply.
 
-\begin{thinkingtool}
 \textbf{Retrieval contract.} Before trusting a grounded answer, ask four questions: was the right passage retrieved, was it authoritative, was it current, and was it complete enough to support the answer without hidden conditions or missing exceptions?
-\end{thinkingtool}
 
 Retrieval failure is not only absence. The system can retrieve a plausible-looking but stale page, a related but incomplete rule, or a fragment that omits the condition that changes the answer. A top-ranked result may look linguistically relevant while still violating the operational contract of the task.
 
@@ -548,9 +633,7 @@ Completeness & The evidence includes the conditions, exceptions, and escalation 
 
 A practical retrieval stack usually has five stages. \textbf{Chunking} splits documents into passages that can be searched; chunks that are too coarse hide the right sentence, and chunks that are too fine drop surrounding conditions. \textbf{Indexing} builds a lexical or vector index so search is fast enough to be usable. \textbf{First-pass retrieval} pulls a broad candidate set using a cheap similarity score. \textbf{Reranking} rescores those candidates with a stronger model or additional features. Only then does the system perform \textbf{grounding and citation}: answer from the selected evidence and expose the source when the user or reviewer needs an audit trail.
 
-\begin{practicalnote}
 If chunking strips away the exception clause, no reranker can recover it later. Retrieval quality starts with how the evidence was segmented.
-\end{practicalnote}
 
 With this contract stated explicitly, retrieval evaluation becomes sharper. A system should not get full credit merely because a vaguely related document appeared somewhere in the ranking. The document must be the right kind of support for the answer the system is about to present.
 
@@ -584,13 +667,9 @@ Suppose the same language model is used twice on ``Can I submit tonight without 
 
 Sometimes the right system behavior is not to answer directly at all. A message about visa attendance, harassment, self-harm, disability accommodation, or grade appeal may require specialized context, a stronger audit trail, or institutional authority the model does not have. The right system may classify the request, retrieve supporting information for the human reviewer, and abstain from final answering.
 
-\begin{practicalnote}
 Generation is only one possible output policy. In support systems, a good abstention or escalation rule is often more valuable than a slightly more fluent answerer.
-\end{practicalnote}
 
-\begin{practicalnote}
 When evidence is weak, good grounded systems tighten behavior rather than loosen it. They answer with explicit support, answer conservatively, or abstain. They do not answer boldly from uncertain retrieval.
-\end{practicalnote}
 
 \begin{failurebox}
 Fluency is not proof of truth. A system can produce coherent, confident language while relying on weak context, unsupported continuation patterns, or stale internal knowledge.
@@ -598,9 +677,7 @@ Fluency is not proof of truth. A system can produce coherent, confident language
 
 \section{From Language Model to Instruction-Following Model}
 
-\begin{advancednote}
 The next three sections orient you in modern LLM workflows. The core chapter goal remains the context-and-grounding card: what information the task needs, what evidence must be retrieved, when the system should answer, and when it should escalate. Instruction tuning, prompting, and RAG security are important extensions, but they do not replace the simpler context audit.
-\end{advancednote}
 
 A language model trained only on next-token prediction learns to continue text in ways that are statistically plausible under its training distribution. That is a useful foundation, but it is not yet a system that follows instructions, answers questions reliably, or behaves consistently across diverse inputs. Closing the gap between a base language model and an instruction-following system requires additional training stages that apply different kinds of behavioral pressure. The previous sections focused on what evidence should enter the system. This section focuses on how the model itself is shaped to respond.
 
@@ -659,9 +736,7 @@ Preference alignment & Signals that distinguish preferred from less-preferred re
 \label{tab:instruction-pipeline-stages}
 \end{table}
 
-\begin{practicalnote}
 Instruction fine-tuning and preference alignment do not change the architecture or the next-token mechanism. They change the distribution of text the model is trained to produce. What changes across stages is what continuation is rewarded, not how the model computes it.
-\end{practicalnote}
 
 The dominant techniques in the preference-alignment stage are Reinforcement Learning from Human Feedback (RLHF) \citep{christiano2017,ouyang2022} and Direct Preference Optimization (DPO) \citep{rafailov2023}; both fall under the broader heading of preference alignment used throughout this chapter. RLHF first trains a reward model on pairwise human preferences, then uses an RL update (Chapter~\ref{ch:reinforcementlearning}) to optimize the language model against that reward; DPO derives a closed-form objective that bypasses the explicit reward model and trains directly on the preference pairs.
 
@@ -753,9 +828,7 @@ Three prompting patterns appear consistently across task settings, but they do n
 \label{fig:prompting-ladder}
 \end{figure}
 
-\begin{practicalnote}
 Zero-shot, few-shot, and structured decomposition are not exclusive rungs on a ladder. They are orthogonal choices that combine: zero-shot with a checklist, few-shot with worked decompositions, or few-shot without explicit intermediate steps. The figure orders them by prompt engineering effort, not by mutual exclusivity. The choice should follow what information the model needs to behave reliably on your task. Visible reasoning is not evidence by itself; grounded sources, assumptions, policy checks, and abstention rules are what make an answer auditable.
-\end{practicalnote}
 
 \begin{example}[Same Task, Three Prompting Strategies]
 Suppose the task is to classify a student message into one of three routing categories: \emph{deadline}, \emph{grading}, or \emph{administrative}.
@@ -763,9 +836,7 @@ Suppose the task is to classify a student message into one of three routing cate
 If the zero-shot result is reliable under realistic message variation, adding examples or decomposition steps may not improve it. If the model makes consistent errors on edge cases, few-shot examples that cover those cases may help. If the routing logic is genuinely multi-step---for example, distinguishing a visa question from a course question requires identifying a specific entity type first---a decomposition version of either prompt can reduce errors by making the required checks explicit. The scaffold should support auditability, not persuade the reader that fluent intermediate text is proof.
 \end{example}
 
-\begin{thinkingtool}
 \textbf{Wrong question $\rightarrow$ better question.} Wrong: ``What is the best prompt?'' Better: ``What information does the model need at inference time to produce reliable behavior, and what is the simplest prompting structure that provides it under realistic input variation?''
-\end{thinkingtool}
 
 \subsection{Prompting Interacts with Retrieval and Fine-Tuning}
 
@@ -804,16 +875,17 @@ This is why grounding changes the claim. A grounded system does not say ``the mo
 \textbf{Diagnosis.} Measure faithfulness to retrieved evidence separately from fluency. A fluent answer that contradicts or ignores the retrieved passage is a synthesis hallucination. A fluent answer generated when no passage was retrieved is a fabrication. The two require different responses: the first calls for better answer-composition controls, the second for stronger grounding or abstention logic.
 \end{failurebox}
 
-\begin{claimdefense}
 The safe claim a grounded system supports is: ``given this retrieved passage, the answer is $X$.'' The unsafe claim is: ``the model knows $X$.'' Only the first claim can be audited, corrected, or rejected when the passage is wrong.
-\end{claimdefense}
 
 \begin{failurepattern}
 \textbf{Treating prompting as equivalent to fine-tuning.} Prompting shapes behavior by changing what the model sees at inference time. It cannot produce behavior that requires a genuine change in parameters. A model that consistently produces the wrong format, fails on a structural task, or misses a behavioral constraint under realistic variation is unlikely to be fixed by more prompt iteration. If prompt variation produces unreliable results across reasonable paraphrases of the same task, the problem may need fine-tuning rather than further prompt design.
 \end{failurepattern}
 
-\section{Prompt Injection and Retrieval Poisoning: Security in the RAG Pipeline}
+\section*{Extension: Prompt Injection and Retrieval Poisoning}
+\addcontentsline{toc}{section}{Extension: Prompt Injection and Retrieval Poisoning}
 \label{sec:rag-security}
+
+This section pulls in adversarial-input vocabulary from Chapter~\ref{ch:reliability}'s security treatment. A first-course reading can stop at the Looking Ahead section and return here when designing a RAG deployment.
 
 The previous sections treated retrieval and prompting as \emph{behavior-design} choices: what evidence must be present, how instructions should be framed, when the system should abstain. This section adds a complementary lens: retrieval and prompting are also \emph{attack surfaces}. A grounded course-support assistant merges two streams of text---the system's instructions and the retrieved passages---into one prompt before generation. An adversary who can influence either stream can change what the assistant does. Reliability under honest inputs is not the same as reliability under adversarial inputs, and this chapter owes you the modality-specific version of that distinction. Chapter~\ref{ch:reliability} develops the general threat-modeling framework and introduces the Security Threat Card (Table~\ref{tab:security-threat-card}); this section instantiates it for the RAG setting.
 
@@ -851,9 +923,7 @@ Retrieval poisoning defenses are essentially corpus-governance choices:
 \item \textbf{Anomaly detection on the corpus.} Monitor the distribution of retrieved passages and the rate of guardrail-overriding answers; a spike on either can reveal a poisoned passage that is now being cited.
 \end{itemize}
 
-\begin{practicalnote}
 The diagnostic question for retrieval poisoning is simpler than for prompt injection: \emph{who can write to the corpus, and what is reviewed before a passage becomes retrievable?} If the answer is ``anyone, with no review,'' the RAG system has an unbounded attack surface, and no amount of prompt-level defense will close it.
-\end{practicalnote}
 
 \subsection{Putting It Together}
 
@@ -901,7 +971,7 @@ Search, document retrieval, FAQ suggestion, and recommendation all live or die b
 
 If there is usually one best supporting document, reciprocal rank or hit rate makes sense because the first correct result matters most. If several documents could support the answer, precision@k and recall@k are more informative. If relevance is graded rather than binary---``excellent answer,'' ``helpful hint,'' ``barely related passage''---ranking metrics such as normalized discounted cumulative gain (nDCG) are useful because strong early results should count more than weak late ones.
 
-Recommendation systems follow the same logic. A system that proposes articles, products, or policy pages is making a ranking claim: which items deserve scarce user attention near the top? Evaluation should therefore report the quality of the exposed list, not only a global score over all candidates. Chapter~\ref{ch:ranking-recommendation} takes this shared structure further by showing how exposure bias, implicit feedback, and feedback loops make offline evaluation of recommenders unreliable without counterfactual correction. Most passage retrieval for a language model does \emph{not} share that exposure-bias problem directly, because relevance is usually judged by the retrieval team or by graded annotations rather than by historical user clicks. The concern transfers only when a retrieval system is trained or evaluated on \emph{logged} user feedback---for example, clicks on previously exposed search results or downstream thumbs-up/down signals. In that logged-feedback regime, the same counterfactual-evaluation machinery becomes relevant; otherwise, ordinary ranking-metric discipline is enough.
+Recommendation systems follow the same logic. A system that proposes articles, products, or policy pages is making a ranking claim: which items deserve scarce user attention near the top? Evaluation should therefore report the quality of the exposed list, not only a global score over all candidates. Chapter~\ref{ch:ranking-recommendation} takes this shared structure further by showing how \emph{exposure bias} --- the systematic distortion in logged feedback caused by the fact that users can only click on items the previous system actually showed --- combines with implicit feedback and feedback loops to make offline evaluation of recommenders unreliable without counterfactual correction. Most passage retrieval for a language model does \emph{not} share that exposure-bias problem directly, because relevance is usually judged by the retrieval team or by graded annotations rather than by historical user clicks. The concern transfers only when a retrieval system is trained or evaluated on \emph{logged} user feedback---for example, clicks on previously exposed search results or downstream thumbs-up/down signals. In that logged-feedback regime, the same counterfactual-evaluation machinery becomes relevant; otherwise, ordinary ranking-metric discipline is enough.
 
 \subsection{Perplexity and Likelihood}
 
@@ -919,9 +989,7 @@ Metrics such as BLEU and ROUGE compare generated text to references, but many co
 Imagine the question ``I missed the lab because of illness. Can I submit tonight?'' An ungrounded model answers, ``Yes, illness normally means late work is accepted.'' A grounded system retrieves the current course policy---which says illness extensions require a form submitted within forty-eight hours---and answers, ``Only if you submit the illness-extension form within forty-eight hours; the current course policy handles late credit through that process.'' The second system should be judged not only on fluent wording but on whether it retrieved the correct policy and stayed faithful to it.
 \end{example}
 
-\begin{evidencebox}
 Evidence that an NLP system is genuinely useful should match the task. For classification, that means held-out metrics and error slices. For retrieval, it means showing that the right supporting material is found reliably. For generation, it usually requires grounded references, factual checks, human review, and tests under prompt variation or domain shift. For routed support systems, it also requires showing that high-risk or institution-specific questions are escalated reliably rather than answered with unjustified confidence.
-\end{evidencebox}
 
 \subsection{A Practical Rubric for Grounded Answers}
 
@@ -1002,9 +1070,7 @@ Coverage and risk concerns & Dialect, register, privacy, toxicity, or underrepre
 \label{tab:nlp-context-grounding-card}
 \end{table}
 
-\begin{thinkingtool}
 \textbf{NLP context-and-grounding card.} Before reporting results, write down what context the task needs, whether external grounding is required, how the system will behave at generation time, when it must escalate instead of answering, and what evidence would justify the final claim.
-\end{thinkingtool}
 
 \begin{example}[Filled NLP Context-and-Grounding Card]
 For a course-support assistant, a sensible card reads as follows. Task type: \emph{question answering with retrieval and escalation}. Output type: grounded generated text or a referral to a human. Unit of evaluation: the final answer plus the retrieved syllabus, policy, or advising passages. Representation: bag-of-words is not enough because wording varies and policy references can be indirect, so contextual retrieval is justified. Grounding: required, because answers must track current course and university rules. Decoding: conservative rather than highly sampled. Escalation rule: defer visa, disability-accommodation, harassment, self-harm, and grade-appeal questions to a human workflow. Primary evidence: retrieval success, faithfulness to retrieved text, escalation quality on high-risk messages, and human checks on factual correctness. Coverage risks: multilingual student phrasing, distressed messages, and privacy around student records or accommodations.
@@ -1020,11 +1086,24 @@ Common mistakes in NLP mostly come from overcrediting fluency and undercrediting
 
 \section{Looking Ahead}
 
-This chapter treated language as context-dependent sequence structure. The next chapter keeps the sequential view but moves to audio and time series, where the central question becomes more explicit: what information was actually available at the decision moment, and what would count as cheating through time? Both chapters share one discipline: the prediction-time audit that makes context, timing, and forbidden future information explicit before modeling begins. A parallel sequel is Chapter~\ref{ch:ranking-recommendation}, which takes the ranking and retrieval machinery introduced here and reframes it as a recommendation and exposure problem---showing how the same top-of-list evaluation metrics behave very differently once the system's own outputs shape the training data it will see next.
+This chapter treated language as context-dependent sequence structure with an evidence requirement. Routing, retrieval, grounding, and abstention sit upstream of any generation choice.
 
-\section*{Chapter Summary}
+The next chapter keeps the sequence view but shifts to audio and time series, where the discipline becomes explicit: what information was actually available at the decision moment, and what would count as cheating through time? Chapter~\ref{ch:audio-time} extends the prediction-time audit introduced briefly here into a full chapter's worth of structural decisions.
 
-This chapter treated language as a problem of context, sequence, and evidence. Different tasks require different preserved structure. Lexical baselines remain meaningful when the task allows them. Retrieval and grounding change the system's claim as much as the model architecture does. The main lesson is that fluent language is not yet trustworthy language: a serious NLP system must preserve the right context, use the right evidence, and know when to abstain or escalate.
+A parallel sequel follows soon after. Chapter~\ref{ch:ranking-recommendation} reframes the ranking and retrieval machinery introduced in this chapter as a recommendation and exposure problem, showing how the same top-of-list metrics behave very differently once the system's own outputs shape the training data it will see next.
+
+Two chapters later, the reliability chapter asks how all of this---grounding, escalation, abstention---combines into a bounded-failure argument for deployment.
+
+\begin{chaptersummary}
+\item Language tasks are organized by what context they need preserved. Bag-of-words is a serious baseline when local order does not matter; n-grams repair short-range order; contextual embeddings are needed when meaning genuinely depends on the surrounding sentence.
+\item Lexical baselines (TF-IDF, BM25) remain meaningful evaluation references, not historical curiosities. They expose the cases where a deep model's gain came from retrieval rather than language modeling.
+\item Retrieval is part of the system, not a wrapper around the model. The retrieval step changes the claim the system is making; a strong generator on weak retrieval is a different system from a weak generator on strong retrieval.
+\item Grounding is the discipline of tying generated text to retrieved evidence. A fluent answer without a grounded citation path is not yet a trustworthy answer, no matter how plausible it sounds.
+\item Top-of-list retrieval metrics (precision@k, recall@k, reciprocal rank) measure different things and answer different operational questions. Picking the wrong one will make a system look ready when it is not.
+\item Abstention and escalation are first-class language-system behaviors. A support assistant that refuses to answer a high-risk question is not failing; a fluent answer to the same question often is.
+\item Hallucination is not one phenomenon. The chapter distinguished retrieval failure, grounding failure, knowledge cutoff, and confident fabrication---each requires a different diagnostic and a different fix.
+\item Language is already about modeling. Choosing tokenization, context window, retrieval design, grounding policy, and abstention threshold is the modeling work; the architecture name on the box does not absolve any of those decisions.
+\end{chaptersummary}
 
 \begin{studyquestions}
 \item Why is a context audit more useful than choosing an NLP architecture by habit?
@@ -1038,6 +1117,7 @@ This chapter treated language as a problem of context, sequence, and evidence. D
 \end{studyquestions}
 
 \begin{exercises}
+\item \exercisetag{Calculation}{Core}Compute perplexity on a four-token toy sequence. A language model assigns the following per-token probabilities under the chain-rule factorization: $P(w_1) = 0.5$, $P(w_2 \mid w_1) = 0.25$, $P(w_3 \mid w_1, w_2) = 0.5$, $P(w_4 \mid w_1, w_2, w_3) = 0.125$. Compute the average per-token cross-entropy $-\tfrac{1}{4}\sum_i \log_2 P(w_i \mid w_{<i})$ and then the perplexity $2^{\text{avg cross-entropy}}$. Interpret the result --- if every prediction were uniform over a vocabulary of size $V$, what would the perplexity be, and how does that comparison make ``perplexity'' a number you can communicate to a non-specialist?
 \item \exercisetag{Concept}{Core}For a support-email classifier, decide whether bag-of-words, n-grams, or contextual modeling is justified first. Explain what structure the task really needs.
 \item \exercisetag{Design}{Core}Construct two short sentences with identical bag-of-words representations but different meanings. Explain which downstream task would fail under bag-of-words and which might still work.
 \item \exercisetag{Concept}{Core}Give one example of an NLP task for which local order is the main missing structure and one for which external grounding is the main missing structure.

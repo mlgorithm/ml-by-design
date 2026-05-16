@@ -1,11 +1,19 @@
 \chapter{Representation Learning and Foundation Models}
 \label{ch:representation-foundation-models}
 
-A model can succeed on a task in two very different ways. It can learn a narrow solution tied closely to that task, or it can learn a representation that stays useful when the task changes. This chapter is about the second possibility. Representation learning matters because modern machine learning increasingly depends on reusable internal structure: embeddings that preserve useful geometry, pretrained encoders that transfer across tasks, and large foundation-model workflows that shift effort from training from scratch to adapting what has already been learned. The central question is not whether reuse is fashionable. It is what exactly is being reused, how much adaptation it requires, and what evidence shows the reuse is real rather than hidden inside a powerful downstream model. By the end of the chapter, you should be able to judge when a learned representation is genuinely reusable, how to test that reuse, and when adaptation changes the claim being made.
+The course-support team's routing model has been retrained from scratch six times this term. Each new dataset---a registrar export, a refreshed help-desk corpus, a changed list of canonical question types---means a new training run, a new tuning sweep, a new round of validation. The model never reuses anything. Each version is born from zero.
 
-The shift is larger than it first appears. In classical machine learning, a model is typically trained for one task, on one dataset, with one objective. Representation learning changes the unit of value. What matters is not only whether the model solves today's task, but whether it learns a space useful for tomorrow's tasks too. Foundation-model workflows push this further by pretraining for reuse first and adapting later. The modern form of the idea draws on work on representation learning as exposed structure, contextual word representations, latent prediction, attention-based sequence modeling, bidirectional pretraining, and foundation-model analysis \citep{bengio2013rep,mikolov2013,peters2018elmo,oord2018cpc,vaswani2017,devlin2019,bommasani2021}. The chapter follows the same path: first what a reusable space is, then what training pressure creates it, then how probes and adaptation test it, and finally how attention and foundation-model workflows scale the same logic.
+That is the gap this chapter fills. A model can succeed on a task in two very different ways: by learning a narrow solution tied to the task, or by learning a representation that stays useful when the task changes.
 
-The chapter extends the book's representation question from one task to many, connects baseline discipline to frozen probes and shallow adaptation, and keeps the evidence question visible by asking whether any downstream gain came from reused structure, extra adaptation capacity, or better external evidence. The running artifact is a reuse and adaptation plan that states what pretrained object is being reused, what first clean diagnostic isolates reuse, what shallowest adaptation is justified, what external evidence the workflow still needs, and what alternative explanation could fake the gain.
+The book's center of gravity now shifts. The unit of value is no longer per-task accuracy; it is whether the model learns a space in which the next task becomes easier, and what evidence shows that the reuse is real rather than hidden inside a powerful downstream head. Foundation-model workflows push this further still: pretrain for reuse first, adapt later.
+
+\section{Problem-Solving Technique: Make the Reuse Claim Testable}
+
+Treat a learned representation as a claim about which structure has been preserved and made accessible. The right diagnostic question is never ``is this embedding good?'' but ``good for which downstream task, under which adaptation, against which alternative explanation?''
+
+\textbf{Reuse and adaptation plan.} Before adopting a pretrained representation, write five things: the pretrained object being reused, the first clean diagnostic that would isolate reuse from adaptation capacity, the shallowest adaptation that the label budget and domain shift justify, the external evidence the workflow still depends on, and the alternative explanation that could fake the gain.
+
+Most embarrassing transfer claims in practice come from skipping the first clean diagnostic---a frozen linear probe---and going straight to a powerful fine-tuned head. The head papers over a brittle representation, and the team learns nothing about whether the pretrained object was the source of the gain.
 
 \begin{decisionbox}
 \textbf{Core path through the chapter.} On a first serious pass, keep the spine narrow: reusable space, training pressure that created it, frozen probe, shallowest justified adaptation, and reuse plan. Attention, transformers, retrieval, prompting, and fine-tuning matter because they change the reuse claim; they should not obscure the diagnostic question of what is actually being reused.
@@ -13,9 +21,9 @@ The chapter extends the book's representation question from one task to many, co
 
 \section{Opening Dilemma: Solve One Task, or Learn a Reusable Space?}
 
-The previous chapter ended by showing that neural networks can learn internal features rather than relying only on hand-built ones. This chapter begins where that idea becomes strategically important. The real value of a model is sometimes not that it solves one task well, but that it learns a space in which many related tasks become easier.
+A course-support team has labeled a few thousand student messages for routing. A new dataset of student questions arrives a month later, this time about course-content rather than logistics. The natural question is whether last month's model has any value here, or whether the team starts again from scratch.
 
-That is the chapter's opening dilemma. Should we solve a task directly from scratch, or invest in learning a reusable representation that might help across tasks, domains, or label budgets?
+If the model learned a narrow solution to last month's routing, the answer is essentially nothing transfers. If, in the course of solving routing, the model learned a representation of student messages---a space where similar messages sit near each other for reasons larger than the routing label---then the new task may need only a lightweight readout on top of the same space. That is the chapter's opening dilemma. Should we solve a task directly from scratch, or invest in learning a reusable representation that might help across tasks, domains, or label budgets?
 
 The question matters whenever useful structure is expensive to relearn. A model trained for a single classifier may work today and still throw away value that could have served retrieval, clustering, transfer, or later fine-tuning. A reusable representation changes what counts as progress. The rest of the chapter turns that idea into a workflow: define the space, ask what pressure created it, test it with the cleanest downstream diagnostic, and only then decide how much adaptation is justified.
 
@@ -243,11 +251,8 @@ Once objects become vectors, we need a way to compare them. For nonzero vectors,
 \]
 It measures the angle between two vectors rather than their raw length, which is especially useful when direction matters more than magnitude.
 
-\begin{prereqbridge}
 The dot product $e_i^\top e_j$ is large when two vectors point in similar directions. Dividing by the vector lengths turns that raw alignment into a scale-free similarity score.
-\end{prereqbridge}
 
-\begin{advancednote}
 \begin{theorem}[Johnson--Lindenstrauss dimension reduction]
 For any finite set $S$ of $n$ points in $\mathbb{R}^d$ and any $0<\varepsilon<1$, there exists a map $f:\mathbb{R}^d\to\mathbb{R}^k$ with
 \[
@@ -261,7 +266,6 @@ such that for all $u,v\in S$,
 \end{theorem}
 
 The theorem does not claim every useful embedding is a random projection, and it does not replace task-specific representation learning. It does justify a central geometric intuition of the chapter: moderately low-dimensional spaces can preserve many of the pairwise relationships that downstream retrieval, clustering, or probing depend on.
-\end{advancednote}
 
 
 \begin{figure}[t]
@@ -299,9 +303,7 @@ The theorem does not claim every useful embedding is a random projection, and it
 \label{fig:cosine-angle-not-length}
 \end{figure}
 
-\begin{advancednote}
 Cosine and Euclidean similarity answer different questions. Euclidean distance cares about absolute position and scale. Cosine cares about direction. In some applications the difference is minor; in others it changes the neighbor ranking substantially.
-\end{advancednote}
 
 \begin{warningbox}
 Embedding neighborhoods are evidence-bearing summaries, not ground-truth meaning. A near neighbor only tells us that the training objective and data made the model treat two objects similarly. That can be useful and still be biased, partial, or unstable.
@@ -339,13 +341,11 @@ The limitation is narrowness. A representation learned for one fixed target may 
 Self-supervised learning generates training targets from the data itself---for example, predicting masked words from their surrounding context---rather than relying on external human labels. The prefix \emph{self-} refers to the source of the supervision signal, not the absence of one.
 \end{definition}
 
-\begin{mathlens}
 A visible example is masked-token prediction. Let $M$ be the set of masked positions in a sequence $x$, and let the model predict a distribution $p_\theta(\cdot \mid \tilde x)$ from the corrupted sequence $\tilde x$. A simple objective is
 \[
 \mathcal{L}_{\text{mask}}(\theta) = -\frac{1}{|M|}\sum_{i\in M}\log p_\theta(x_i \mid \tilde x).
 \]
 The loss is small only when the model assigns high probability to the original tokens at the masked positions. The training signal is explicit: the model must use surrounding context to recover what was removed.
-\end{mathlens}
 
 Self-supervised learning builds prediction problems from structure already in the input. Common patterns include predicting masked or missing parts of a sequence, reconstructing a clean example from a corrupted one, matching two augmented views of the same underlying object, and predicting future segments of time-series or audio data.
 
@@ -417,9 +417,7 @@ Students do not need to memorize every acronym. The durable lesson is simpler: e
 
 Two evidence-bearing cases are more useful here than a long taxonomy. In language, masked-token pretraining teaches the model to encode what neighboring words make plausible, which is why contextual encoders can separate different uses of the same surface token \citep{devlin2019}. In vision, SimCLR showed that representation quality moved sharply with augmentation design, projection heads, and batch size---exactly what we should expect if self-supervision is teaching invariance rather than merely fitting labels \citep{chen2020simclr}. The point is not that every modality uses the same pretext task. It is that each objective defines what structure should be stable enough to reuse later.
 
-\begin{practicalnote}
 The hard part of self-supervision is choosing an objective that cannot be solved by a cheap shortcut. If a corruption can be inverted from a trivial cue, or if paired views do not really describe the same underlying content, the model can score well on the pretraining task while preserving little that helps later.
-\end{practicalnote}
 
 \begin{codeexample}[caption={A minimal self-supervised training loop}]
 for each raw example x:
@@ -441,7 +439,6 @@ An autoencoder learns an encoder that maps an input into a latent representation
 
 The training signal comes from reconstruction. When the model must recover the original input from a smaller or constrained internal state, it cannot memorize every detail; it must keep the information most useful for rebuilding the example. Under those conditions, reconstruction becomes a representation-learning pressure rather than just a copying exercise.
 
-\begin{mathlens}
 A simple reconstruction objective is
 \[
 \mathcal{L}_{\mathrm{rec}}(\theta) = \|x - \hat x\|_2^2,
@@ -449,7 +446,6 @@ A simple reconstruction objective is
 \hat x = g_\theta(f_\theta(x)),
 \]
 where $f_\theta$ is the encoder and $g_\theta$ is the decoder. The loss is small only when the latent representation preserves enough structure to rebuild the input faithfully.
-\end{mathlens}
 
 \begin{codeexample}[caption={A minimal autoencoder loop}]
 for each example x:
@@ -521,8 +517,15 @@ Scale helps only when the self-supervised objective encourages structure that al
 Suppose an image model is trained to reconstruct a clean image from a corrupted version. It cannot succeed by memorizing one pixel at a time. It must learn which patterns are stable enough to infer the missing content. That forces the internal representation to organize edges, textures, and shapes rather than only the raw corruption.
 \end{example}
 
-\begin{advancednote}
 Contrastive learning is an especially influential self-supervised idea. Two views of the same underlying example are pushed to have similar representations; different examples are pushed apart. This teaches invariance: what changes under augmentation should be ignored, while what remains stable should be preserved.
+
+\begin{advancednote}
+\textbf{The InfoNCE loss.} Most modern contrastive methods (SimCLR, MoCo, CLIP) optimize the same loss in different guises. Given an \emph{anchor} representation $z$ and a batch of $N$ candidates $\{z_1, \ldots, z_N\}$ in which exactly one $z_{j^\star}$ is a true positive (a different view of the same example), the InfoNCE loss treats the positive identification as an $N$-way classification problem solved by softmax over cosine similarities:
+\[
+\mathcal{L}_{\mathrm{InfoNCE}}(z, z_{j^\star}) \;=\; -\log \frac{\exp\!\bigl(\mathrm{sim}(z, z_{j^\star}) / \tau\bigr)}{\sum_{j=1}^{N} \exp\!\bigl(\mathrm{sim}(z, z_j) / \tau\bigr)}, \qquad
+\mathrm{sim}(a, b) = \frac{a^\top b}{\|a\|\,\|b\|}.
+\]
+The temperature $\tau > 0$ controls how concentrated the softmax becomes: small $\tau$ sharpens the distinction between the positive and the hardest negatives, large $\tau$ smooths it. Negative examples are the other $N-1$ candidates in the same batch (SimCLR), drawn from a momentum-updated memory bank (MoCo), or paired across modalities (CLIP's image--caption pairs). Mathematically, the loss is a lower bound on the mutual information between the two views, which is why ``InfoNCE'' (Noise-Contrastive Estimation of mutual information) is its formal name. Operationally, this is the loss that produces the embeddings sketched in the alignment box of Figure~\ref{fig:selfsupervised-workflow}.
 \end{advancednote}
 
 Transfer learning makes reuse operational, but it leaves one diagnostic question open: is the useful structure already present in the frozen representation, or does the downstream model have to build it again?
@@ -610,15 +613,11 @@ This is one of the cleanest habits in the chapter:
 
 A strong linear probe means the representation has already organized the information in a usable way for that target. If a very complex downstream model is still required, the representation may be less mature than it first appeared. A weak probe does not prove the representation is useless. It means the current frozen representation does not make the target easily accessible under a simple readout---which is exactly the diagnostic question we wanted to ask.
 
-\begin{mathlens}
 Let $h(x)$ be a frozen representation and let $g_\phi$ be a linear probe trained on top of it. If $g_\phi(h(x))$ performs well, then the target is linearly accessible in the frozen space. That is evidence of reuse, but it does not prove three stronger claims: that the representation is causally organized the way humans describe it, that the signal is robust under distribution shift, or that a nonlinear head could not rescue a weak frozen space. The probe tests accessibility, not truth.
-\end{mathlens}
 
 That is the narrow claim the probe supports: linearly accessible information in a frozen space. It is not, by itself, evidence of causal structure or robustness under shift.
 
-\begin{claimdefense}
 A successful linear probe supports the safe claim that a target is linearly accessible in the frozen representation. It does not support the unsafe claims that the representation encodes the human-readable concept causally, that the signal will survive distribution shift, or that a deeper head could not have rescued a weaker representation.
-\end{claimdefense}
 
 \begin{example}[Few Labels, Frozen Encoder]
 Imagine a vision encoder pretrained on a large collection of unlabeled classroom images. A school later wants to classify a small labeled set of whiteboard photos into categories such as clear, blurred, glare-obstructed, or partially cropped. If the encoder already captures strokes, edges, writing density, and camera artifacts, a small linear probe may perform surprisingly well even with few labels.
@@ -677,6 +676,12 @@ The judgment rule is simple: start with the linear probe. If the probe achieves 
 The previous section named the options. This short scenario guide turns the same menu into a decision rule rather than another list of methods. Once a representation is shown to contain useful information, the question becomes how much of it should be allowed to move.
 
 The modern design space is wider than freeze versus full fine-tuning. Gradual-unfreezing strategies like ULMFiT made this visible early in NLP, and later adapter modules and low-rank updates made the same point at larger scale: teams can specialize a pretrained model while moving only part of it \citep{howard2018ulmfit,houlsby2019adapters,hu2021lora}. These methods lower compute and preserve more of the original model, but they do not remove the need to show whether the observed gain came from reused representation or from extra task-specific capacity.
+
+\textbf{LoRA: low-rank adapters in one line of math (Extension).} For a pretrained weight matrix $W_0 \in \mathbb{R}^{d_\text{out} \times d_\text{in}}$ in (say) an attention projection, the update during fine-tuning can be written as $W = W_0 + \Delta W$. Full fine-tuning treats every entry of $\Delta W$ as a trainable parameter, so the update has $d_\text{out} \cdot d_\text{in}$ degrees of freedom --- the same scale as the original weight. LoRA \citep{hu2021lora} freezes $W_0$ and constrains the update to a low-rank factorization:
+\[
+\Delta W \;=\; B A, \qquad B \in \mathbb{R}^{d_\text{out} \times r}, \quad A \in \mathbb{R}^{r \times d_\text{in}}, \quad r \ll \min(d_\text{out}, d_\text{in}).
+\]
+Only $A$ and $B$ are trained, reducing the number of fine-tuning parameters from $d_\text{out} d_\text{in}$ to $r(d_\text{out} + d_\text{in})$ --- often two to three orders of magnitude smaller. The factorization is initialized so that $\Delta W = 0$ at the start of fine-tuning (typically $B = 0$, $A$ random), so the fine-tuned model begins identical to the pretrained one and is steered by the rank-$r$ update only as training progresses. At inference, the merged weight $W_0 + BA$ has the same shape as $W_0$, so deployment cost is unchanged. The implicit assumption is that task-specific specialization lives in a low-rank subspace of weight space --- which empirically holds for many fine-tuning regimes but is the hypothesis a LoRA-style adapter is really making. Other parameter-efficient methods (Houlsby-style adapters, prefix tuning, $(IA)^3$) differ in \emph{where} the small set of trainable parameters live; LoRA's contribution is that the trainable parameters can sit \emph{inside} the original weight matrices via a clean rank constraint.
 
 \begin{table}[t]
 \centering
@@ -740,11 +745,13 @@ Full fine-tuning & 0.573 & aggressive tuning can erase the advantage when labels
 \label{tab:adaptation-results}
 \end{table}
 
-\begin{evidencebox}
 Evidence that transfer learning is genuinely helping should show up in at least one concrete way: similar performance with fewer labeled examples, better performance at the same label budget, faster convergence during downstream training, or better robustness under domain shift or nuisance variation.
-\end{evidencebox}
 
 Up to this point, reuse has meant a fixed learned space. Attention changes that picture by making the representation itself depend on context at inference time. The key architectural ingredient is attention---a mechanism that lets each position in a sequence directly access any other position, weighted by learned relevance. Understanding attention matters because it underlies the transformer architecture that powers nearly every current foundation model.
+
+\begin{decisionbox}
+\textbf{Mid-chapter checkpoint.} The first half of the chapter (representation, probes, adaptation ladder) is the core diagnostic story: a reusable space and how to test reuse. The sections that follow---attention, multi-head attention, positional encoding, transformer blocks, and the foundation-model workflow---explain how the dominant pretraining architecture creates such spaces. On a first serious pass, follow the q\(^\top\)k attention example end to end and skim the rest. The mechanism details matter when the reuse claim hinges on architecture, not before.
+\end{decisionbox}
 
 \section{Attention: Building Context-Dependent Representations}
 
@@ -776,11 +783,10 @@ c = \sum_j \alpha_j v_j.
 \]
 Here $c$ is the context-aware representation produced by attention.
 
-\begin{prereqbridge}
 The softmax function converts a list of raw scores into nonnegative weights that sum to $1$. It turns ``how relevant is each item?'' into a proper weighted average.
-\end{prereqbridge}
 
-\begin{theorem}[Softmax attention produces a convex combination of value vectors]
+\begin{advancednote}
+\begin{theorem}[Softmax attention produces a convex combination of value vectors (Extension)]
 In the transformer formulation above, each attention weight satisfies \(\alpha_j \ge 0\) and \(\sum_j \alpha_j = 1\). The context vector
 \[
 c = \sum_j \alpha_j v_j
@@ -791,14 +797,31 @@ is therefore a convex combination of the value vectors \(\{v_j\}\).
 \begin{proof}
 Each \(\alpha_j\) is a softmax weight, so it is nonnegative by construction. The denominator in the softmax is the sum of all exponentiated scores, so summing the resulting weights over \(j\) gives \(1\). A weighted sum of vectors with nonnegative weights that sum to \(1\) is, by definition, a convex combination.
 \end{proof}
+\end{advancednote}
 
-\begin{practicalnote}
+\begin{advancednote}
+\textbf{Attention is kernel smoothing with a learned kernel.} Define the exponential-similarity kernel
+\[
+k(q, k) \;=\; \exp\!\bigl(q^\top k / \sqrt{d_k}\bigr).
+\]
+Softmax attention is then exactly Nadaraya--Watson kernel smoothing of the value vectors against the keys:
+\[
+\mathrm{Attn}(q, K, V) \;=\; \sum_j \frac{k(q, k_j)}{\sum_{j'} k(q, k_{j'})}\, v_j.
+\]
+Each output is a kernel-weighted average of the values, where the weights are a Gibbs/Boltzmann distribution over similarity-to-query: the score $q^\top k_j$ acts as a negative energy and $\sqrt{d_k}$ acts as a temperature.
+
+This view explains three things the convex-combination theorem alone does not. (a) \emph{Why softmax}: it turns arbitrary similarity scores into a normalized probability over keys, which is exactly a Gibbs measure at temperature $\sqrt{d_k}$ over the negative-energy field $-q^\top k_j$. (b) \emph{Why the $\sqrt{d_k}$ scaling}: without it, the kernel temperature would effectively shrink as $d_k$ grows because score magnitudes scale with $\sqrt{d_k}$, and the softmax would saturate to a one-hot peak --- the kernel would degenerate from smoothing to nearest-neighbor lookup. (c) \emph{What multi-head attention buys}: each head learns its own $W_Q, W_K$ and so each head defines a different similarity kernel; multi-head attention is an ensemble of kernel smoothers with different metrics. The ``soft retrieval'' interpretation often used informally is precisely this kernel-smoothing identity.
+
+This kernel-smoothing view is developed formally in Tsai et al.\ (2019) and is the foundation for kernel-based efficient-attention variants such as Performer (Choromanski et al.\ 2020), which approximate $k(q, k)$ by random features so that attention costs scale linearly rather than quadratically in sequence length.
+\end{advancednote}
+
 This is the clean mathematical version of the usual intuition that attention forms a weighted average over candidate pieces of context. The pre-projection context vector \(c\) cannot leave the convex hull of the mixed values; later linear maps, residual connections, or feed-forward blocks can move the full layer output elsewhere. What changes here is which values receive most of the weight.
-\end{practicalnote}
 
-\begin{mathlens}
 The factor \(\sqrt{d}\) keeps dot-product scores from growing too large as the key/query dimension \(d\) grows. If the coordinates of \(q\) and \(k_j\) are roughly centered with unit-scale variation, the typical magnitude of \(q^\top k_j\) grows with \(d\). Dividing by \(\sqrt{d}\) makes the softmax input less sensitive to dimension, so no single head becomes overwhelmingly peaky merely because its vectors are longer.
-\end{mathlens}
+
+\begin{failurebox}
+\textbf{Softmax saturation and attention collapse.} When the pre-softmax scores $q^\top k_j / \sqrt{d}$ are very large in magnitude --- because the $\sqrt{d}$ scaling was dropped, because key/query vectors are not normalized, or because the model has trained itself into an extreme regime --- the softmax saturates: one weight is essentially $1$ and the rest are essentially $0$. The gradient of the softmax at that point is nearly flat, so no useful learning signal flows through that head, and the head effectively stops moving. The symptom at training time is a head whose attention pattern becomes a one-hot mask early and then never changes; the symptom at inference is a model that uses only a tiny fraction of its context. The reverse failure is also possible: when scores collapse toward zero (e.g., severely under-trained projections, or after aggressive normalization), every weight is close to $1/N$ and attention is no different from a uniform average --- the head has stopped distinguishing anything. Both pathologies are diagnosable by inspecting the entropy of the attention distribution per head; healthy heads sit between the two extremes.
+\end{failurebox}
 
 \begin{figure}[t]
 \centering
@@ -873,6 +896,38 @@ c = 0.576v_1 + 0.140v_2 + 0.284v_3
 = \begin{bmatrix} 0.860 \\ 0.424 \end{bmatrix}.
 \]
 
+The same calculation in matrix form takes only a few lines of numpy. For a sequence of $n$ tokens with packed matrices $Q \in \mathbb{R}^{n \times d_k}$, $K \in \mathbb{R}^{n \times d_k}$, $V \in \mathbb{R}^{n \times d_v}$, scaled dot-product attention is
+
+\begin{codeexample}
+import numpy as np
+
+def scaled_dot_product_attention(Q, K, V):
+    # Q: (n, d_k)   K: (n, d_k)   V: (n, d_v)
+    d_k = Q.shape[-1]
+    scores = Q @ K.T / np.sqrt(d_k)         # (n, n) similarities
+    # numerically stable softmax along the last axis
+    scores -= scores.max(axis=-1, keepdims=True)
+    weights = np.exp(scores)
+    weights /= weights.sum(axis=-1, keepdims=True)
+    return weights @ V, weights              # (n, d_v),  (n, n)
+
+# Reproducing the worked example above:
+q  = np.array([[1.0, 0.0]])                  # one query
+K  = np.array([[1.0, 0.0],                   # k_1
+               [0.0, 1.0],                   # k_2
+               [0.5, 0.5]])                  # k_3
+V  = np.array([[1.0, 0.0],                   # v_1
+               [0.0, 1.0],                   # v_2
+               [1.0, 1.0]])                  # v_3
+c, w = scaled_dot_product_attention(q, K, V)
+print(w.round(3))   # [[0.576 0.140 0.284]]
+print(c.round(3))   # [[0.860 0.424]]
+\end{codeexample}
+
+The function is the same expression the chapter wrote symbolically, $\mathrm{softmax}(QK^\top/\sqrt{d_k})\,V$. The numerical stability step (subtracting the row maximum before exponentiating) is the only addition beyond the formula; it keeps the softmax from overflowing when scores are large.
+
+For a sequence of length $n$ with model dimension $d$, scaled dot-product attention costs $O(n^2 d)$ time and $O(n^2)$ memory: every query must attend to every key, and the $n \times n$ weight matrix must be materialized. The quadratic cost in $n$ is the single most important fact about attention's scaling. A model that doubles its context window pays roughly four times the attention compute and four times the attention memory, which is why long-context architectures (sparse attention, linear attention, state-space models, FlashAttention's I/O-aware kernels) all try to avoid building the full $n \times n$ matrix. The per-step linear cost in $d$ is comparatively benign.
+
 \begin{example}[Reading a Tiny Attention Matrix]
 Suppose a three-token sentence produces the following attention weights for one head:
 \[
@@ -887,13 +942,11 @@ Each row shows how one token distributes its attention across the sequence. The 
 Permuting the tokens can change the weights because each row depends on token content together with whatever positional or order information the model receives. Attention is therefore not just a bag of pairwise similarities; it is a context-dependent calculation over represented tokens in positions.
 \end{example}
 
-\begin{mathlens}
 \textbf{Where do queries, keys, and values come from?} Each input vector $x_i$ is mapped to three projections by learned matrices:
 \[
 q_i = W_Q\,x_i, \qquad k_i = W_K\,x_i, \qquad v_i = W_V\,x_i.
 \]
 The same $W_Q, W_K, W_V$ are reused across all positions. They are learned by gradient descent on the downstream training objective, just like any other parameters in the network. Attention does not have privileged access to ``meaning''; it gets to ask the questions and supply the answers that the training pressure rewards.
-\end{mathlens}
 
 \subsection{Multi-Head Attention}
 
@@ -901,7 +954,40 @@ A single attention layer mixes context one way: one $W_Q$, one $W_K$, one $W_V$.
 \[
 \text{MultiHead}(X) = W_O\,\bigl[\,\text{head}_1(X);\ \text{head}_2(X);\ \ldots;\ \text{head}_H(X)\,\bigr].
 \]
-Each head receives a smaller per-head dimension (typically $d/H$) so total compute stays close to a single large head. The motivation is that one head may learn to attend to syntactic neighbors, another to semantic role, another to long-range coreference, all in parallel. Empirically, heads specialize during training, although the assignment is not always interpretable in human terms.
+Each head receives a smaller per-head dimension (typically $d_k = d/H$) so total compute stays close to a single large head. The motivation is that one head may learn to attend to syntactic neighbors, another to semantic role, another to long-range coreference, all in parallel. Empirically, heads specialize during training, although the assignment is not always interpretable in human terms.
+
+\begin{codeexample}
+import numpy as np
+
+def multi_head_attention(X, W_Q, W_K, W_V, W_O, n_heads):
+    """Multi-head self-attention on a batch-free (n, d) input X."""
+    n, d   = X.shape
+    d_k    = d // n_heads
+    # Project once, then split into per-head views by reshape.
+    Q = (X @ W_Q).reshape(n, n_heads, d_k).transpose(1, 0, 2)   # (H, n, d_k)
+    K = (X @ W_K).reshape(n, n_heads, d_k).transpose(1, 0, 2)
+    V = (X @ W_V).reshape(n, n_heads, d_k).transpose(1, 0, 2)
+    # Per-head scaled dot-product attention, all heads in one tensor op.
+    scores = np.einsum('hnk,hmk->hnm', Q, K) / np.sqrt(d_k)      # (H, n, n)
+    scores -= scores.max(axis=-1, keepdims=True)
+    weights = np.exp(scores)
+    weights /= weights.sum(axis=-1, keepdims=True)
+    heads  = np.einsum('hnm,hmk->hnk', weights, V)               # (H, n, d_k)
+    # Concatenate per-head outputs and project back to model dimension.
+    concat = heads.transpose(1, 0, 2).reshape(n, n_heads * d_k)  # (n, d)
+    return concat @ W_O                                          # (n, d)
+\end{codeexample}
+
+The shape arithmetic is the only thing that hides the simplicity: one matmul to produce queries / keys / values, a reshape that turns the last axis into ``head $\times$ head-dimension,'' attention computed inside each head, a concat-and-project that recombines heads. Total compute is $O(H \cdot n^2 \cdot d_k) = O(n^2 d)$---the same as one large head, which is what made multi-head attention practical at scale.
+
+\textbf{Pre-norm versus post-norm transformer blocks (architecture detail).} A transformer block wraps the attention computation with residual connections and layer normalization. \emph{Layer normalization} \citep{ba2016layernorm} normalizes each token's representation independently across its feature dimension:
+\[
+\mathrm{LN}(x) \;=\; \gamma \odot \frac{x - \mu(x)}{\sigma(x) + \varepsilon} + \beta,
+\qquad \mu(x) = \tfrac{1}{d}\sum_i x_i, \quad \sigma^2(x) = \tfrac{1}{d}\sum_i (x_i - \mu(x))^2,
+\]
+with learned scale $\gamma$ and shift $\beta$. The choice of layer norm rather than batch norm matters here: batch norm couples examples in a minibatch, which interacts badly with variable-length sequences and inference-time batches of one; layer norm operates per token and is therefore invariant to batch size.
+
+Two block placements are used in practice. \emph{Post-norm} (the original transformer) is $y = \mathrm{LN}(x + \mathrm{Attention}(x))$ then $z = \mathrm{LN}(y + \mathrm{FFN}(y))$; gradients flow through the normalization on the way back. \emph{Pre-norm} (modern variants) is $y = x + \mathrm{Attention}(\mathrm{LN}(x))$ then $z = y + \mathrm{FFN}(\mathrm{LN}(y))$; the residual stream is unnormalized end to end, which makes very deep stacks easier to optimize and is now the standard. The choice is a real architectural decision: pre-norm trains more stably without learning-rate warmup, post-norm sometimes reaches slightly stronger final performance with more careful schedules. A first-pass reader can take ``a transformer block is attention plus a feed-forward layer, each wrapped in a residual connection and a normalization step'' as the operational summary; this box is for readers building or modifying transformer code.
 
 \subsection{Positional Encoding}
 
@@ -911,7 +997,18 @@ The original transformer adds a fixed sinusoidal vector to each input embedding:
 \[
 \text{PE}(p, 2i) = \sin\!\bigl(p\,/\,10000^{2i/d}\bigr), \qquad \text{PE}(p, 2i+1) = \cos\!\bigl(p\,/\,10000^{2i/d}\bigr),
 \]
-where $p$ is the position and $i$ indexes the dimension. Modern variants prefer learned positional embeddings or rotary position embeddings (RoPE), which encode position multiplicatively inside the attention computation rather than additively at the input. The architectural choice matters more for long contexts (where extrapolation beyond the longest training sequence is needed) than for short ones.
+where $p$ is the position and $i$ indexes the dimension. On a first pass the operational summary is enough: each position $p$ gets a fixed vector with a different frequency at every dimension, the vector is added to the input embedding, and order information now lives inside the representation.
+
+\begin{advancednote}
+\textbf{Why those particular sines and cosines (Extension).} The choice is not arbitrary. For any fixed offset $\Delta$, the position-encoding pair at $p + \Delta$ is a linear transformation of the pair at $p$:
+\[
+\begin{bmatrix} \text{PE}(p + \Delta, 2i) \\ \text{PE}(p + \Delta, 2i+1) \end{bmatrix}
+=
+\underbrace{\begin{bmatrix} \cos(\omega_i \Delta) & \sin(\omega_i \Delta) \\ -\sin(\omega_i \Delta) & \cos(\omega_i \Delta) \end{bmatrix}}_{\text{a rotation depending only on } \Delta}
+\begin{bmatrix} \text{PE}(p, 2i) \\ \text{PE}(p, 2i+1) \end{bmatrix},
+\]
+with $\omega_i = 1/10000^{2i/d}$. The rotation depends only on the \emph{relative} offset $\Delta$, not on $p$. That is the formal reason sinusoidal encodings let attention learn relative-position relations: a linear layer in the model can compute the rotation that connects two positions a fixed distance apart, regardless of where in the sequence they sit. Modern variants like rotary position embeddings (RoPE) make this rotation explicit inside the attention computation rather than additive at the input, which makes the relative-position property exact in the dot-product score; learned positional embeddings drop the structural guarantee but let the model fit position information empirically.
+\end{advancednote}
 
 The conceptual point is simple: without positional information, the convex-combination theorem above says attention is averaging values, but the input to that average no longer reflects the order of the sequence. Positional encoding is what restores order-sensitivity.
 
@@ -972,9 +1069,7 @@ The point of this section is not a buzzword parade. It is to explain why attenti
 \label{fig:high-level-transformer-block}
 \end{figure}
 
-\begin{advancednote}
 Transformers matter because they combine flexible context modeling, shared architecture across modalities, and scalable pretraining. That combination made reusable representation learning much easier to scale.
-\end{advancednote}
 
 \section{Foundation Models as a Workflow Shift}
 \begin{definition}[Foundation Model]
@@ -1109,13 +1204,9 @@ The distinction becomes clear in the running support-assistant case. If the mode
 
 The claim changes with the intervention. A prompting gain supports a behavior-design claim. A retrieval gain supports an evidence-access claim. A fine-tuning gain supports a task-adaptation claim. Collapsing these together produces exactly the kind of blurry evaluation story the book is trying to prevent.
 
-\begin{thinkingtool}
 \textbf{Intervention audit.} When a system improves, ask what changed: the instruction, the accessible evidence, or the predictor itself. Then make the claim at that same level rather than attributing the gain to vague ``model quality.''
-\end{thinkingtool}
 
-\begin{thinkingtool}
 \textbf{Common failure mode $\rightarrow$ recovery move.} Failure mode: treating prompting, retrieval, and fine-tuning as interchangeable upgrades and making one blurry claim about ``the model.'' Recovery move: run the smallest comparison that changes only one layer of the workflow, name whether the gain came from instruction, evidence, or parameter updates, and keep the claim at that same level.
-\end{thinkingtool}
 
 \begin{figure}[t]
 \centering
@@ -1178,9 +1269,7 @@ The claim changes with the intervention. A prompting gain supports a behavior-de
 Consider a device-support assistant built on the same pretrained language model. With prompting alone, the defensible claim is narrow: the system can often produce fluent answers, but those answers are not yet grounded in the manufacturer's current manuals and warranty rules. Add retrieval over the official support documents and the claim changes: the system can now be evaluated as a document-grounded assistant whose answers should track retrieved sources. Fine-tune the model on past resolved support chats and another claim becomes possible---the assistant may adapt better to local tone and recurring cases. But that gain introduces ambiguity. Better answers may now come from retrieval, from the pretrained model, or from the fine-tuned parameters, and each source of improvement must be validated separately.
 \end{example}
 
-\begin{practicalnote}
 Changing the adaptation method changes the claim you can make. Always ask what part of an observed gain belongs to reusable representation, what part to retrieval or prompting, and what part to downstream parameter updates.
-\end{practicalnote}
 
 \section{Chapter Artifact: A Reuse and Adaptation Plan}
 
@@ -1209,9 +1298,7 @@ Evidence needed & What result would justify claiming that reuse is genuinely hel
 \label{tab:reuse-adaptation-plan}
 \end{table}
 
-\begin{thinkingtool}
 \textbf{Reuse and adaptation plan.} Before adapting a pretrained model, write down what is being reused, what is being changed, the first clean diagnostic of reuse, and what evidence would justify a strong transfer claim.
-\end{thinkingtool}
 
 \begin{example}[Filled Reuse and Adaptation Plan]
 A university wants to classify short student emails into three support categories: routine, ambiguous, and high-risk.
@@ -1237,15 +1324,36 @@ A university wants to classify short student emails into three support categorie
 
 \section{Common Mistakes with Representation Learning}
 
-The recurring mistakes are all versions of one deeper error: confusing reusable behavior with justified evidence about why that behavior exists. A representation can be useful across tasks without being task-free magic. Embedding neighbors are model-dependent summaries, not ground-truth meaning. Skipping the linear probe hides the basic accessibility question. Self-supervision does not automatically solve label scarcity unless its training pressure matches the downstream need. Transfer gains must be attributed carefully across representation, retrieval, prompting, and fine-tuning. Attention maps are diagnostic evidence, nothing more. And scale does not remove the need for controlled evaluation.
+The recurring mistakes are all versions of one deeper error: confusing reusable behavior with justified evidence about why that behavior exists.
+
+\textbf{Reading embedding neighbors as meaning.} Embedding neighbors are model-dependent summaries of what one training objective made close, not ground-truth semantic similarity. Treating them as evidence about the world rather than about the model invites confident claims that the next checkpoint will silently overturn.
+
+\textbf{Skipping the linear probe.} A weak readout on a fixed representation is the first diagnostic of whether the basic information is even accessible. Jumping to a powerful downstream head hides this question and lets a brittle representation appear strong through head capacity alone.
+
+\textbf{Assuming self-supervision solves label scarcity.} Pretraining helps only when its training pressure approximates what the downstream task needs. A strong pretraining loss is not yet evidence of useful transfer, and a large unlabeled corpus does not substitute for matching the right invariances.
+
+\textbf{Misattributing transfer gains.} An improvement after adopting a foundation model can come from the representation, the retrieval layer, the prompt, or the fine-tuning recipe. Crediting the representation without separating these sources turns one engineering result into a misleading scientific claim.
+
+\textbf{Treating attention maps as explanation.} Attention is data-dependent weighted averaging. The maps say where the model looked, not why it inferred what it inferred, and scale does not remove the need for controlled evaluation on top of them.
 
 \section{Looking Ahead}
 
-This chapter framed AI around reusable representations: embeddings, probes, transfer, attention, and foundation-model workflows. The next chapter turns reusable representations toward generation: how latent spaces can be sampled, interpolated, and audited when the system produces new data rather than only describing existing data.
+This chapter shifted the unit of value from per-task accuracy to reusable structure. A representation earns its keep when it preserves the right invariances and makes the next task easier on top of a lightweight readout.
 
-\section*{Chapter Summary}
+The next chapter turns reusable structure toward production. If a representation can be sampled, interpolated, and steered, the system is no longer only describing data---it is generating it. Chapter~\ref{ch:generative-representations} asks what a generative model has to preserve to count as faithful to its training distribution, and what evaluation can detect when it has not.
 
-This chapter shifted the unit of value from one-task accuracy to reusable structure. A learned representation is valuable when it preserves the right information, captures the right invariances, and remains useful under a lightweight downstream readout or adaptation strategy. Embeddings, probes, attention, and foundation-model workflows all fit the same logic: progress is not just solving today's task, but learning a space that makes future tasks easier for reasons we can inspect.
+Later parts of the book inherit this chapter's vocabulary directly. The retrieval, ranking, and grounding chapters treat embeddings as the substrate they operate on; the reliability chapter asks what a probe really proves and how representation choices propagate into bounded failure.
+
+\begin{chaptersummary}
+\item Representation learning shifts the unit of value from one-task accuracy to reusable structure. A learned space that preserves the right information makes the next task easier through a lightweight readout rather than a new model from scratch.
+\item Cosine similarity measures direction in an embedding space; magnitude becomes a separable signal about confidence or specificity. Whether direction or magnitude carries the relevant information is a modeling claim, not a default.
+\item Self-supervised pretraining---contrastive, masked, and next-token---earns its reuse claim only when the training pressure approximates what the downstream task needs. A strong pretraining loss is not yet evidence of useful transfer.
+\item The linear probe is the right first diagnostic. A weak readout reveals whether the basic information is accessible at all; a strong readout can hide a brittle representation behind a powerful head.
+\item Attention is data-dependent weighted averaging, not a window into reasoning. Attention maps are diagnostic evidence about where a model looked, never a justification for what it inferred.
+\item Foundation models do not reduce the need for evaluation; they increase it. The same model is now reused across tasks, deployments, and shifts---each one a separate claim that needs its own probe, baseline, and ablation.
+\item Transfer gains must be attributed across representation, retrieval, prompting, and fine-tuning. The strongest improvement may not come from the representation at all, and credit assignment is part of the experimental responsibility.
+\item Reuse is already about modeling. Choosing a pretraining objective, a probe, an adaptation strategy, and a transfer evaluation is the modeling work; the foundation model only sets the substrate on which those choices play out.
+\end{chaptersummary}
 
 \begin{studyquestions}
 \item Why can a weak downstream model perform well when built on top of a strong representation?
@@ -1257,6 +1365,7 @@ This chapter shifted the unit of value from one-task accuracy to reusable struct
 \end{studyquestions}
 
 \begin{exercises}
+\item \exercisetag{Proof}{Core}Re-prove the convex-combination theorem. Given softmax weights $\alpha_j = \exp(s_j) / \sum_\ell \exp(s_\ell)$ over candidate scores $\{s_j\}$, show that (a) $\alpha_j \ge 0$ for every $j$, (b) $\sum_j \alpha_j = 1$, and (c) therefore the context vector $c = \sum_j \alpha_j v_j$ lies in the convex hull of $\{v_j\}$. Then explain in one sentence why this means a single-head attention layer cannot produce a context vector that points in a direction \emph{no} candidate $v_j$ already points toward.
 \item \exercisetag{Concept}{Core}A model produces attention weights $[0.1, 0.7, 0.2]$ for one token attending to three others. (a) What can you conclude from these weights? (b) What would be an over-interpretation? (c) If you permuted the three context tokens and the weights changed to $[0.6, 0.1, 0.3]$, what does that tell you about the model's sensitivity to position?
 \item \exercisetag{Concept}{Core}Draw a tiny 2D picture of a ``bad'' space and a ``good'' learned space for the same binary classification task. Explain what changed.
 \item \exercisetag{Calculation}{Core}Compute the cosine similarity between the vectors $a=[1,2]^\top$ and $b=[2,1]^\top$.
@@ -1265,7 +1374,7 @@ This chapter shifted the unit of value from one-task accuracy to reusable struct
 \item \exercisetag{Diagnosis}{Intermediate}Explain why a linear probe may be a better first diagnostic than a deep downstream head when evaluating a new embedding model.
 \item \exercisetag{Concept}{Intermediate}In your own words, explain why attention can be understood as data-dependent weighted averaging.
 \item \exercisetag{Concept}{Intermediate}A model produces the attention row $(0.10, 0.70, 0.20)$ for one token over a three-token sequence. What does that row tell you, and what does it \emph{not} justify you claiming?
-\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:reuse-adaptation-plan} to sketch a reuse and adaptation plan for one target task of your choice. Include the first clean diagnostic and one alternative explanation you would have to rule out before claiming that reuse helped. If you are carrying one case through the book, say what remains fixed from the previous chapter's training report and what this chapter changes first.
+\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:reuse-adaptation-plan} to sketch a reuse and adaptation plan for one target task of your choice. Include the first clean diagnostic and one alternative explanation you would have to rule out before claiming that reuse helped. If you are carrying one case through the book, say what remains fixed from the training report you produced in Chapter~\ref{ch:optimization-neural-networks} and what this chapter changes first.
 \item \exercisetag{Implementation}{Intermediate}Demonstrate the linear-probe diagnostic on synthetic embeddings. Construct a 4-class dataset with 200 points per class. Build two embedding spaces of dimension 50: (a) random embeddings drawn from $\mathcal{N}(0, I)$ and (b) cluster-aligned embeddings where each class has its own random center plus small Gaussian noise, so classes are nearly linearly separable. Train a logistic-regression linear probe on top of each frozen embedding (\verb|sklearn.linear_model.LogisticRegression|) and report held-out accuracy for both. The cluster-aligned space should reach near-perfect accuracy while the random space stays near $1/4$. Briefly explain why this makes the linear probe a sharp test of representational structure.
 \end{exercises}
 

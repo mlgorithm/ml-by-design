@@ -1,7 +1,33 @@
 \chapter{Reliability: Bias, Robustness, Privacy, and Safety}
 \label{ch:reliability}
 
-Chapter~\ref{ch:experiments-claims} asked what an experiment justifies. This chapter asks a harder practical question. Even if the result is real, is the system reliable enough to trust under changing conditions and real consequences? Evidence is necessary but not sufficient. A model can be empirically strong and still unacceptable because it fails under shift, harms subgroups unevenly, leaks private information, cannot fail safely, or breaks the first time an adversary designs an input to cross its guardrails. This chapter treats bias, robustness, privacy, safety, and adversarial security as parts of one reliability question: does the system stay within acceptable bounds for the people, conditions, harms, and motivated attackers that actually matter in deployment? By the end, the reader should be able to judge reliability as bounded failure across the full pipeline.
+A reliability issue rarely arrives as a metric. It arrives as an email. ``Your early-warning system has not flagged a single international student in our cohort. We have eleven who already missed two assignments. Please review.'' The model's overall accuracy is unchanged from launch. Its overall calibration looks fine. Its slice-level recall on international students is $0.21$, against a global recall of $0.78$. No one was watching that slice.
+
+Evidence is necessary but not sufficient. A model can be empirically strong and still unacceptable: it may fail under shift, harm subgroups unevenly, leak private information, lack a safe fallback when uncertain, or break the first time an adversary designs an input to cross its guardrails. This chapter treats bias, robustness, privacy, safety, and adversarial security as parts of one reliability question: does the system stay within acceptable bounds for the people, conditions, harms, and motivated attackers that actually matter in deployment?
+
+\section{Problem-Solving Technique: The Bounded-Failure Review}
+
+Reliability is not a property of a model checkpoint. It is a property of the pipeline that surrounds the checkpoint---data collection, labeling, representation, threshold choice, interface, monitoring, and rollback path. Read a reliability question as a question about the pipeline, never about the trained weights alone.
+
+\textbf{Bounded-failure review.} For each reliability dimension---bias, robustness, privacy, safety---name the harms that matter, the conditions under which they grow, and the bound at which they become unacceptable. The review is not a search for zero failure; it is a written argument that the remaining failure stays within stated limits.
+
+The most common reliability failure is not technical---it is filing the review under one heading and assuming the others are someone else's job. A subgroup gap that only appears under shift is a bias \emph{and} robustness failure; a guardrail that leaks examples in its logs is a safety \emph{and} privacy failure. The four dimensions are taught in sequence; they fail together.
+
+\section{Opening Dilemma: When the Average Lies}
+
+Suppose a course-support assistant ships with strong aggregate numbers: 89\% answer accuracy on a held-out evaluation set, response times well within the service target, and a positive pilot review. Two months in, a complaint surfaces. International students writing in non-dominant phrasings are receiving more confident wrong answers than the system flags for review. The model accuracy on that slice is 74\%, but it is small enough that the aggregate number barely moves.
+
+The team has three reactions available. The first is to declare the gap a labeling artifact and move on. The second is to add the slice to the training data and retrain. The third is to ask a harder question: which other failure modes does the aggregate number also hide, and what would it take to know?
+
+That third question is this chapter. A reliable system is not one that hits a single number. It is one whose worst cases---across subgroups, across shifts, across privacy exposures, across severe-harm scenarios, and across adversarial inputs---are bounded by an argument the team has actually written down.
+
+\begin{quote}\itshape
+Reliability is the discipline of refusing to let an average score answer a question the average score cannot answer.
+\end{quote}
+
+Two running cases carry this argument through the chapter. The grounded course-support assistant from the experiments and language chapters concentrates all four reliability themes in one pipeline: subgroup gaps in language coverage, robustness failures when wording or policy context shifts, privacy exposure through sensitive student records, and safety failures when the system answers questions that should have been escalated. To keep the story visibly cross-domain, the chapter also returns to the dashboard-camera pedestrian detector from Chapter~\ref{ch:vision}, which moves the same questions into sensor shift, bystander privacy, and bounded physical risk.
+
+The chapter introduces its vocabulary at the point each term bites, not in this opening: harm taxonomy and allocation harm in the bias section, safety case and selective automation in the safety section, demographic parity and equalized odds inside the subgroup-metric discussion. The reliability review card pulls all of them together at the end.
 
 \section{Reliability Is a Pipeline Property}
 
@@ -12,12 +38,6 @@ This chapter groups bias, robustness, privacy, and safety together because teach
 \begin{decisionbox}
 The reliability review card is the chapter's spine. Fill it in stages: first name harms and critical slices, then add shift scenarios, then privacy exposures, then severe hazards and fallback paths, and only at the end decide whether the remaining bounded failures are acceptable.
 \end{decisionbox}
-
-Keep one running case in view: the grounded course-support assistant from the earlier language and experiments chapters. It routes student questions, retrieves policy passages, sometimes generates grounded answers, and sometimes escalates to humans. The case is useful because it looks ordinary enough to tempt careless deployment, yet it concentrates all four reliability themes in one pipeline: subgroup gaps in language coverage, robustness failures when wording or policy context shifts, privacy exposure through sensitive student records, and safety failures when the system answers questions that should have been escalated. It also gives the chapter its spine: slice gaps first, then shifts, then exposure, then bounded-failure design.
-
-To keep the reliability story visibly cross-domain, this chapter also returns to the dashboard-camera pedestrian detector from Chapter~\ref{ch:vision}. That contrast case moves the same ideas into sensor shift, bystander privacy, and bounded physical risk. The point is not that the domains are identical, but that the same reliability questions survive domain change.
-
-Some vocabulary is worth fixing early. A \emph{harm taxonomy} is a simple naming scheme for the failure types that matter operationally, written before metrics are chosen. \emph{Allocation harm} means opportunities or burdens are distributed unevenly across people or groups. \emph{Demographic parity} asks whether positive decisions occur at similar rates across groups; \emph{equalized odds} asks whether true positive and false positive rates are similar. A \emph{safety case} is a short structured argument about one severe hazard, its trigger, its mitigation, its fallback, and its monitoring signal. \emph{Selective automation} means automating only the cases safe enough to handle without immediate human review.
 
 \begin{figure}[t]
 \centering
@@ -38,13 +58,9 @@ A useful working taxonomy starts with \textbf{allocation harm}, where the system
 
 These categories overlap, but they keep the reliability review from collapsing into one vague fairness score. A course-support assistant might show quality-of-service harm for multilingual students, privacy harm if sensitive records leak into prompts or logs, and safety harm if high-risk messages are answered directly instead of escalated. One dashboard number cannot summarize all three responsibly.
 
-\begin{practicalnote}
 This book names concrete harm categories---allocation harm, quality-of-service harm, representation harm---rather than using the single umbrella term ``fairness.'' The reason is practical. ``Fairness'' means different things to different stakeholders, and a vague appeal to it can mask conflicting requirements. Naming the specific harm you are trying to prevent makes the design choice visible and debatable.
-\end{practicalnote}
 
-\begin{practicalnote}
 Ask ``what kind of harm are we trying to rule out?'' before asking ``which metric should we compute?'' Reliability metrics become more meaningful once the harm model is explicit.
-\end{practicalnote}
 
 \subsection{Overall Performance Can Hide Unequal Harm}
 
@@ -77,9 +93,7 @@ Visa or accommodation questions & 45 & 0.62 safe-routing recall & 0.80 & 5 \\
 \label{tab:subgroup-dashboard-example}
 \end{table}
 
-\begin{practicalnote}
 Small slices are noisy. If a subgroup has only a few dozen examples, a one- or two-case change can move the metric materially. Treat large gaps as real signals; treat small gaps on tiny slices as hypotheses until they survive more data or repeated evaluation.
-\end{practicalnote}
 
 This format matters because subgroup disparities do not always appear in the same column. One group may have similar accuracy but much worse calibration. Another may receive far more abstentions because the system is less certain---a safe design choice or a service-quality problem, depending on the application. Yet another may look fine on average while concentrating the worst errors in exactly the cases that should have triggered escalation.
 
@@ -132,7 +146,6 @@ Accuracy counts all correct predictions equally. True positive rate isolates how
 
 Fairness metrics such as subgroup accuracy, true positive rate, false positive rate, demographic parity, and equalized odds are useful because they force modelers to examine uneven behavior explicitly \citep{hardt2016}. But no single metric captures all relevant harms. Different applications justify different tradeoffs, and some fairness objectives conflict when base rates differ.
 
-\begin{advancednote}
 Equalized odds asks whether groups have similar true positive and false positive rates. Demographic parity asks whether groups receive positive predictions at similar rates. These can conflict, which is one reason reliability work requires judgment rather than metric worship.
 
 One compact way to see the tension is to write, for group $A=a$ with base rate $\pi_a=P(Y=1\mid A=a)$,
@@ -140,7 +153,6 @@ One compact way to see the tension is to write, for group $A=a$ with base rate $
 P(\hat Y=1\mid A=a)=\mathrm{TPR}_a\,\pi_a+\mathrm{FPR}_a\,(1-\pi_a).
 \]
 If equalized odds holds across groups, $\mathrm{TPR}_a$ and $\mathrm{FPR}_a$ are the same for each group, so different base rates $\pi_a$ still produce different positive-prediction rates. Demographic parity then usually cannot hold at the same time unless the groups have equal base rates or the classifier has no useful class-discriminating power, with $\mathrm{TPR}=\mathrm{FPR}$.
-\end{advancednote}
 
 \begin{example}[When fairness metrics disagree]
 Consider a hiring classifier evaluated on two groups, A and B. Group A has a base rate of 40\% qualified candidates; Group B has 20\%. In a simple toy case, suppose the model has TPR $= 0.80$ and FPR $= 0$ in both groups. It then satisfies \emph{equalized odds} but still violates \emph{demographic parity}: it accepts 32\% of Group A ($0.80 \times 0.40$) but only 16\% of Group B ($0.80 \times 0.20$). With unequal base rates, satisfying both criteria generally requires degenerate behavior such as $\mathrm{TPR}=\mathrm{FPR}$, with predicting all negative or all positive as simple examples. This tension forces an explicit design choice about which fairness property the system should prioritize.
@@ -160,13 +172,9 @@ This matters immediately for the running support-assistant case. Suppose the mod
 Imagine two groups of support messages. In Group A, messages scored at confidence $0.9$ are correct about $90\%$ of the time. In Group B, the same scores are correct only about $65\%$ of the time. A single confidence threshold then looks principled while silently exposing Group B users to much riskier automation. The engineering lesson is simple: reliability review should inspect calibration and threshold behavior by slice, not only global score distributions.
 \end{example}
 
-\begin{practicalnote}
 When a model's confidence determines escalation, triage, or human review, calibration is part of the system contract, not a cosmetic diagnostic.
-\end{practicalnote}
 
-\begin{practicalnote}
 Statistical fairness metrics such as demographic parity and equalized odds measure \emph{observed} disparities in model outputs. They do not answer the causal question: would the outcome change if the protected attribute were different, all else equal? When fairness requires causal evidence---for example, demonstrating that a hiring model does not penalize candidates \emph{because of} their gender---causal-inference techniques become essential. Chapter~\ref{ch:experiments-claims} previews the prediction-versus-causation distinction; a full causal-inference treatment is beyond this book's scope. The distinction matters because a model can satisfy a statistical fairness criterion while still encoding a causal pathway through a proxy variable.
-\end{practicalnote}
 
 \section{Robustness Under Change}
 
@@ -240,10 +248,26 @@ Forecasting system & delayed sensor updates or seasonal regime change & whether 
 
 The broader lesson is that a deployment story should justify each robustness test. A benchmark corruption that never appears in practice can still be pedagogically useful, but the strongest reliability evidence comes from changes the system is actually likely to face.
 
-\begin{advancednote}
 The distribution shifts discussed above arise naturally (sensor change, population drift). A distinct concern is \emph{adversarial robustness}: small, deliberately crafted perturbations---often imperceptible to humans---that cause confident misclassification. Adversarial attacks exploit model geometry rather than data drift, and defenses such as adversarial training and certified bounds are an active research area. This book focuses on natural shift, but adversarial robustness matters whenever the deployment environment includes motivated adversaries.
 
 Natural distribution shift occurs when the deployment environment differs from training---for example, testing a daytime detector at dusk. Adversarial perturbations are different: deliberate, often imperceptible modifications designed to cause misclassification. A model that generalizes well under natural shift may still be vulnerable to adversarial attack. The two require different defenses: domain adaptation and data collection for natural shift; certified defenses, adversarial training, or input preprocessing for adversarial perturbations.
+
+\begin{advancednote}
+\textbf{The TRADES decomposition: robustness as a regularization budget.} Standard training minimizes the clean-data risk $\mathbb{E}[\ell(f(x), y)]$. Adversarial training in the PGD style replaces this with the worst-case loss inside an $\epsilon$-ball, $\mathbb{E}[\max_{\|\delta\| \le \epsilon} \ell(f(x + \delta), y)]$, and trains against perturbations that maximize that inner loss. Zhang et al.\ (2019) propose the TRADES decomposition, which splits the objective into a clean term and a separate adversarial-consistency term:
+\[
+\mathbb{E}[\ell(f(x), y)] \;+\; \lambda \cdot \mathbb{E}\!\left[\max_{\|\delta\| \le \epsilon} \mathrm{KL}\!\left(f(x) \,\|\, f(x + \delta)\right)\right].
+\]
+The first term is ordinary clean-accuracy loss. The second forces the predicted distribution to be stable across the $\epsilon$-ball, with a tradeoff coefficient $\lambda$ that the team gets to set.
+
+The operational consequence is that adversarial training silently trades clean accuracy for robust accuracy with no explicit knob, whereas TRADES exposes that tradeoff as $\lambda$. Setting $\lambda = 0$ recovers standard training; taking $\lambda$ large recovers full adversarial training. The decomposition makes the cost of robustness visible to the people choosing it.
+
+\textbf{Certified radius from Lipschitz continuity.} Empirical robustness from adversarial training is only as strong as the attack used to evaluate it. A complementary route gives a \emph{provable} guarantee. A classifier $f$ with Lipschitz constant $L$ satisfies $\|f(x) - f(x')\|_2 \le L \|x - x'\|_2$ for all inputs. For a multi-class classifier, define the predicted-class margin at $x$ as $m(x) = f_y(x) - \max_{y' \ne y} f_{y'}(x)$. Then the classification is provably stable under any $\ell_2$ perturbation of radius
+\[
+r < \frac{m(x)}{2L},
+\]
+because no perturbation in that ball can change the score gap enough to flip the argmax. Bounding or constraining $L$ during training---through spectral normalization, orthogonal layers, or other Lipschitz-constrained parametrizations---therefore yields a \emph{certified} robust radius that adversarial training only delivers empirically. The cost is some expressive power: tightly Lipschitz-constrained networks fit less aggressively than unconstrained ones.
+
+The reliability review card introduced earlier in the chapter is the right place to record which guarantee a robustness claim actually rests on: empirical adversarial accuracy under a named attack, a certified radius under a named norm, or neither.
 \end{advancednote}
 
 \section{Privacy as a Modeling Constraint}
@@ -308,15 +332,38 @@ Several technical responses are common:
 
 These techniques are not free. Stronger privacy constraints can reduce utility, increase computation, or complicate debugging. That tradeoff is part of the real engineering problem. A system that performs well only by exposing people to unacceptable privacy risk is not reliable in any serious sense.
 
-\begin{advancednote}
-Differential privacy provides a formal guarantee that the output distribution of an algorithm changes only slightly when one training example is added or removed \citep{dwork2006}. The precise definition is more advanced than this chapter requires, but the intuition is important: privacy can be formalized as a bound on how much one person's data can influence the released result.
+\begin{example}[A Single-Number Privacy Budget: What $\epsilon = 1$ Actually Means]
+Imagine a course-support analytics team that wants to publish slice-level metrics---say, grade distributions by demographic group or by accommodation status. They worry about a specific operational risk: an adversary who already knows everything about one particular student could test whether that student is in the dataset by comparing the published statistics under inclusion versus exclusion. Membership inference is the operational threat; differential privacy is the operational guarantee.
 
-Formally, a randomized mechanism $M$ is $\epsilon$-DP if for all neighboring datasets $D,D'$ and all events $S$,
+For an $\epsilon$-DP mechanism, the maximum advantage of any membership-inference adversary over random guessing is bounded by
 \[
-P(M(D)\in S)\le e^\epsilon P(M(D')\in S).
+\mathrm{Adv}(\epsilon) \;\le\; \frac{e^\epsilon - 1}{e^\epsilon + 1}.
 \]
-A useful undergraduate intuition is sensitivity: if a query $q$ changes by at most $\Delta q$ when one record changes, adding noise on the order of $\Delta q/\epsilon$ makes any single person's contribution hard to detect while preserving the coarse signal.
-\end{advancednote}
+Three numeric anchors:
+\begin{itemize}[leftmargin=*]
+\item $\epsilon = 0.1$: $\mathrm{Adv} \le (e^{0.1} - 1)/(e^{0.1} + 1) \approx 0.05$. The adversary gains at most a five-percentage-point edge over a coin flip.
+\item $\epsilon = 1$: $\mathrm{Adv} \le (e - 1)/(e + 1) \approx 0.46$. The adversary can be substantially better than random.
+\item $\epsilon = 5$: $\mathrm{Adv} \le (e^5 - 1)/(e^5 + 1) \approx 0.987$. Effectively no protection against a determined adversary.
+\end{itemize}
+
+So $\epsilon$ is a single scalar that names the \emph{worst-case} membership-inference advantage the publisher is willing to expose. Choosing $\epsilon$ is a policy decision, not a math one. Privacy researchers cluster around $\epsilon \in [0.1, 3]$ as the operationally meaningful range; values above $10$ are usually about checking that the math still composes rather than about real protection. The next page formalizes this with $(\epsilon, \delta)$-DP and the mechanisms that achieve it.
+
+This bridge lets the math that follows be read as the formalization of a number the team already had reason to care about.
+\end{example}
+
+Differential privacy provides a formal guarantee that the output distribution of an algorithm changes only slightly when one training example is added or removed \citep{dwork2006}. Two datasets $D, D'$ are \emph{neighboring} if they differ in one record. A randomized mechanism $M$ is $\epsilon$-DP if for all such pairs and every measurable event $S$,
+\[
+P(M(D) \in S) \;\le\; e^{\epsilon}\, P(M(D') \in S).
+\]
+The smaller $\epsilon$, the stronger the guarantee: the output distribution under $D$ is multiplicatively close to the output distribution under $D'$, so an observer who sees $M(D)$ cannot tell which neighboring dataset produced it. The $(\epsilon, \delta)$-DP relaxation adds an additive slack of $\delta$ for tail events: $P(M(D) \in S) \le e^\epsilon P(M(D') \in S) + \delta$, which buys easier analysis at the cost of a tiny failure probability.
+
+The standard construction is sensitivity-then-noise. The \emph{$\ell_1$-sensitivity} of a query $q$ is $\Delta q = \max_{D, D' \text{ neighbors}} \|q(D) - q(D')\|_1$. The \emph{Laplace mechanism} releases $q(D) + \mathrm{Lap}(\Delta q / \epsilon)$ and is $\epsilon$-DP; the \emph{Gaussian mechanism} releases $q(D) + \mathcal{N}(0, (\Delta q\, \sigma)^2 I)$ with $\sigma \ge \sqrt{2\ln(1.25/\delta)}/\epsilon$ and is $(\epsilon, \delta)$-DP. The proof for the Laplace mechanism takes a few lines: the ratio of Laplace densities at any output $z$ for inputs $q(D)$ and $q(D')$ is at most $\exp(\|q(D) - q(D')\|_1 / (\Delta q / \epsilon)) \le e^\epsilon$ by the sensitivity bound, which is the DP definition with $S = \{z\}$ extended by integration to general $S$. Composition theorems show that running $k$ $\epsilon$-DP mechanisms on overlapping data costs $k\epsilon$ (basic composition) or roughly $\sqrt{k}\,\epsilon$ (advanced composition); this $\epsilon$-accounting is what privacy budgets really track in production.
+
+For deep learning, DP-SGD \citep{abadi2016} is the canonical training algorithm: clip each per-example gradient to a fixed $\ell_2$ norm $C$, add Gaussian noise calibrated to $C$ and the sampling rate, and account for the cumulative privacy cost across steps via the moments accountant. The clip-and-noise step is what makes the per-example influence bounded; the accounting tells the team how much $\epsilon$ has been spent by the end of training.
+
+\textbf{Membership inference as a formal threat model.} Given a deployed model $f$, the membership-inference adversary aims to decide, for a candidate record $x$, whether $x$ was in the training set $D$ used to train $f$. Formally, $D$ is sampled from a population $\mathcal{P}$ of size $N$; the adversary observes the model $f$ (or query access to it), holds candidate $x$, and outputs a guess $\hat m \in \{0, 1\}$ for membership. A baseline guess achieves accuracy $1/2$. The model is said to be \emph{vulnerable} to membership inference at level $\alpha$ if some efficient adversary achieves accuracy $1/2 + \alpha$ on a held-out population. The standard attack from \citet{shokri2017} trains shadow models on auxiliary data drawn from $\mathcal{P}$, observes the per-example loss distribution for in-set versus out-of-set examples, and applies a classifier to that loss signature on the target model's predictions.
+
+The connection to differential privacy is direct: if $f$ is trained with an $\epsilon$-DP mechanism, then for any membership-inference adversary the advantage over the baseline is bounded by $(e^\epsilon - 1)/(e^\epsilon + 1) \le \epsilon$ (when $\epsilon$ is small). Choosing $\epsilon = 1$ caps adversary advantage at about $0.46$; $\epsilon = 0.1$ caps it at about $0.05$. The DP guarantee is therefore the formal version of the empirical defense ``train so that no individual example matters too much''---and the empirical defenses (gradient clipping, output filtering, knowledge distillation) are best evaluated by whether they hold up under shadow-model attacks at the scale the deployment will face.
 
 \subsection{Privacy Risk Lives in the Whole Data Path}
 
@@ -381,9 +428,7 @@ For the course-support assistant, one safety case might center on high-risk stud
 
 The pedestrian detector shows the same pattern in another domain: the hazard is a missed close-range pedestrian; the trigger condition is glare, rain, or unusual night geometry; the mitigation is stress-tested sensing and conservative policy thresholds; the fallback is slowdown or human takeover; the monitoring signal is a rising miss rate under those visibility conditions. The lesson is the same in both domains. Safety is strongest when failure handling is specified before deployment rather than improvised after the first incident.
 
-\begin{evidencebox}
 ``The model is accurate'' is not a safety case. A safety case must say what the dangerous failure is, when it is likely, what reduces it, how the system falls back, and what signal would warn the team that the protection is no longer holding.
-\end{evidencebox}
 
 \subsection{Human Oversight and Fallbacks}
 
@@ -417,9 +462,7 @@ When the cost of a confident mistake is high, do not ask only how to improve the
 Suppose the support assistant answers $82\%$ of incoming questions automatically with very low factual error when it abstains on low-confidence or high-risk cases, but reaches $96\%$ automation only by answering many uncertain messages directly. The second system may look more efficient, yet the first may be far more reliable because its failures are bounded by design. The same principle appears in perception systems that slow down, request takeover, or switch to a conservative fallback when visibility is poor.
 \end{example}
 
-\begin{evidencebox}
 Evidence for safety should include more than nominal test performance. It should include severe-failure analysis, operating thresholds, fallback behavior, monitoring plans, and documentation of what the system is \emph{not} intended to do.
-\end{evidencebox}
 
 \subsection{Reliability Is Sometimes a Reason to Decline Deployment}
 
@@ -431,28 +474,15 @@ Reliability does not end when the model leaves the notebook. Post-deployment mon
 
 For the running support-assistant case, useful monitoring signals include subgroup routing accuracy, retrieval success on current policy passages, escalation miss rate on high-risk messages, citation coverage for grounded answers, and sudden changes in the distribution of incoming questions. For the pedestrian detector, useful signals include weather-conditioned miss rates, takeover frequency, latency spikes, and changes in camera installation geometry.
 
-\begin{thinkingtool}
 \textbf{Monitoring question.} For every major reliability risk named before launch, specify one observable post-launch signal that would warn the team early if that risk were getting worse.
-\end{thinkingtool}
 
 Monitoring also connects directly to rollback and narrowing decisions. If a support assistant begins failing after a policy-site redesign, the right response may be to disable direct answers temporarily and revert to retrieval-plus-escalation. If a perception module shows degraded performance under a new camera firmware version, the right response may be to reduce automation authority until the shift is understood. A reliable system is therefore not just one that works initially. It is one whose failure can be noticed and bounded before harm compounds.
 
 
 
-\section{Why Ethics and Engineering Cannot Be Separated}
-
-One common mistake in AI education is separating ethics from engineering so completely that students discuss harms in one room and technical design in another. That structure quietly teaches the wrong lesson. It implies that fairness, privacy, and safety are optional reflections added after the real work.
-
-A better educational pattern is to show that:
-\begin{itemize}[leftmargin=*]
-\item subgroup metrics are technical measurements,
-\item robustness tests are experimental design,
-\item privacy protection constrains data and training,
-\item safety analysis shapes thresholds and system architecture,
-\item documentation and human oversight are engineering choices.
-\end{itemize}
-
-Ethical reflection remains broader than these tools, but reliability work is one place where ethical obligations become operational engineering practice.
+\begin{decisionbox}
+\textbf{Ethics is engineering work, not commentary on it.} Subgroup metrics are technical measurements, robustness tests are experimental design, privacy protection constrains data and training, safety analysis shapes thresholds and system architecture, and documentation and human oversight are engineering choices. Ethical reflection remains broader than these tools, but reliability work is the place where ethical obligations become operational engineering practice---and treating it as a separate room quietly teaches that fairness, privacy, and safety are optional reflections added after the real work.
+\end{decisionbox}
 
 \section{Chapter Artifact: A Reliability Review Card}
 
@@ -482,32 +512,24 @@ No-deploy condition & What finding would be strong enough to delay, narrow, or r
 \label{tab:reliability-review-card}
 \end{table}
 
-\begin{thinkingtool}
 \textbf{Reliability review card.} Before calling a system reliable, write down the critical slices, shift scenarios, privacy exposures, severe hazards, fallback path, monitoring triggers, and the condition under which deployment should be delayed or refused.
-\end{thinkingtool}
 
 \begin{example}[Filled Reliability Review Card]
 For the course-support assistant, a disciplined review card would name the following. Critical slices: multilingual phrasing, underrepresented language registers, visa-related questions, disability-accommodation requests, and distressed student messages. Shift scenarios: a new semester, revised syllabus wording, new learning-platform terminology, or policy-page reorganization. Spurious cues: course codes or standard-form wording that may not survive outside the training setting. Privacy exposures: student identifiers, health disclosures, and accommodation records. Severe hazards: answering high-risk questions directly when escalation is required. Fallback path: human advising or specialist support teams. Monitoring triggers: subgroup degradation, retrieval failures on policy pages, or rising escalation misses. No-deploy condition: unacceptable failure on high-risk slices, even when overall metrics remain strong.
 \end{example}
 
-\begin{practicalnote}
 The chapter's core artifact is now complete: a reliability review card that names bounded-failure requirements before launch. The remaining sections add optional toolkits and narrower previews that can strengthen particular rows on the card. They do not replace it, and they do not turn reliability into ``whatever extra method was used most recently.''
-\end{practicalnote}
 
 \section{Extension: Interpretability and Explanations}
 \label{sec:xai-toolkit}
 
-\begin{practicalnote}
 The next three sections are extensions for project-level depth; instructors may skip them without losing the chapter's core artifact, the reliability review card.
-\end{practicalnote}
 
 Some deployments benefit from understanding \emph{why} a model behaves as it does, not just \emph{what} it predicts. Interpretability methods---often grouped under ``Explainable AI'' (XAI)---are best treated as an optional toolkit for inspecting suspicious model behavior, auditing spurious cues, or making selected decisions more legible. Several families recur in practice. \emph{SHAP} \citep{lundberg2017shap} attributes per-feature contributions whose sum equals the gap between the model's output and its average prediction. \emph{LIME} fits a simple local model to perturbed inputs and reads importance off its coefficients. \emph{Partial dependence plots} show how the average prediction changes with one feature, marginalizing over the others; they mislead when features are correlated. \emph{Counterfactual explanations} answer ``what is the smallest change that would flip the prediction?'' and are intuitive for stakeholders because they describe actionable changes.
 
 Choose the method to match the audit question: counterfactuals when an actionable change is wanted, PDPs for average behavior, SHAP or LIME for local feature attribution. Constrain counterfactuals to actionable, non-protected features---``if the student were male, the prediction would change'' is a valid counterfactual but an inappropriate recommendation. All four families have well-documented failure modes. Explanations can be unstable: small input perturbations that do not change the prediction can dramatically change the attribution. Post-hoc explanations are not faithful to the underlying model: a LIME approximation does not guarantee the model relied on the same features. Feature importance is statistical association, not causal influence---SHAP values read as causal claims will mislead. And gradient-based saliency maps can be adversarially manipulated to look reasonable while the model relies on something else.
 
-\begin{thinkingtool}
 \textbf{Explanation audit.} Before trusting an explanation method, test it. Does the explanation change when the prediction does not? Do two methods agree? Do domain experts recognize the highlighted features? If the answer to any of these is ``no,'' the explanation needs more scrutiny than the model it is trying to explain.
-\end{thinkingtool}
 
 \emph{Further reading.} \citet{lundberg2017shap} for SHAP, and Christoph Molnar's textbook \emph{Interpretable Machine Learning} for a longer survey of feature attribution, counterfactuals, and their failure modes.
 
@@ -517,6 +539,59 @@ Choose the method to match the audit question: counterfactuals when an actionabl
 Chapter~\ref{ch:probabilistic-models} introduced aleatoric and epistemic uncertainty. For this chapter, uncertainty quantification is not a second core artifact beside the reliability review card. It is a narrower toolkit for strengthening one specific row on the card: the fallback and review path. The deployment-facing question is when uncertainty estimates can justify deferral, abstention, or extra safety margin, and when they merely decorate a weak system with confidence language.
 
 \emph{Conformal prediction} provides distribution-free predictive intervals (or prediction sets) with a finite-sample marginal coverage guarantee under exchangeability between calibration and deployment data \citep{shafer2008,angelopoulos2023}. The intervals are valid regardless of model family or sample size, but they may be wide when the underlying predictor is weak or the target coverage is high, and the marginal guarantee does not transfer automatically to every individual subgroup. Conformal prediction makes uncertainty explicit; it does not make a bad model good.
+
+The split-conformal construction is short enough to state in full. Given a trained predictor $\hat f$ and a held-out calibration set $\{(x_i, y_i)\}_{i=1}^n$ exchangeable with the test point $(x_{n+1}, y_{n+1})$:
+\begin{enumerate}[leftmargin=*,label=(\arabic*)]
+\item Choose a \emph{nonconformity score} $s(x, y)$ that measures how badly $\hat f$ explains the pair $(x, y)$. For regression, $s(x, y) = |y - \hat f(x)|$ is the canonical choice; for classification, $s(x, y) = 1 - \hat p(y \mid x)$ where $\hat p$ is the model's softmax estimate.
+\item Compute the calibration scores $s_i = s(x_i, y_i)$ and let $\hat q$ be the $\lceil (n+1)(1 - \alpha)\rceil / n$ empirical quantile of $\{s_1, \ldots, s_n\}$.
+\item Output the prediction set $\mathcal{C}(x_{n+1}) = \{y : s(x_{n+1}, y) \le \hat q\}$.
+\end{enumerate}
+
+\begin{prereqbridge}
+\emph{Exchangeability} is the only probabilistic assumption the construction needs. A finite collection of random variables is exchangeable if its joint distribution is invariant under any permutation of indices. Independent and identically distributed (i.i.d.) data is exchangeable; the calibration-to-deployment use of conformal prediction needs exchangeability between the held-out calibration set and the test point, which is weaker than i.i.d.\ across all of time but stronger than ``the test data may come from anywhere.''
+\end{prereqbridge}
+
+The construction enjoys a finite-sample coverage guarantee. If $(x_1, y_1), \ldots, (x_{n+1}, y_{n+1})$ are exchangeable, then
+\[
+\Pr\bigl(y_{n+1} \in \mathcal{C}(x_{n+1})\bigr) \;\ge\; 1 - \alpha,
+\]
+and the argument is one paragraph. By exchangeability, the rank of $s_{n+1}$ among the $n+1$ scores $\{s_1, \ldots, s_n, s_{n+1}\}$ is uniform on $\{1, \ldots, n+1\}$. The event $y_{n+1} \in \mathcal{C}(x_{n+1})$ is equivalent to $s_{n+1} \le \hat q$, which is equivalent to $s_{n+1}$ ranking among the smallest $\lceil (n+1)(1-\alpha)\rceil$ of the combined scores. That probability is exactly $\lceil (n+1)(1-\alpha)\rceil / (n+1) \ge 1 - \alpha$. The argument uses no assumption about the data distribution, no assumption about the predictor, and no asymptotics: it holds at the smallest sample size, for any $\hat f$, on any task where the calibration-to-test exchangeability assumption is defensible. The price is that the guarantee is \emph{marginal}---averaged over the joint distribution of $(x, y)$. It does not say the coverage rate on any one slice is $1 - \alpha$, and conditional coverage (slice-by-slice) requires stronger machinery (Mondrian conformal, group-conditional methods, or distribution-aware constructions).
+
+\begin{codeexample}
+import numpy as np
+
+def split_conformal_regression(model, X_cal, y_cal, X_test, alpha=0.1):
+    """Return prediction intervals with marginal coverage at least 1 - alpha."""
+    # 1. Nonconformity scores on the calibration set: absolute residuals.
+    cal_scores = np.abs(y_cal - model.predict(X_cal))
+    # 2. The conformal quantile q_hat (ceil(n+1)(1-alpha) / n).
+    n   = len(cal_scores)
+    k   = int(np.ceil((n + 1) * (1 - alpha)))
+    q_hat = np.partition(cal_scores, k - 1)[k - 1]
+    # 3. Symmetric interval around the point prediction.
+    y_hat = model.predict(X_test)
+    return y_hat - q_hat, y_hat + q_hat
+
+# Toy demonstration: with alpha = 0.1, empirical coverage approaches 0.9.
+class Toy:
+    def predict(self, X): return X[:, 0] * 2 + 1
+rng   = np.random.default_rng(0)
+x     = rng.uniform(0, 1, size=(2000, 1))
+y     = 2 * x[:, 0] + 1 + 0.3 * rng.standard_normal(size=2000)
+X_cal, X_te = x[:1000], x[1000:]
+y_cal, y_te = y[:1000], y[1000:]
+lo, hi = split_conformal_regression(Toy(), X_cal, y_cal, X_te, alpha=0.10)
+coverage = ((y_te >= lo) & (y_te <= hi)).mean()
+print(f"empirical coverage = {coverage:.3f}")   # close to 0.90
+\end{codeexample}
+
+\begin{example}[A Worked Conformal Interval Width]
+Take the toy code above with $\alpha = 0.10$, $n = 1000$ calibration points, and Gaussian noise $\varepsilon \sim \mathcal{N}(0, 0.3^2)$ in the data. The nonconformity score for a calibration point is $|y_i - \hat y_i| = |\varepsilon_i|$, which has a folded-Gaussian distribution; its theoretical $\lceil (n+1)(1-\alpha)\rceil / n$ empirical quantile sits near the $90\%$ quantile of $|\mathcal{N}(0, 0.09)|$, which is $0.3 \cdot \Phi^{-1}(0.95) \approx 0.3 \cdot 1.645 = 0.494$. So $\hat q \approx 0.494$ and the prediction interval is $[\,\hat y(x) - 0.494,\; \hat y(x) + 0.494\,]$ of total width $\approx 0.99$ --- the same number a textbook would give for a parametric two-sided $90\%$ interval on a $\mathcal{N}(0, 0.3^2)$ residual. The match is not an accident: when the model is well-calibrated and the residual distribution is symmetric and identically distributed across $x$, conformal recovers the parametric answer. The empirical coverage printed by the code, near $0.90$, is what conformal guarantees \emph{without} assuming Gaussian residuals. If the noise were heavy-tailed or heteroscedastic, the parametric interval would mis-cover but conformal would not; the price would just be a different $\hat q$ and a wider interval where the residuals are wider.
+\end{example}
+
+\begin{failurebox}
+\textbf{Marginal coverage is not conditional coverage.} The conformal guarantee $\Pr(y \in \mathcal{C}(x)) \ge 1 - \alpha$ averages over the joint distribution of $(x, y)$. It does \emph{not} say the coverage rate is $1 - \alpha$ on any specific subgroup. A 90\% conformal interval can perfectly satisfy its marginal guarantee while covering 99\% of cases in one demographic, 95\% in a second, and 70\% in a third --- if the model's residuals are larger in the third group, the same nominal interval just misses the truth more often there. In high-stakes deployments, marginal coverage by itself is therefore not a fairness or reliability guarantee; the third group is being failed in a way the average hides. The conditional-coverage variants exist to address this gap: \emph{Mondrian conformal} fits a separate calibration quantile per subgroup, \emph{group-conditional} methods bound coverage per protected group, and \emph{adaptive} methods scale interval width by a per-input difficulty estimate. The cost is usually wider intervals where the model is less reliable --- which is the correct behaviour. Before deploying conformal intervals to an audience with meaningful subgroup structure, slice the empirical coverage by the same dimensions the rest of the reliability review uses; uniform marginal coverage with sharply non-uniform conditional coverage is one of the most subtle failure modes in this space.
+\end{failurebox}
 
 A simpler signal works in many systems: \emph{ensemble disagreement}. Train several models with different initializations and use the spread of their predictions as a real-time indicator. Below a chosen threshold, serve the prediction automatically; above the threshold, defer to human review or a safer fallback. The threshold-crossing rate over time is itself useful as a drift indicator. For example, a campus pedestrian detector running an ensemble might show variance averaging $0.02$ in normal daytime conditions and spiking sharply during a heavy rainstorm; that spike is a deployment-time cue to switch to a more conservative policy rather than evidence the model has improved or worsened on average.
 
@@ -585,11 +660,22 @@ These mistakes are surface forms of the chapter's main enemy: confusing a good a
 
 \section{Looking Ahead}
 
-This chapter treated reliability as an engineering discipline across the full pipeline. The final chapter asks the launch question that follows from that discipline. Once contracts, monitoring, fallback behavior, queue limits, and ownership are included, is the whole system actually ready to operate as a real service?
+This chapter treated reliability as a pipeline property and as a written bounded-failure argument. Subgroup gaps, robustness, privacy, safety, and security are different views on one question: does the system stay within stated bounds for the people, conditions, harms, and motivated attackers that actually matter?
 
-\section*{Chapter Summary}
+The next chapter asks the launch question that follows. Once contracts, monitoring, fallback behavior, queue limits, and ownership are included, is the whole system actually ready to operate as a real service?
 
-Reliability is a pipeline property, not a model property. Subgroup evaluation, robustness testing, privacy review, safety cases, fallback design, and monitoring are different views of one question: does the system stay within acceptable bounds for the people, conditions, and harms that matter in deployment? The chapter's pedagogical center is the reliability review card, which gathers those views into a single bounded-failure launch check. Interpretability methods such as SHAP, LIME, and counterfactual explanations form an optional inspection toolkit with well-documented failure modes: explanations can be unstable, unfaithful, or confused with causation. Uncertainty quantification (conformal prediction, ensemble disagreement) is a narrower toolkit for making fallback, deferral, and abstention rules more disciplined. Security and abuse extend the same bounded-failure discipline to adversarial pressure: data and feedback poisoning, adversarial examples, model extraction, membership inference, and prompt injection may require their own threat cards when that pressure is in scope. The correct outcome is sometimes redesign, stronger constraint, a narrower deployment claim, or refusal to launch.
+Chapter~\ref{ch:models-systems} treats that question with the same discipline this chapter applied to reliability: the readiness brief is a written argument with named owners and named no-launch conditions, not a status meeting.
+
+\begin{chaptersummary}
+\item Reliability is a property of the pipeline, not the trained checkpoint. Data collection, labeling, representation, threshold choice, interface, monitoring, and rollback all participate in the failure modes that this chapter named.
+\item Bias is a structured failure mode of the whole system, and the harm taxonomy---allocation, quality-of-service, representation, privacy, and safety harm---comes before metric choice. ``Which fairness metric?'' is the wrong first question.
+\item Subgroup evaluation requires more than per-group accuracy. The right artifact is a small dashboard that keeps sample size, task metric, calibration, escalation rate, and severe-failure count visible together, slice by slice.
+\item Robustness is not natural smoothness. A system that holds up under noise, lighting, or phrasing change can still fail under deliberate adversarial pressure; security needs its own threat model and its own evaluation card.
+\item Privacy is a modeling constraint, not only a policy issue. Memorization, membership inference, and inferential leakage are upstream design questions that change which representations and which training procedures even count as candidates.
+\item Safety is more than accuracy on hard cases. A safety case names one severe hazard, its trigger, its mitigation, its fallback, and its monitoring signal---and selective automation accepts only the cases the system is allowed to act on without immediate human review.
+\item Interpretability methods (SHAP, LIME, counterfactual explanations) are diagnostic toolkits, not certifications. Their failure modes---instability, unfaithfulness, and the confusion of association with causation---are well documented and must be acknowledged before their output is shown to a decision-maker.
+\item Refusing to deploy is sometimes the correct reliability decision. The reliability review card exists to make that refusal a defensible written argument rather than an opinion.
+\end{chaptersummary}
 
 \begin{studyquestions}
 \item Why should bias be treated as a property of the full pipeline rather than only the model?

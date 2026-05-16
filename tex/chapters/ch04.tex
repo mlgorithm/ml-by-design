@@ -156,17 +156,13 @@ G = 1 - \sum_{k} p_k^2,
 \]
 where $p_k$ is the fraction of examples in the node that belong to class $k$. A pure node containing only one class has impurity zero. Mixed nodes have higher impurity.
 
-\begin{prereqbridge}
 If the impurity formula looks unfamiliar, the idea is simple: a good split creates children that are more homogeneous than the parent. The formula scores that intuition.
-\end{prereqbridge}
 
-\begin{mathlens}
 For binary classification, if the fraction of positive examples in a node is $p$, then the Gini impurity becomes
 \[
 G = 1 - p^2 - (1-p)^2 = 2p(1-p).
 \]
 This is 0 when $p=0$ or $p=1$, and largest at $p=0.5$. That is why pure nodes feel ``finished'' and evenly mixed nodes feel maximally impure.
-\end{mathlens}
 
 For regression trees, the objective is analogous but numeric: each split reduces variance or squared error in the target values within each child node. The recursive structure stays the same even though the leaf predictions differ.
 
@@ -493,13 +489,22 @@ Think of it this way. One panelist's opinion about whether a student is at risk 
 \label{fig:ensemble-variance-reduction}
 \end{figure}
 
-\begin{mathlens}
 Suppose $T$ trees each produce an independent prediction with variance $\sigma^2$. The variance of their average is
 \[
 \operatorname{Var}\!\left(\frac{1}{T}\sum_{t=1}^{T} \hat{y}_t\right) = \frac{\sigma^2}{T}.
 \]
 Averaging $T$ uncorrelated estimators reduces variance by a factor of $T$ while leaving the expected prediction unchanged. Trees are not perfectly uncorrelated in practice, so the gain is smaller than $1/T$, but the direction is the same: more diverse trees, lower variance.
-\end{mathlens}
+
+\begin{advancednote}
+\textbf{Why averaging is not enough: the correlated-tree variance bound.} The clean $\sigma^2/T$ formula above assumes the trees are mutually independent, which is rarely true: bootstrap samples overlap, and trees fit on similar data tend to make similar mistakes. Let the $T$ trees each have variance $\sigma^2$ and average pairwise correlation $\rho \in [0,1]$. A direct calculation gives
+\[
+\operatorname{Var}\!\left(\frac{1}{T}\sum_{t=1}^{T} \hat{y}_t\right) = \rho\,\sigma^2 + \frac{(1-\rho)\,\sigma^2}{T}.
+\]
+
+The operational consequence is sharp. As $T\to\infty$ the variance does \emph{not} vanish; it asymptotes to $\rho\sigma^2$. Adding more trees beyond a point cannot push the ensemble variance below this floor. The only way to drive variance down is to reduce $\rho$---to decorrelate the trees themselves. This is the formal reason random forests combine two sources of randomness rather than one: bootstrap resampling (bagging) alone leaves trees too correlated because they still see most of the same data and split on the same dominant features; the random feature subset at each split is what knocks $\rho$ further down. Each device makes the trees less similar, and each fraction of $\rho$ removed shows up directly in the variance bound.
+
+For an interested reader, the derivation is one line: $\operatorname{Var}(\tfrac{1}{T}\sum_t \hat{y}_t) = \tfrac{1}{T^2}\bigl[\sum_t \operatorname{Var}(\hat{y}_t) + \sum_{i\neq j}\operatorname{Cov}(\hat{y}_i,\hat{y}_j)\bigr] = \tfrac{1}{T^2}\bigl[T\sigma^2 + T(T-1)\rho\sigma^2\bigr]$, which simplifies to the displayed expression.
+\end{advancednote}
 
 \paragraph{Diversity is what makes averaging work.} The variance-reduction argument rests on one critical assumption: the trees must not all make the same mistakes. If every tree in the ensemble produces the same error on the same examples, averaging changes nothing. The average of ten identical wrong answers is still a wrong answer.
 
@@ -575,9 +580,7 @@ A random forest trains many trees on different resampled subsets of the data and
 
 The main idea is variance reduction. A single tree may overreact to quirks of the sample, while many diverse trees averaged together are more stable. Random forests often perform very well on tabular data for this reason.
 
-\begin{advancednote}
 Random forests also offer an appealing internal-validation intuition through out-of-bag examples. Because each tree is trained on a bootstrap-style resample, some training examples are left out of that tree's fit. Those left-out examples support a rough internal check without a separate validation pass. It is not a replacement for careful evaluation, but it is a useful diagnostic idea.
-\end{advancednote}
 
 \begin{codeexample}[caption={From scratch: the prediction step of a random forest}]
 def majority_vote(votes):
@@ -619,7 +622,7 @@ NOAA-supported work on storm-scale severe-weather guidance has compared tree ens
 
 Tree ensembles keep the branching story and reduce its instability. The next family addresses a different situation: the representation already makes the classes look roughly separable, and the main question is how to place a robust boundary rather than how to build region-specific rules.
 
-\section{Margin-Based Classification: Support Vector Machines}
+\section{Margin-Based Classification: Support Vector Machines (Extension)}
 
 Trees handle region-specific logic. Nearest neighbors handle local similarity. Margin-based classification handles a different geometric story: the classes already look roughly linearly separable in the current representation, and the best separator is the one that stays as far as possible from the nearest training points. SVMs are therefore the geometric continuation of the global-separator idea from the linear baseline, with a stricter robustness preference.
 
@@ -629,7 +632,12 @@ A support vector machine is a classifier that chooses a separating hyperplane wi
 
 The geometric idea is simple. Many separating lines may correctly classify the same data; an SVM prefers the line most robust to small perturbations. The examples with active margin constraints are the \emph{support vectors}---the points that actually define the margin.
 
-\begin{mathlens}
+\begin{prereqbridge}
+The math below uses the convention $y_i \in \{-1, +1\}$ instead of the $\{0, 1\}$ used in logistic regression. The reason is geometric: with $\pm 1$ labels, the product $y_i \cdot f(x_i)$ is positive when the prediction agrees with the label and negative when it disagrees, so ``margin'' (signed distance from the boundary) becomes a single number to maximize.
+\end{prereqbridge}
+
+The optimization block below states the SVM objective in both constrained and hinge-loss form, and the following theorem shows the two are equivalent under canonical scaling. On a first read the operational summary is enough: an SVM picks the separator that pushes the closest training points as far from the boundary as possible, controlled by a tuning parameter $C$. The formal block is for readers who want to see why ``maximum margin'' and ``minimum-norm separator'' are the same problem.
+
 For binary labels \(y_i \in \{-1,+1\}\) and a linear score \(f(x)=w^\top x+b\), the hard-margin SVM solves
 \[
 \begin{aligned}
@@ -649,7 +657,6 @@ This is equivalent to minimizing the unconstrained hinge-loss objective:
 \frac{1}{2}\|w\|_2^2 + C\sum_i \max(0, 1-y_i f(x_i)).
 \]
 The first term prefers a wide margin. The second term is the \emph{hinge loss}, weighted by \(C\): it is zero when an example is safely beyond the margin and grows linearly when that example falls inside the margin or on the wrong side of the boundary.
-\end{mathlens}
 
 \begin{theorem}[Maximum margin is minimum norm under canonical scaling]
 If a separating hyperplane is written in canonical scaling so that
@@ -692,11 +699,19 @@ This is a subgradient-style sketch for intuition, not a production SVM solver. I
 
 An SVM fits when the current representation already makes the classes look close to linearly separable and you want a robust, wide-margin boundary that will not flip under small perturbations. A tree or tree ensemble is the better choice when the task is really region-specific threshold logic or when different subgroups obey different rules. If the geometry itself is poor, learned representations come first: an SVM cannot invent missing features or repair a bad embedding.
 
+\textbf{The dual and the kernel trick (Extension).} The primal SVM solves for the weight vector $w$ directly. A classical alternative is the \emph{dual} formulation. Introducing Lagrange multipliers $\alpha_i \ge 0$ for the margin constraints and eliminating $w$ and $b$ via the KKT optimality conditions transforms the hard-margin problem into
+\[
+\max_{\alpha \ge 0} \quad \sum_i \alpha_i - \tfrac{1}{2}\sum_{i,j} \alpha_i \alpha_j\, y_i y_j\, (x_i^\top x_j) \quad \text{subject to } \sum_i \alpha_i y_i = 0,
+\]
+with the soft-margin version adding box constraints $\alpha_i \le C$. The optimal weight is $w^\star = \sum_i \alpha_i^\star y_i x_i$, and only the points with $\alpha_i^\star > 0$ (the support vectors) contribute. Two things follow. First, the dual's complexity scales with the number of examples, not the dimension---useful when $d \gg n$. Second, the data appears only through inner products $x_i^\top x_j$, which opens the door to the kernel trick.
+
+The \emph{kernel trick} replaces every inner product $x_i^\top x_j$ by $K(x_i, x_j) = \phi(x_i)^\top \phi(x_j)$ for some feature map $\phi$ into a (possibly very high-dimensional) space. The SVM then learns a linear separator in $\phi$-space, which corresponds to a nonlinear boundary in the original input space, \emph{without} ever computing $\phi(x)$ explicitly. The usual choices are the polynomial kernel $K(x, x') = (1 + x^\top x')^p$ and the RBF (Gaussian) kernel $K(x, x') = \exp(-\gamma \|x - x'\|_2^2)$. Mercer's theorem characterizes which symmetric functions $K$ are valid inner products in some feature space: $K$ must be positive semi-definite, meaning the Gram matrix $K_{ij} = K(x_i, x_j)$ is PSD for every finite sample. The same trick underlies kernel ridge regression, kernel PCA, and Gaussian processes. For this book the operational summary is enough: kernels let a linear method see nonlinear structure by changing what ``inner product'' means.
+
 \begin{failurebox}
 An SVM is not a replacement for representation learning. If the problem needs many local rules, structured interactions, or a better geometry before any separator makes sense, a tree-based model or a learned representation is the more honest next step.
 \end{failurebox}
 
-\section{Naive Bayes: Probability as Structure (Preview)}
+\section{Naive Bayes: Probability as Structure (Preview) (Extension)}
 \label{sec:naive-bayes-ch4}
 
 Trees exploit region-specific logic. Ensembles reduce variance by averaging. SVMs find wide-margin boundaries. Naive Bayes adds one more structural diagnosis: sometimes the useful baseline is not a more flexible boundary but a simple model of what examples from each class tend to look like.
@@ -748,13 +763,9 @@ The crucial choice is not only the number $k$ but the meaning of distance. Eucli
 \]
 This formula is easy to write and dangerous to use blindly. A feature on a much larger scale than the others can dominate the distance. Irrelevant features can drown out useful ones. If the representation does not place similar examples near one another, the nearest-neighbor method has little chance to succeed.
 
-\begin{prereqbridge}
 For nearest-neighbor methods, the distance function is part of the model, not an afterthought. ``What counts as near?'' is as important as ``what are the labels?''
-\end{prereqbridge}
 
-\begin{practicalnote}
 Before applying any distance-based method to multi-feature data, plot at least the first two or three features in a scatter plot, colored by class label. Even a low-dimensional slice can reveal whether classes overlap, cluster separately, or sit on a continuum---and whether any separation is linear or requires local similarity to capture.
-\end{practicalnote}
 
 \subsection{Worked Example: Local Similarity in Student Profiles}
 
@@ -778,7 +789,6 @@ D & 22{,}000 & 5 & risk \\
 
 Under raw Euclidean distance, the nearest examples are A and B because the click count dominates the geometry, so the query looks safe. But if clicks are rescaled into units of tens of thousands before measuring distance, the late-submission difference matters much more, and the nearest neighbors become the risky students C and D. The predicted label flips even though the labels and raw data did not change.
 
-\begin{mathlens}
 Using the query \((51{,}000,5)\), the raw distances are approximately
 \begin{align*}
 d(A) &\approx 1000.0, & d(B) &\approx 1000.0, \\
@@ -790,7 +800,6 @@ d(A) &\approx 5.00, & d(B) &\approx 4.00, \\
 d(C) &\approx 3.26, & d(D) &\approx 2.90.
 \end{align*}
 The nearest-neighbor order changes because the geometry changed. In $k$-NN, scaling is part of the model, not a cosmetic preprocessing choice.
-\end{mathlens}
 
 \begin{table}[t]
 \centering
@@ -828,6 +837,8 @@ compare the returned label and distance with the scaled version
 \end{codeexample}
 
 The snippet is small on purpose. It exposes the whole method: store the examples, measure distance to each one, and borrow the label of the nearest case. Later libraries may optimize this idea, but they should not hide it.
+
+Brute-force $k$-NN training is $O(1)$: store the dataset. The work moves to prediction. For a single query against $n$ training points in $d$ dimensions, computing all distances takes $O(nd)$ time, and selecting the $k$ nearest costs $O(n)$ with a partial sort or a heap, for $O(nd + n)$ overall. This scales poorly when $n$ is in the millions, which is why production systems use approximate nearest-neighbor structures (KD-trees in low $d$, ball trees, locality-sensitive hashing, or HNSW graphs) that trade a small recall loss for $O(\log n)$ or $O(\sqrt{n})$ query time. The exact-search version is fine for tens of thousands of points; beyond that, the linear scan becomes the bottleneck. Memory is $O(nd)$ to hold the training set---another reason that $k$-NN, despite the absence of a ``training'' procedure, is not a small-footprint model.
 
 \begin{figure}[t]
 \centering
@@ -904,13 +915,9 @@ As the number of features grows, distances become less informative. Many points 
 \label{fig:distance-concentration}
 \end{figure}
 
-\begin{advancednote}
 Nearest-neighbor methods are sometimes called \emph{nonparametric} because they do not compress the training data into a small fixed set of learned parameters the way linear models do. The flexibility is attractive, but it shifts the burden onto representation quality and data density. In high dimensions, good neighbors are hard to find unless the representation has already learned a useful geometry.
-\end{advancednote}
 
-\begin{complexitylens}
 Nearest-neighbor methods are cheap to ``train'' because they mostly store the data, but they can be expensive at prediction time because each query may need to be compared with many stored examples. Trees have the opposite profile: more work during fitting, faster prediction once the structure is built.
-\end{complexitylens}
 
 The warning also creates a natural bridge forward. Later chapters on learned representations matter partly because they improve the geometry itself. A poor representation makes neighborhood methods brittle. A better representation makes geometry useful again.
 
@@ -949,7 +956,6 @@ repeat:
 until assignments stop changing
 \end{codeexample}
 
-\begin{mathlens}
 Why is the recomputed center the mean? Suppose one cluster contains points \(x_1,\ldots,x_m\), and we want one center \(c\) that minimizes the within-cluster squared error
 \[
 J(c)=\sum_{i=1}^m \|x_i-c\|_2^2.
@@ -963,7 +969,6 @@ Setting the gradient to zero gives
 c=\frac{1}{m}\sum_{i=1}^m x_i.
 \]
 The mean is not an arbitrary convention. It is the point that minimizes squared distance to the assigned cluster members. This also explains the method's geometric bias: because the mean minimizes squared distance, k-means prefers compact, roughly spherical clusters under Euclidean geometry.
-\end{mathlens}
 
 k-means is appealing because it is simple and fast, but its assumptions are strong. It works best when clusters are roughly compact and separable under the chosen distance metric. If the structure is elongated, nested, imbalanced, or highly nonconvex, k-means can mislead badly.
 
@@ -1043,9 +1048,7 @@ A sports-analytics clustering exercise is a good reminder that the hard part is 
 Clusters are model-dependent summaries, not discovered natural kinds. Treating them as objective human categories is a frequent source of overconfident claims in applied machine learning, especially when the analysis moves from exploration to policy.
 \end{failurebox}
 
-\begin{claimdefense}
 From clustering alone, the safe claim is that a particular representation, metric, and clustering rule produce a grouping pattern that may be analytically useful. The unsafe claim is that the groups are natural human types or policy categories.
-\end{claimdefense}
 
 \subsection{Choosing K}
 
@@ -1111,9 +1114,7 @@ An e-commerce team clusters purchasing histories into five groups and labels the
 
 The right habit is to treat any cluster as provisional until three questions are answered. Is the partition stable under small perturbations of the data and initialization? Does it support the operational decisions it will be used to justify? And what external evidence would be needed before a causal or social interpretation could be defended?
 
-\begin{thinkingtool}
 \textbf{Cluster naming discipline.} Describe clusters by their measurable properties first---average feature values, distinguishing coordinates, sample size. Name them with social or causal labels only after external validation. A cluster labeled ``high-risk'' that is defined only geometrically is not a validated risk group; it is a starting hypothesis.
-\end{thinkingtool}
 
 \section{Dimensionality Reduction as a Lens}
 
@@ -1123,7 +1124,8 @@ PCA is best taught here not as a competitor to predictive methods but as a lens:
 
 PCA is scale-sensitive. A feature measured in much larger numerical units can dominate the first principal component. Standardize features first when the units are not already comparable. On the shared student-profile cloud, the first component mainly tracks raw clicks unless the features are standardized; after standardization, it can reflect the click-versus-lateness tradeoff.
 
-\begin{mathlens}
+The block below makes the headline ``PCA picks directions of maximum variance, which is the same thing as picking directions of smallest reconstruction error'' formal. On a first read, that headline plus the projection picture from Mathematical Bridge~I is enough; the calculation is for readers who want to see why the two phrasings are not separate criteria.
+
 For centered data \(x_1,\ldots,x_n\), a one-dimensional PCA direction \(u\) with \(\|u\|_2=1\) can be found by maximizing the projected variance
 \[
 \frac{1}{n}\sum_{i=1}^n (x_i^\top u)^2.
@@ -1137,7 +1139,6 @@ because pointwise
 \left\|x_i-(x_i^\top u)u\right\|_2^2=\|x_i\|_2^2-(x_i^\top u)^2,
 \]
 so the two expressions differ only by the additive constant \(\tfrac{1}{n}\sum_i \|x_i\|_2^2\), which does not depend on \(u\). Maximizing the first is therefore equivalent to minimizing the second, and PCA is choosing the direction that keeps the largest amount of variation after compression.
-\end{mathlens}
 
 \begin{figure}[t]
 \centering
@@ -1196,9 +1197,7 @@ Projecting back onto the principal direction gives
 PCA keeps the dominant diagonal component of the point and discards the residual orthogonal variation. That is the precise sense in which PCA compresses: it preserves some directions and throws away others.
 \end{example}
 
-\begin{advancednote}
 The unsupervised landscape is broader than k-means and PCA. DBSCAN and hierarchical clustering are often better when cluster shape or nested structure matters; t-SNE and UMAP are mainly visualization tools. They can be highly informative, but they should not be treated as truth machines.
-\end{advancednote}
 
 \begin{table}[t]
 \centering
@@ -1265,9 +1264,7 @@ Interpretation boundary & What the method's output does and does not justify cla
 \textbf{Interpretation boundary.} A tree's discovered split (``hardship $\wedge$ deadline'') describes a regularity in the available data; it does not justify a causal claim about which combination triggers urgency. The next step if the tree wins is a small targeted human review of flagged messages to verify the rule is meaningful, not coincidental.
 \end{example}
 
-\begin{thinkingtool}
 \textbf{Structure diagnosis sheet.} Before changing model families, write down what the baseline missed, what structural hypothesis now seems plausible, why a tree, neighbor, or unsupervised method matches that hypothesis, and what evidence would justify the move.
-\end{thinkingtool}
 
 \section{Common Mistakes with Structural Methods}
 

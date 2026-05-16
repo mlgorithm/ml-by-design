@@ -11,13 +11,9 @@ Most students first meet linear algebra as a list of operations: add vectors, mu
 
 This chapter is therefore not a miniature mathematics course but a reading course in the mathematical objects that later chapters will use constantly. If you can look at a vector or matrix and ask, ``what real thing does each row, column, or coordinate mean here?'' the mathematics is already doing its job.
 
-\begin{problemsolvinglens}
 Before asking which model family to use, ask how one case is represented, what each coordinate means, what counts as similarity, and what a weighted combination of the coordinates would mean in plain language.
-\end{problemsolvinglens}
 
-\begin{thinkingtool}
 \textbf{Representation audit.} Before blaming or praising a model, ask four questions: what counts as one example, what each coordinate means, what information has already been discarded, and what notion of similarity the representation makes easy.
-\end{thinkingtool}
 
 Keep the chapter artifact in view from the start. The later sections introduce shapes, weighted scores, geometry, and projection, but the payoff is a short \emph{representation card}: what one example is, what the coordinates mean, what geometry matters, and what a linear score would mean in plain language.
 
@@ -75,9 +71,7 @@ where the coordinates mean:
 
 The notation matters less than the interpretation. The vector is not just ``four numbers.'' It is one student expressed through four chosen coordinates. A different representation choice would give a different vector and therefore a different modeling problem.
 
-\begin{prereqbridge}
 Read \(x_j\) as ``the \(j\)-th coordinate of the represented example.'' If the notation feels formal, translate it back into task language right away: attendance, quiz average, missed assignments, or inactivity.
-\end{prereqbridge}
 
 Two practical habits begin here. First, order matters. Once the first coordinate means attendance and the second means quiz average, we cannot silently swap them later. Second, scale matters. A coordinate measured from \(0\) to \(1000\) behaves very differently from one measured from \(0\) to \(1\). Later chapters on nearest neighbors, regularization, and optimization all depend on this simple point.
 
@@ -174,9 +168,7 @@ Inactivity score & \(0.35\) & \(1.8\) & \(0.630\) \\
 \noindent\textbf{Reading rule.} Multiply each coordinate by how much it matters, then add the contributions.
 \end{center}
 
-\begin{mathlens}
 \textbf{Why the dot product appears everywhere.} A dot product is a weighted sum, and weighted sums are the simplest way to combine many weak signals into one score. Linear regression, logistic regression, attention scores, nearest-prototype methods, and many neural-network layers all reuse this structure. The later models are richer, but the weighted-sum idea never really leaves.
-\end{mathlens}
 
 \section*{From One Example to Many: Matrices As Datasets}
 
@@ -226,7 +218,6 @@ Xw =
 
 Now the same weighted rule has produced one score for each student.
 
-\begin{mathlens}
 If the rows of \(X\) are examples \(x_1^\top,\ldots,x_n^\top\), then
 \[
 Xw=
@@ -238,7 +229,6 @@ x_n^\top w
 \end{bmatrix}.
 \]
 So matrix-vector multiplication is just repeated dot products, one row at a time. The matrix is not doing a different kind of math; it is packaging the same linear rule so it can be applied to many examples at once.
-\end{mathlens}
 
 \begin{codeexample}
 def linear_scores(X, w, b=0.0):
@@ -254,6 +244,22 @@ def linear_scores(X, w, b=0.0):
 \end{codeexample}
 
 The point of this tiny function is not software convenience. It is to make the mechanism visible. A matrix is not mystical: it is a compact way to store many represented cases, and matrix multiplication applies one structured computation to every row.
+
+\begin{codeexample}[caption={From scratch: matrix--matrix product with explicit shape assertions}]
+def matmul(A, B):
+    n, k = len(A), len(A[0])
+    k2, m = len(B), len(B[0])
+    if k != k2:
+        raise ValueError(f"shape mismatch: {n}x{k} @ {k2}x{m}")
+    C = [[0.0] * m for _ in range(n)]
+    for i in range(n):
+        for j in range(m):
+            for p in range(k):
+                C[i][j] += A[i][p] * B[p][j]
+    return C
+\end{codeexample}
+
+Three loops, no library magic. The outer two loops walk every output cell; the inner loop is the dot product of row $i$ of $A$ with column $j$ of $B$. The shape assertion at the start is the most common bug-catcher in matrix code: most ``broken model'' issues in a layered network are silent shape mismatches that this assertion would have raised immediately. Numpy's \verb|A @ B| is the same operation, vectorized and parallelized; the loops above are just the literal definition.
 
 \begin{example}[Matrix-Vector Product by Hand]
 Consider three students, each described by two features: attendance rate and number of late submissions. The design matrix and weight vector are
@@ -437,7 +443,6 @@ Projection is the cleanest first fitting intuition. When the world is more compl
 
 That is the useful least-squares picture. A linear model does not win by capturing every detail of reality; it wins when the best projection into the linear family is already good enough for the task.
 
-\begin{mathlens}
 For the simplest projection onto a one-dimensional direction \(u\) with \(\|u\|_2=1\), the fitted point is
 \[
 \hat{x}=(x^\top u)u.
@@ -447,23 +452,10 @@ The residual is \(r=x-\hat{x}\). The key geometric fact is
 r^\top u=0,
 \]
 so the leftover error is orthogonal to the direction we kept. In least squares, this is the meaning of ``best fit'': after projection, no remaining error points along the allowed direction.
-\end{mathlens}
 
-\begin{mathlens}
-A projection map is itself a linear map. If \(u\) is a unit direction, then
-\[
-P_u(x)=(u^\top x)u
-\]
-keeps only the component of \(x\) that lies along \(u\). Applying it twice changes nothing:
-\[
-P_u(P_u(x))=P_u(x).
-\]
-That is the algebraic version of geometric fitting: once a vector has been projected onto the allowed line, projecting again cannot improve it further.
-\end{mathlens}
+A projection map is itself a linear map, and it is \emph{idempotent}: applying \(P_u\) once or twice gives the same answer, $P_u(P_u(x)) = P_u(x)$. Idempotence is the algebraic version of ``best fit under the allowed family''---once a vector has been projected onto the allowed line, projecting again cannot move it further. The same fact returns under a different name in PCA, in least-squares hat matrices, and in any setting where ``the best we can do inside a restricted class'' is computed.
 
-\begin{advancednote}
 Students often hear that linear models are ``simple'' and stop there. A better statement is that linear models define a restricted hypothesis class with very transparent geometry. The restriction is sometimes a weakness, but it is also what makes the class interpretable, diagnosable, and often surprisingly competitive.
-\end{advancednote}
 
 \begin{example}[Projection in One Dimension]
 Suppose we observe three data points \(y = [2, 4, 6]\) and we want to fit a constant model---a single number \(c\) that stands in for all three values. Which constant is best?
@@ -541,9 +533,7 @@ The XOR pattern is not a contrived puzzle. It is the general situation where the
 
 This is the geometric reason interaction features, kernel methods, tree splits, and neural nonlinearities matter. Each extends the expressible boundary beyond a flat hyperplane: trees by recursive axis-aligned cuts, kernel methods by implicitly working in a richer feature space, and neural networks by composing nonlinear transformations.
 
-\begin{advancednote}
 The formal study of which problems linear models can solve falls under the theory of VC dimension and linear dichotomies. For this book, the geometric picture is enough: a hyperplane is a powerful tool when the relevant decision boundary is roughly flat in the feature space, and a poor tool when the boundary requires feature interactions.
-\end{advancednote}
 
 \section*{Low-Dimensional Structure}
 
@@ -551,21 +541,11 @@ Real datasets often have many coordinates but fewer genuinely important directio
 
 The practical lesson is not that every dataset can be compressed aggressively. It is that high ambient dimension does not always mean high effective complexity. This intuition later supports PCA, embeddings, representation learning, and transfer learning.
 
-\begin{mathlens}
-A projection onto an allowed subspace is a linear map. For a unit direction \(u\), define
-\[
-P_u(x)=(u^\top x)u.
-\]
-Then \(P_u\) keeps only the component of \(x\) that lies along \(u\). Applying it twice does nothing new:
-\[
-P_u(P_u(x))=P_u(x).
-\]
-That idempotence is the algebraic version of geometric compression: once the allowed direction has been kept, projecting again does not change the answer.
-\end{mathlens}
+The same projection picture from the previous section reappears under a different name here. There, $P_u(x) = (u^\top x)u$ was the closest fit inside a one-dimensional model class. Here it is the closest \emph{compression} into a one-dimensional summary: the kept component along $u$ is the information we hold onto; the residual $x - P_u(x)$ is what we let go. ``Fitting'' and ``compressing'' are the same operation read from two directions.
 
 A full singular-value-decomposition treatment is not needed here. What students do need is the idea that useful structure can live in fewer directions than the raw coordinate count suggests.
 
-\subsection*{Eigendecomposition and SVD: A Preview}
+\subsection*{Eigendecomposition and SVD: A Preview (Extension)}
 
 \begin{advancednote}
 Later chapters (dimensionality reduction in Chapter~\ref{ch:structure-beyond-linearity}, embeddings in Chapter~\ref{ch:representation-foundation-models}, and latent-factor models in Chapter~\ref{ch:probabilistic-models}) use the \emph{singular value decomposition} (SVD) and eigendecomposition. A full treatment is not needed yet. The useful bridge idea is only this: data often varies more along some directions than others, and a low-dimensional summary tries to keep the directions that carry the most structure.
@@ -577,6 +557,29 @@ Later chapters (dimensionality reduction in Chapter~\ref{ch:structure-beyond-lin
 \textbf{Why this matters for ML.} Truncating the SVD to the top $k$ components gives the best rank-$k$ approximation of the matrix (in the Frobenius norm sense). This is why PCA works for dimensionality reduction, why matrix factorization works for recommendation (Chapter~\ref{ch:ranking-recommendation}), and why low-rank approximations appear throughout representation learning. The key intuition: most of the ``important'' structure in a matrix can often be captured by a small number of directions.
 
 Given a centered data matrix $X \in \mathbb{R}^{n \times d}$ (rows are examples, columns are features), the SVD yields $X = U \Sigma V^\top$. The top \(k\) columns of \(V\) give the first \(k\) principal-component directions. If the first five directions explain most of the centered variance, the data can often be summarized in five dimensions even when it has many raw features. Treat this as a preview, not as a prerequisite for the rest of the bridge.
+
+\textbf{A worked $2 \times 2$ rank-1 approximation.} Consider $X = \begin{pmatrix} 3 & 0 \\ 4 & 0 \end{pmatrix}$. Its columns are $(3, 4)^\top$ and $(0, 0)^\top$. The column space is one-dimensional --- spanned by $(3, 4)^\top$, which has norm $5$ --- so the matrix already has rank $1$ and admits an exact decomposition $X = U \Sigma V^\top$ with $\Sigma = \mathrm{diag}(5, 0)$, $U = \begin{pmatrix} 3/5 & -4/5 \\ 4/5 & 3/5 \end{pmatrix}$, $V = \begin{pmatrix} 1 & 0 \\ 0 & 1 \end{pmatrix}$. The single nonzero singular value $\sigma_1 = 5$ equals the norm of that column. Now perturb $X$ to $\tilde X = \begin{pmatrix} 3 & 0.1 \\ 4 & 0.1 \end{pmatrix}$. The matrix is no longer exactly rank $1$, but the second column is small. Computing singular values numerically gives $\sigma_1 \approx 5.014$ and $\sigma_2 \approx 0.014$. The rank-1 approximation $\hat X = \sigma_1 u_1 v_1^\top$ keeps the first $\sigma$ and zeros out the second; the Frobenius-norm reconstruction error $\|\tilde X - \hat X\|_F$ equals $\sigma_2 \approx 0.014$ --- exactly the dropped singular value. That is Eckart--Young in miniature: the best rank-$k$ approximation in Frobenius norm is obtained by keeping the top $k$ singular values, and the resulting error equals $\sqrt{\sum_{j > k} \sigma_j^2}$. Most of $\tilde X$'s structure lives in one direction; truncating to that direction loses $0.3\%$ of the matrix's squared norm.
+\end{advancednote}
+
+\section*{A Little Matrix Calculus: Three Facts You Will Reuse (Extension)}
+
+\begin{advancednote}
+
+Several later chapters take derivatives of expressions that mix vectors and matrices---the normal equations of least squares, the ridge convexity argument, backpropagation through a linear layer, and the M-step of EM. The full apparatus of matrix calculus is more than this book needs. Three facts cover almost every place those derivations appear, and they are easier to recognize once than to redrive each time.
+
+\textbf{Three matrix-calculus facts.} For a scalar-valued function of a vector \(w \in \mathbb{R}^d\), let \(\nabla_w f\) denote its gradient (the column vector of partial derivatives).
+
+\emph{(1) Linear form.} If \(f(w) = a^\top w\), then \(\nabla_w f = a\). The gradient of ``weighted sum'' is the weight vector itself.
+
+\emph{(2) Quadratic form.} If \(f(w) = w^\top A w\) for a symmetric matrix \(A\), then \(\nabla_w f = 2 A w\) and the Hessian is \(\nabla_w^2 f = 2A\). When \(A\) is positive semi-definite, the function is convex; when \(A\) is positive definite, it is strictly convex with a unique minimum.
+
+\emph{(3) Squared error.} If \(f(w) = \|y - X w\|_2^2\), then \(\nabla_w f = -2 X^\top (y - X w)\). Setting this to zero gives the \emph{normal equations} \(X^\top X w = X^\top y\)---the closed-form least-squares solution.
+
+The sigmoid derivative \(\sigma'(s) = \sigma(s)(1 - \sigma(s))\) is in the same family of one-line facts; the book uses it whenever a logistic model is differentiated.
+
+Read these as recognition rules, not as a calculus subject. When a later chapter writes ``the gradient of \(\|y - Xw\|_2^2\) is \(-2 X^\top (y - Xw)\),'' or ``the Hessian of ridge is \(X^\top X + \lambda I\), which is positive definite,'' that chapter is using fact (2) or fact (3) and nothing more. The intuition is the same in every case: a quadratic in \(w\) has gradient that is linear in \(w\); a constant in \(w\) drops out; a Hessian that is positive (semi-)definite means the surface curves upward, so a stationary point is a minimum.
+
+\textbf{Where each fact returns.} Fact (1) underlies the linear-model gradient in Chapter~\ref{ch:linear-models} and the forward-pass weight derivatives in Chapter~\ref{ch:optimization-neural-networks}. Fact (2) is the engine behind the ridge-convexity argument and the Gaussian log-likelihood derivatives in Chapter~\ref{ch:probabilistic-models}; the Hessian sign is what makes ``complete the square'' work for the Bayesian-linear-regression posterior. Fact (3) is the least-squares closed form and the recurring template for the bias--variance algebra in Chapter~\ref{ch:linear-models}. Together they cover most of the ``one line of algebra later in the book that looked intimidating'' moments. An undergraduate first reader can take all three on faith; a reader who wants the derivations can verify each by expanding the inner products coordinate-wise.
 \end{advancednote}
 
 \section*{Chapter Artifact: Representation Card}
@@ -668,6 +671,7 @@ Linear separability & Chapters~\ref{ch:linear-models},~\ref{ch:optimization-neur
 \item \exercisetag{Design}{Core}Construct a \(3 \times 4\) design matrix for three emails with four hand-chosen features. State clearly what the rows and columns represent.
 \item \exercisetag{Concept}{Core}Give one situation in which cosine similarity would be a better comparison than Euclidean distance, and one situation in which it would be worse.
 \item \exercisetag{Concept}{Intermediate}Fill out a representation card for spam filtering, student support, or a simple image task. If you plan to carry one running case through the book, keep the same case and add one sentence saying which coordinates Chapter 1's framing memo would treat as acceptable inputs at prediction time.
+\item \exercisetag{Implementation}{Intermediate}Implement a from-scratch matrix--vector multiply \verb|matvec(A, x)| using nested Python loops, with a shape assertion at the start. Test it against the worked Example in this chapter so that \verb|matvec(X, w)| reproduces the predictions table. Then time your loop version against \verb|numpy| on a $100 \times 100$ random $A$ and report the ratio. The point is not to make Python fast; it is to feel where the work actually happens before letting a library hide it.
 \end{exercises}
 
 \begin{challengeexercises}

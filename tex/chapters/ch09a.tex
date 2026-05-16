@@ -1,19 +1,17 @@
 \chapter{Ranking, Recommendation, and Exposure}
 \label{ch:ranking-recommendation}
 
+\emph{Opening dilemma.} A course-support team launches a recommender that suggests five study resources whenever the early-warning model flags a student as CONCERNING. After six months they audit it. Worked-example videos --- the resource the team showed most often last semester --- now drive 80\% of recommendations. Practice problems and tutoring sign-ups, which a quieter cohort of students preferred, have nearly disappeared from the top-5 lists. The model is not broken in any conventional sense: its offline replay accuracy on last semester's logs is higher than ever. The replay just \emph{is} last semester's policy. The system has taught itself to recommend, more and more confidently, exactly what last semester's system already showed --- and it has erased the evidence that any other recommendation could have worked. That feedback loop is what this chapter is really about. Collaborative filtering, matrix factorization, and NDCG are the methods; exposure bias is the modeling dilemma they have to answer.
+
 Earlier chapters built models that classify, regress, detect, and forecast. In each case, the model produces one prediction per input. But many real-world systems do not predict a single answer---they produce a \emph{ranked list}. A search engine ranks documents. A streaming service ranks movies. A course-support system ranks resources for a struggling student. A campus job board ranks opportunities for graduating seniors.
 
 Ranking introduces problems classification and regression do not face. The items a system surfaces shape what users see, click, and ultimately choose. The model's outputs influence the data it will be trained on next---a feedback loop that can amplify biases, suppress diversity, and create blind spots. The design question shifts from ``is the prediction correct?'' to ``is the ranked list useful, fair, and safe?''
 
 This chapter treats recommendation as a ranking problem. It introduces collaborative filtering and matrix factorization, addresses the challenges of implicit feedback and missing data, and examines how exposure bias corrupts evaluation and perpetuates inequality. The chapter artifact---the recommendation audit card---documents what the system exposes, suppresses, and amplifies.
 
-\begin{problemsolvinglens}
 A recommender system is not a neutral mirror of user preferences. It actively shapes what users experience. Every design decision---what to rank, which signals to use, how to handle missing data---decides what gets seen and what stays hidden.
-\end{problemsolvinglens}
 
-\begin{thinkingtool}
 \textbf{Exposure as allocation.} When evaluating a recommendation system, ask who or what is being exposed and who or what is being suppressed. Ranking allocates user attention, and that allocation has consequences for content creators, students, job seekers, and anyone whose opportunities depend on being visible.
-\end{thinkingtool}
 
 \begin{practicalnote}
 \textbf{Depth guide.} The core target is to understand ranking as exposure allocation and to recognize the feedback-loop risks that ordinary classifiers do not create. Full-scale recommender optimization, production counterfactual logging, and marketplace fairness are natural extensions for projects.
@@ -64,11 +62,25 @@ Collaborative filtering fails when there is insufficient interaction data:
 
 \textbf{Sparse interactions.} Even for established users, most user-item pairs have no interaction. A university with 1,000 students and 500 resources has 500,000 possible interactions, yet each student may have accessed only 20 resources. The interaction matrix is 96\% empty.
 
-\begin{practicalnote}
 The cold-start problem is not a technical nuisance---it is a design problem. New items that are never recommended will never collect interactions, so they will keep going unrecommended. This creates a rich-get-richer dynamic: popular items accumulate more data and become even more popular, while new or niche items stay permanently invisible. Addressing cold start requires deliberate exploration---sometimes recommending items the system is uncertain about, not just items it is confident the user will like.
-\end{practicalnote}
+
+\begin{example}[Cold Start on a New Resource]
+The course-support recommender has just added a new resource---``Quiz: Linear Algebra Review''---with zero interaction history. Three strategies the team could use, and what each one quietly bets on:
+
+\emph{1. Popularity fallback.} Rank items by total clicks across all students and recommend the top ones. The new quiz is never shown because it has zero clicks, so it never accumulates evidence, so it is never shown. The state is self-reinforcing and the new resource is effectively frozen out forever.
+
+\emph{2. Content-based prior.} Encode the new quiz's metadata---topic (``linear algebra''), difficulty level, length---and find similar resources that already have engagement. Use the average click-through rate (CTR) of those neighbors as a prior CTR for the new quiz. This warmstarts the prediction. The bet is that the metadata is informative and that the new resource will behave like its neighbors.
+
+\emph{3. Exploration bonus.} Add an explicit bonus $b/\sqrt{n_i + 1}$ to every resource's predicted score, where $n_i$ is the number of times resource $i$ has been recommended so far. This guarantees the new quiz gets surfaced until it accumulates enough data to be evaluated on its own merit. The bet is short-term loss of CTR (sometimes showing items that may not be top-rated) in exchange for long-term catalog coverage.
+
+\emph{Concrete numbers.} Suppose popularity fallback gives the current top three resources predicted CTRs of $0.18$, $0.16$, $0.15$. The new quiz has no observed data. Content-based assigns it a prior CTR of $0.14$ from the average of similar quizzes. With exploration bonus $b = 0.05$ and $n_i = 0$, the bonus adds $0.05 / \sqrt{1} = 0.05$. The new quiz's score becomes $0.14 + 0.05 = 0.19$, just above the popularity leader at $0.18$, so it gets recommended. After $20$ impressions and $4$ clicks, the bonus has shrunk to $0.05 / \sqrt{21} \approx 0.011$, and the resource is now evaluated essentially on its observed CTR of $4/20 = 0.20$.
+
+Each strategy makes a different bet about what should replace the missing cold-start data. The popularity strategy bets that new items will never matter. The content-based strategy bets on metadata quality. The exploration-bonus strategy bets that paying short-term CTR for long-term coverage is the right trade.
+\end{example}
 
 \section{Matrix Factorization}
+
+\emph{Back to the course-support recommender.} User- and item-based collaborative filtering gave the team a working baseline but two persistent problems: cold-start students with no interaction history get nothing useful, and similarity over a sparse 500-resource catalog is noisy. Matrix factorization is what the team reaches for next --- a way to learn compact ``what this student tends to need'' and ``what this resource tends to teach'' vectors from the same logs, with explicit handles for regularization and cold-start fallbacks.
 \label{sec:matrix-factorization}
 
 \subsection{The Latent Factor Model}
@@ -106,6 +118,68 @@ The latent factors are learned by minimizing the reconstruction error on observe
 
 The regularization term $\lambda(\|U\|_F^2 + \|V\|_F^2)$ uses squared Frobenius norms---the sums of squared entries in the user and item factor matrices. It prevents overfitting; without it, the model can memorize the observed ratings without learning generalizable structure.
 
+\textbf{Two ways to optimize the factorization.} The objective is non-convex jointly in $U$ and $V$ but \emph{convex} in each one with the other held fixed. That observation is the basis of both standard optimizers.
+
+\emph{Alternating least squares (ALS).} Fix $V$ and minimize over $U$: each user row $u_u$ has a closed-form ridge-regression update obtained by setting the gradient to zero. Writing $\Omega_u = \{i : (u, i)\text{ observed}\}$,
+\[
+u_u \;\leftarrow\; \Bigl(\sum_{i \in \Omega_u} v_i v_i^\top + \lambda I\Bigr)^{-1} \sum_{i \in \Omega_u} r_{ui}\, v_i.
+\]
+Then fix $U$ and apply the symmetric update for each item $v_i$. Alternate to convergence. Each half-step is a stack of $k \times k$ linear systems, one per user or item, and is trivially parallel.
+
+\emph{Stochastic gradient descent (SGD).} For one observed $(u,i)$, write the prediction error $\epsilon_{ui} = r_{ui} - u_u^\top v_i$. The gradient of the loss on this single example gives the paired updates
+\[
+u_u \;\leftarrow\; u_u + \eta\,(\epsilon_{ui}\, v_i - \lambda\, u_u),
+\qquad
+v_i \;\leftarrow\; v_i + \eta\,(\epsilon_{ui}\, u_u - \lambda\, v_i),
+\]
+applied for one sampled observation at a time. SGD is preferred when the observed matrix is too large to materialize the per-user systems, and when implicit-feedback weights or side features make the closed form intractable.
+
+The two optimizers reach essentially the same fixed points on the same objective; ALS converges in fewer outer iterations but pays more per iteration, while SGD scales smoothly to streaming data.
+
+\begin{codeexample}
+import numpy as np
+
+def als_step(R, mask, U, V, lam):
+    """One full ALS pass over a sparse rating matrix R (m, n), with
+    a boolean mask of observed entries (m, n)."""
+    m, n = R.shape
+    k    = U.shape[1]
+    Ik   = lam * np.eye(k)
+    # Update U row-by-row given V
+    for u in range(m):
+        idx  = np.where(mask[u])[0]
+        if len(idx) == 0:
+            continue
+        Vi   = V[idx]                       # (|Omega_u|, k)
+        A    = Vi.T @ Vi + Ik               # (k, k)
+        b    = Vi.T @ R[u, idx]             # (k,)
+        U[u] = np.linalg.solve(A, b)
+    # Update V symmetrically given U
+    for i in range(n):
+        idx  = np.where(mask[:, i])[0]
+        if len(idx) == 0:
+            continue
+        Uu   = U[idx]                       # (|Omega_i|, k)
+        A    = Uu.T @ Uu + Ik
+        b    = Uu.T @ R[idx, i]
+        V[i] = np.linalg.solve(A, b)
+    return U, V
+
+# 4 users, 5 items, partially observed
+rng  = np.random.RandomState(0)
+R    = rng.uniform(1, 5, size=(4, 5))
+mask = rng.uniform(size=(4, 5)) < 0.6        # ~60% observed
+R   *= mask                                  # zero out unobserved
+k, lam = 2, 0.1
+U = rng.normal(scale=0.1, size=(4, k))
+V = rng.normal(scale=0.1, size=(5, k))
+for _ in range(20):
+    U, V = als_step(R, mask, U, V, lam)
+print((U @ V.T).round(2))                    # filled-in predictions
+\end{codeexample}
+
+The structure is the algorithm: hold one factor matrix fixed, solve a per-user (or per-item) ridge regression on its observed entries, then swap and repeat. Confidence-weighted ALS for implicit feedback simply replaces the unweighted $V_i^\top V_i$ with $V_i^\top C_i V_i$, where $C_i$ is a diagonal confidence matrix derived from interaction strength.
+
 \subsection{What the Latent Factors Mean}
 
 The latent factors capture implicit structure. In a movie recommendation system, one factor might encode ``action vs.\ drama preference,'' another ``preference for recent vs.\ classic films.'' In a course-resource system, one factor might encode ``prefers worked examples vs.\ conceptual explanations,'' another ``prefers short vs.\ long content.'' The factors are not predefined---they are discovered from the interaction data.
@@ -114,9 +188,7 @@ The latent factors capture implicit structure. In a movie recommendation system,
 The course-support system has a sparse interaction matrix: 800 students $\times$ 500 resources, with only 16,000 observed interactions (4\% fill rate). Matrix factorization with $k=20$ latent factors learns user vectors that capture resource-format and study-pattern preferences, and item vectors that capture resource characteristics. After training, the system predicts that Student~A---whose latent vector resembles students who prefer worked examples---would benefit from Resource~247, a worked example on regression, even though Student~A has never accessed it. The predicted relevance score is 4.2 out of 5, placing it in the student's top-5 recommendations.
 \end{example}
 
-\begin{practicalnote}
 Matrix factorization is conceptually related to the dimensionality reduction in Chapter~\ref{ch:structure-beyond-linearity}. PCA also factorizes a matrix into low-rank components. The key difference is that matrix factorization for recommendation works on a \emph{sparse} matrix (most entries are missing) and fits only the observed entries, while PCA operates on a complete matrix. The optimization algorithms differ accordingly: alternating least squares (ALS) or stochastic gradient descent (SGD) for sparse matrix factorization, versus eigendecomposition for PCA.
-\end{practicalnote}
 
 \subsection{Adding Side Information}
 
@@ -158,6 +230,16 @@ Treating all non-interactions as negatives is one of the most common mistakes in
 The course-support system logs which resources each student accesses, how long they spend on each, and whether they return. A student who spends 45 minutes on a worked example and returns to it twice is a strong positive signal. A student who clicks a resource and leaves after 10 seconds is a weak positive (or possibly a negative). A resource the student was never shown is missing data, not a negative. The team uses confidence-weighted matrix factorization: observed interactions are weighted by dwell time (longer means higher confidence), and non-interactions for items that were \emph{displayed but not clicked} are treated as weak negatives. Non-interactions for items that were never displayed are excluded from training.
 \end{example}
 
+\subsection{Listwise Losses: When Pairs Aren't Enough}
+
+Matrix factorization with squared error is a \emph{pointwise} loss: each $(u, i)$ prediction is scored independently against its observed rating. Bayesian Personalized Ranking (BPR) and RankNet are \emph{pairwise} losses: each pair $(i^+, i^-)$ of a relevant and a non-relevant item for the same user is treated as a binary classification problem---``did the model rank $i^+$ above $i^-$?'' Both losses are convenient, but neither captures the operational truth that ranking is about the \emph{full ordered list} the user actually sees, and that an error at position $1$ matters far more than an error at position $20$.
+
+\emph{Listwise approaches} put the whole list into the loss. LambdaRank (Burges, 2010) keeps the pairwise scaffolding but weights each pair's gradient by its impact on a position-sensitive metric: if swapping the two items would change NDCG by $\Delta\text{NDCG}$, the pair's gradient is scaled by $|\Delta\text{NDCG}|$. Pairs whose swap would barely move the metric get little weight; pairs whose swap would move a high-relevance item out of the top positions get the most. ListNet (Cao et al., 2007) goes further: it treats the full ranking as a probability distribution over permutations using a Plackett-Luce parameterization, and minimizes the KL-divergence between the model's induced permutation distribution and the ideal one. Both are operational refinements of the same statement: \emph{I care about the ranked list, not the pair.}
+
+\emph{Choosing among the three.} Use pointwise when ratings are explicit and calibration matters---predicting an absolute score that another downstream system will consume. Use pairwise (BPR) when you have implicit clicks or conversions and want a simple binary preference signal that scales easily with negative sampling. Use listwise (LambdaRank, ListNet) when you have an exposure-aware top-$k$ metric---NDCG, MRR, Recall@$k$---that you actually report to stakeholders; the position-weighting in the loss is what aligns training with reporting.
+
+The choice of pointwise / pairwise / listwise is a modeling choice about \emph{what counts as the same answer}. Pointwise loss says two rankings are the same when their scores match. Pairwise loss says they are the same when their pairwise orderings match. Listwise loss says they are the same when their top-$k$ items appear in the same positions. Each definition aligns with a different reporting practice, and the right choice is the one whose ``same'' matches what the user experiences.
+
 \section{Evaluating Ranking Systems}
 \label{sec:ranking-eval}
 
@@ -169,7 +251,6 @@ Classification metrics (accuracy, precision, recall) miss what matters in rankin
 Suppose the course-support system shows a student three resources in this order: \#1 worked example, \#2 short video, \#3 practice quiz. Later we learn the worked example was somewhat helpful, the video was not helpful, and the quiz was very helpful. With binary relevance, the relevant items sit at ranks 1 and 3. The reciprocal rank is $1$ because the first relevant item is at rank 1, so MRR for this list is perfect even though another relevant item is lower. Average Precision looks at both relevant positions: precision@1 is $1/1=1$ and precision@3 is $2/3$, and AP averages them. With graded relevance instead---say scores 2, 0, and 3---NDCG gives more credit when the very helpful quiz is near the top and less when it is buried lower in the list.
 \end{example}
 
-\begin{mathlens}
 For the same list, binary AP is
 \[
 \mathrm{AP}=\frac{1+\frac{2}{3}}{2}\approx 0.833.
@@ -185,27 +266,77 @@ The ideal order places relevance \(3\) first and \(2\) second, giving
 \mathrm{NDCG@3}\approx 0.821.
 \]
 The numbers make the differences visible: MRR is perfect because the first relevant item appears first, AP notices that another relevant item is lower, and NDCG notices that the most helpful item was not first.
-\end{mathlens}
 
 \textbf{Mean Reciprocal Rank (MRR).} The reciprocal rank of a single query is $1/\text{rank}$ of the first relevant item. MRR averages this across queries. MRR rewards systems that place the first relevant item high but ignores all other relevant items.
 
 \textbf{Mean Average Precision (MAP).} Average Precision for a single query computes precision at each position where a relevant item appears, then averages those values. MAP averages across queries. It rewards systems that place \emph{all} relevant items high, not just the first.
 
-\textbf{Normalized Discounted Cumulative Gain (NDCG).} NDCG assigns graded relevance scores to items rather than binary relevant/irrelevant labels, and discounts items lower in the list by $1/\log_2(\text{rank} + 1)$. The score is normalized against the ideal ranking. NDCG is the most widely used ranking metric because it handles graded relevance and position discounting together.
+\textbf{Normalized Discounted Cumulative Gain (NDCG).} NDCG assigns graded relevance scores to items rather than binary relevant/irrelevant labels and discounts items lower in the list. Writing $\mathrm{rel}_i$ for the graded relevance of the item at rank $i$, the discounted cumulative gain at depth $k$ is
+\[
+\mathrm{DCG}@k \;=\; \sum_{i=1}^{k} \frac{2^{\mathrm{rel}_i} - 1}{\log_2(i + 1)},
+\]
+and the normalized version divides by the ideal value $\mathrm{IDCG}@k$, the DCG of the same items reordered by descending relevance:
+\[
+\mathrm{NDCG}@k \;=\; \frac{\mathrm{DCG}@k}{\mathrm{IDCG}@k} \;\in\; [0, 1].
+\]
+The numerator $2^{\mathrm{rel}_i} - 1$ is the exponential gain convention used in industry; the logarithmic position discount $1/\log_2(i + 1)$ is the standard rank discount. The normalization makes NDCG comparable across queries with different numbers of relevant items. NDCG is the most widely used ranking metric because it handles graded relevance and position discounting together.
 
-\begin{practicalnote}
 NDCG@$k$ evaluates only the top $k$ positions. Choosing $k$ is a design decision: for a mobile app showing 5 recommendations, NDCG@5 is appropriate; for a search page showing 20 results, NDCG@20 may be better. Always report $k$ and justify it from the user interface.
-\end{practicalnote}
 
-\subsection{The Offline Evaluation Problem}
+\subsection*{Extension: Counterfactual Offline Evaluation (IPS and Doubly Robust)}
+
+This subsection introduces inverse-propensity-scoring (IPS) and doubly-robust (DR) estimators for offline evaluation. The estimators are standard in modern recommendation but use the expectation-under-a-distribution language from Mathematical Bridge~II and an importance-weighting argument that takes a section's worth of setup. The headline is short: naive offline replay is biased by the old exposure policy, and principled estimators reweight the logs to correct for that. The Decision Box at the end of the section captures what the chapter artifact actually needs; readers who want only that operational summary can skip the derivations and read the formulas as recipes.
 
 In logged implicit-feedback data, naive offline evaluation is unreliable when the test observations were generated by a previous exposure policy. Imagine last semester's system almost always showed worked examples first and rarely showed quizzes. If a student clicked the worked example, the log records that interaction. But if the student would have preferred the quiz, there is no evidence of that because the quiz was never exposed. This is the \emph{missing-not-at-random} problem: the test data is biased by the policy that generated it.
 
-\textbf{Counterfactual estimation.} The most principled approach uses inverse propensity scoring (IPS): weight each test observation by the inverse probability that the previous system would have exposed that item in that position or slate. If quizzes were shown only 10\% of the time, a click on a quiz carries more weight than a click on a worked example shown 90\% of the time. Items the previous system was unlikely to show get higher weight, correcting the selection bias. This requires logging item-position exposure propensities, which many production systems do not do.
+\textbf{Counterfactual estimation.} The most principled approach uses inverse propensity scoring (IPS). Let $\pi_0$ be the old logging policy that generated the data and $\pi$ the new target policy whose value we want to estimate. For each logged interaction $(u, i)$ with observed outcome $y_{ui}$ (a click, a reward, a relevance label), the IPS estimator of the new policy's value is
+\[
+\hat{V}_{\text{IPS}}(\pi) \;=\; \frac{1}{N}\sum_{(u, i)\in\mathcal{D}} \frac{\pi(i \mid u)}{\pi_0(i \mid u)}\, y_{ui},
+\]
+where $\pi_0(i \mid u)$ is the logged propensity---the probability that the old system would have exposed item $i$ to user $u$. The intuition is that a logged interaction tells us about whatever $\pi_0$ chose to expose, and dividing by $\pi_0$ rescales each datum to be representative under the new policy. If quizzes were shown only 10\% of the time, a click on a quiz carries weight $1/0.1 = 10$; a click on a worked example shown 90\% of the time carries weight $1/0.9 \approx 1.1$. Items the previous system was unlikely to show get higher weight, correcting the selection bias. Standard estimator properties: $\hat{V}_{\text{IPS}}$ is unbiased when $\pi$ has support inside $\pi_0$, but its variance grows with $1/\pi_0$ on the rare side, which is why small propensities are typically clipped at a floor $\pi_0 \ge \pi_{\min}$ (a bias--variance trade with a small introduced bias). This requires logging item-position exposure propensities, which many production systems do not do.
+
+\begin{example}[$\hat V_{\text{IPS}}$ on a Five-Row Log]
+A logged interaction set, with reward $r_i = 1$ if the user clicked and $0$ otherwise, and logged propensity $\pi_0$:
+\begin{center}
+\begin{tabular}{cllcc}
+\toprule
+$i$ & user & item & $r_i$ & $\pi_0(a_i\mid x_i)$ \\
+\midrule
+$1$ & $u_1$ & quiz A   & $1$ & $0.10$ \\
+$2$ & $u_2$ & quiz B   & $0$ & $0.50$ \\
+$3$ & $u_3$ & video C  & $1$ & $0.20$ \\
+$4$ & $u_4$ & quiz A   & $1$ & $0.40$ \\
+$5$ & $u_5$ & video D  & $0$ & $0.05$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Define the new target policy as $\pi(a_i\mid x_i) = \min(2\,\pi_0(a_i\mid x_i),\,1)$, so the new system is twice as likely to recommend each logged item, capped at $1$. The per-row importance weight is $w_i = \pi(a_i\mid x_i)/\pi_0(a_i\mid x_i)$ (which equals $2$ except when capping bites), and the contribution to the estimator is $w_i r_i$.
+\begin{center}
+\begin{tabular}{ccccc}
+\toprule
+$i$ & $\pi_0$ & $\pi$ & $w_i = \pi/\pi_0$ & $w_i\, r_i$ \\
+\midrule
+$1$ & $0.10$ & $0.20$ & $2.0$ & $2.0$ \\
+$2$ & $0.50$ & $1.00$ & $2.0$ & $0.0$ \\
+$3$ & $0.20$ & $0.40$ & $2.0$ & $2.0$ \\
+$4$ & $0.40$ & $0.80$ & $2.0$ & $2.0$ \\
+$5$ & $0.05$ & $0.10$ & $2.0$ & $0.0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Summing and averaging over $n=5$ gives $\hat V_{\text{IPS}} = (2.0 + 0 + 2.0 + 2.0 + 0)/5 = 1.2$. To see why variance is the real concern, swap row $1$'s reward into a counterfactual log where the click had landed on the rarely-exposed video D ($\pi_0 = 0.05$): that single row would contribute $w_5 r_5 = (0.10/0.05)\cdot 1 = 2$, fine here, but if the target policy had assigned $\pi = 0.5$ to that pair the weight jumps to $10$ and a single click moves the estimator by $10/5 = 2$ in absolute value. Clipping weights at, say, $w_i \le 5$ trades a small bias for a large variance reduction, which is why production IPS deployments almost always clip.
+\end{example}
 
 \begin{decisionbox}
 IPS is only as credible as the logging policy behind it. Before using it, verify three things. First, the old system logged which items were exposed, their positions or slate context, and the probability of each exposure. Second, the new policy mostly recommends items inside the old policy's support. Third, very small propensities are clipped, stabilized, or analyzed for variance. Without these conditions, IPS can look principled while producing a noisy or unsupported estimate.
 \end{decisionbox}
+
+\textbf{Doubly-robust estimation.} A practical refinement combines IPS with a learned reward model $\hat r(u, i)$ that predicts the outcome from features. The doubly-robust estimator subtracts the model prediction from the importance-weighted residual and adds back the model's expected value under the new policy:
+\[
+\hat{V}_{\mathrm{DR}}(\pi) \;=\; \frac{1}{N}\sum_{(u, i) \in \mathcal{D}} \Bigl[\, \hat{r}_\pi(u) \;+\; \frac{\pi(i \mid u)}{\pi_0(i \mid u)}\bigl(y_{ui} - \hat r(u, i)\bigr)\Bigr],
+\qquad \hat r_\pi(u) = \sum_{i'} \pi(i' \mid u)\, \hat r(u, i').
+\]
+The name describes the guarantee: $\hat{V}_{\mathrm{DR}}$ is unbiased if \emph{either} the propensities $\pi_0$ are correct \emph{or} the reward model $\hat r$ is correct, not necessarily both. When the reward model is accurate, the residual $y_{ui} - \hat r(u, i)$ is small, the importance-weighted term contributes little variance, and the estimator reduces to the model's predictions $\hat r_\pi(u)$---this is the variance-reduction benefit over plain IPS. When the propensities are correct and the model is wrong, the residual term still corrects the model's bias on the data the new policy would actually expose. The DR estimator is the standard counterfactual evaluator in modern recommendation work because it tolerates one source of misspecification at a time, which is realistic in deployed systems where neither propensities nor reward models are perfectly known.
 
 \textbf{Replay methods.} When historical logs include randomized recommendations---say, a small fraction of random items mixed into the ranked list---replay methods estimate how a new policy would have performed by replaying the historical data and using the randomized portion as unbiased logged observations. In the same example, if the old system occasionally inserted a random quiz into the list, those randomized exposures provide a fairer basis for judging whether a new policy that ranks quizzes higher would help.
 
@@ -215,6 +346,8 @@ Offline metrics on logged implicit-feedback data tend to favor policies similar 
 
 \section{Exposure Bias and Feedback Loops}
 \label{sec:exposure-bias}
+
+\emph{The dilemma from the opener, named.} The course-support recommender that ``taught itself to recommend only what it already showed'' is not a freak failure mode. It is the natural behaviour of any system that trains on logs of its own past decisions. This section names the mechanism, says why the IPS and DR estimators of the previous section exist, and gives the audit habits the chapter artifact will codify.
 
 \subsection{How Recommender Systems Shape Their Own Data}
 

@@ -1,6 +1,8 @@
 \chapter{Designing the Dataset}
 \label{ch:dataset-design}
 
+\emph{Opening dilemma.} A team builds a pedestrian detector for a campus shuttle. The validation accuracy on their training distribution is excellent. The first week of live operation, the system misses every pedestrian at dusk on the elm-lined approach to the dining hall. The team's instinct is to label more data: thousands of additional frames are queued for annotation. A skeptical engineer asks the awkward question: is ``more data'' the right answer, or did the team's earlier choice to label only midday footage already decide what the model would never learn? The labeled set was the model's entire experience of the world. The dataset was a design choice; the team just did not notice they were designing.
+
 Earlier chapters framed the learning problem, chose metrics, protected evaluation, and diagnosed structural gaps. One critical question stayed deferred: how should the training data itself be designed? Data is a design choice, not a given. The same task can be tackled with different examples, different labeling schemes, different class distributions, and different label-quality standards. Each choice changes what the model can learn and how it behaves in the world.
 
 This chapter treats dataset construction as a modeling decision, not preprocessing. Who labels the data? What counts as a valid label when annotators disagree? How should class imbalance be handled? When should a team invest in more examples, cleaner labels, or better-curated examples? When labels are expensive, which examples should be labeled next? When does synthetic data help, and when does it mislead? Each answer shapes the learning problem itself.
@@ -11,13 +13,9 @@ By the end of this chapter, you should be able to state what data-design choices
 \textbf{Core path.} The required path covers label definition, annotator consistency, label noise, class balance, coverage, and the data design card. Active learning, semi-supervised learning, weak supervision, augmentation, and synthetic data are label-acquisition strategies. Assign them selectively or treat them as extensions once the core data-design decisions are stable.
 \end{practicalnote}
 
-\begin{problemsolvinglens}
 Data design is not optional cleanup before real modeling begins. It is part of the model. The examples labeled, the labels themselves, and their distribution are deliberate design choices that constrain what the model can learn and where it will fail.
-\end{problemsolvinglens}
 
-\begin{thinkingtool}
 \textbf{Data as design.} When evaluating a model, always ask three questions. What does the dataset tell the model is important? What structure or distribution is missing from the training set? What gaps exist between the labeled data and the deployment population?
-\end{thinkingtool}
 
 \begin{decisionbox}
 \textbf{Data-design order of operations.} Do not start with augmentation, synthetic data, or a larger labeling budget. First define what each label means and who may assign it. Then measure label quality and disagreement. Next compare the data distribution with the deployment distribution and the operating policy. Only after those checks should the team pick a label-acquisition strategy such as active learning, semi-supervised learning, weak supervision, augmentation, or synthetic data.
@@ -123,13 +121,11 @@ When multiple annotators label the same example, they often disagree. Practition
 Inter-annotator agreement is the degree to which independent annotators assign the same labels to the same examples, typically measured by Cohen's kappa, Fleiss's kappa, or Krippendorff's alpha.
 \end{definition}
 
-\begin{mathlens}
 \textbf{Cohen's kappa.} For two annotators labeling the same examples, let $p_o$ be the observed proportion of agreements and $p_e$ the proportion expected by chance under each annotator's marginal label frequencies. Cohen's kappa is
 \[
 \kappa = \frac{p_o - p_e}{1 - p_e}.
 \]
 Values near $1$ indicate strong agreement beyond chance; $0$ means agreement at the chance level; negative values indicate systematic disagreement. Fleiss's kappa generalizes to more than two annotators; Krippendorff's alpha further allows ordinal or interval labels and missing values.
-\end{mathlens}
 
 Low agreement signals one of three things: unclear guidelines, an inherently ambiguous task, or undertrained annotators. Each is worth investigating before treating disagreement as noise to be averaged away.
 
@@ -145,9 +141,7 @@ Three common strategies exist.
 Two advisors each label ten student messages. On one message about a missed assignment, one advisor chooses CONCERNING and the other chooses ROUTINE. Majority vote forces an arbitrary hard label. Soft labels record $[0.5, 0.5]$, capturing the genuine ambiguity. A model trained on soft labels learns to output moderate confidence on similar cases instead of being forced to pick a side.
 \end{example}
 
-\begin{practicalnote}
 For short guidelines and tasks that feel objective (``does this image contain a car?''), majority vote is usually enough. For long guidelines and subjective or ambiguous tasks (``is this message urgent?''), soft labels or adjudication preserve more information. Measure inter-annotator agreement before committing to one strategy.
-\end{practicalnote}
 
 \section{Label Noise and Its Effects}
 \label{sec:label-noise}
@@ -192,13 +186,19 @@ When labels are noisy, several strategies exist.
 
 \textbf{Threshold and filter.} Train the model and remove or down-weight examples the model is highly confident were mislabeled---those where its prediction strongly contradicts the given label.
 
-\begin{evidencebox}
 Northcutt et al.\ found widespread label errors across common benchmark test sets---averaging at least 3.3\% across ten datasets---and showed that corrected labels can change which model appears best \citep{northcutt2021labelerrors}. Related confident-learning work shows how systematic label auditing can identify likely errors and improve downstream training \citep{northcutt2021confidentlearning}. Cleaning important datasets is not busy work; it can directly change the evidence used to judge trained models.
-\end{evidencebox}
 
-\begin{thinkingtool}
+\begin{advancednote}
+\textbf{When does training on noisy labels still recover the right classifier?} Natarajan et al.\ 2013 give a precise answer for binary classification under class-conditional noise. Let $\rho_+$ be the probability that a true positive label is flipped to negative and $\rho_-$ the probability that a true negative is flipped to positive, and assume $\rho_+ + \rho_- < 1$. For any standard convex surrogate loss $\ell(\hat y, y)$ used on clean labels, the corrected loss
+\[
+\tilde\ell(\hat y, y) = \frac{(1 - \rho_{-y})\,\ell(\hat y, y) - \rho_y\,\ell(\hat y, -y)}{1 - \rho_+ - \rho_-}
+\]
+is an unbiased estimator of the clean loss in the sense that $\mathbb{E}_{\tilde y \mid y}[\tilde\ell(\hat y, \tilde y)] = \ell(\hat y, y)$, where $\tilde y$ denotes the observed (possibly flipped) label. Empirical risk minimization with $\tilde\ell$ on the \emph{noisy} data is therefore consistent for the clean Bayes-optimal classifier.
+
+Operationally, the result says that if the noise rates $\rho_+, \rho_-$ can be estimated---typically from a small clean validation set or a held-out audit---there is no need to clean the training data before fitting; an unbiased classifier can be trained directly on the noisy labels with the corrected loss. This is the theoretical foundation underneath ``confident learning'' and Cleanlab-style methods: the confident-learning estimator of Northcutt et al.\ \citep{northcutt2021confidentlearning} cited above is one practical way to estimate the flip rates $\rho_+, \rho_-$ that the correction formula requires. The limit is sharp: when $\rho_+ + \rho_- \geq 1$ the labels are no more informative than coin flips, the denominator in $\tilde\ell$ collapses, and no consistent estimator of the clean Bayes classifier exists from the noisy data alone.
+\end{advancednote}
+
 \textbf{Noise investigation.} When validation performance is worse than expected, ask whether label noise is the culprit before blaming the model. Sample and hand-inspect a small random subset of training labels to estimate noise rates.
-\end{thinkingtool}
 
 \section{Class Imbalance: Problem or Design Choice?}
 
@@ -330,9 +330,7 @@ Better coverage or data augmentation helps most when:
 \label{fig:data-investment-choice}
 \end{figure}
 
-\begin{thinkingtool}
 \textbf{Data investment triage.} Before collecting new data, diagnose the failure mode. If training error is much lower than validation error, the problem is variance. If both are high, the problem is bias or coverage. If labels look unreliable, the problem is noise. Invest accordingly.
-\end{thinkingtool}
 
 \section{Active Learning: Labeling Strategically}
 
@@ -362,11 +360,9 @@ Active learning is least useful when labeling is cheap, the unlabeled pool is sm
 A university starts with 100 randomly labeled student messages. The early-warning model performs reasonably but has room to improve. Instead of randomly labeling 100 more messages, the team uses uncertainty sampling: they ask the model for the 100 unlabeled messages where it is least confident. A domain expert (student advisor) labels only those 100. With 200 total labels---100 of them strategically chosen---the model improves more than it would from 200 random labels. The team gets more improvement from the same expert time by skipping examples the model already handles confidently.
 \end{example}
 
-\begin{practicalnote}
 Active learning requires discipline. The model must be retrained after each labeling round, and the uncertainty estimates must be reliable. An overconfident or poorly calibrated model will steer uncertainty sampling toward uninformative examples. Test active learning on a small batch first before committing to a full labeling campaign.
-\end{practicalnote}
 
-\section{Learning with Fewer Labels}
+\section{Learning with Fewer Labels (Extension)}
 \label{sec:fewer-labels}
 
 Active learning asks \emph{which} examples to label next. A different question is often more pressing: can the model learn from examples that have no labels at all, or from labels that are noisy and automatically generated? In many real-world settings, unlabeled data is abundant and labeled data is scarce. A university's learning management system may contain hundreds of thousands of student messages, but only a few hundred reviewed by an advisor. A campus shuttle may record millions of video frames, but only a small fraction have bounding boxes. The gap between available data and labeled data is the central problem of this section.
@@ -402,6 +398,7 @@ Self-training amplifies the model's existing biases. If the initial model miscla
 
 \subsubsection{Co-Training}
 
+\begin{advancednote}
 Co-training addresses self-training's confirmation bias by using two models instead of one. The idea requires two \emph{views} of the data---two feature sets that are each sufficient for the task but provide complementary information.
 
 Each model trains on the labeled data using its own view. Each then labels the unlabeled examples, and the most confident predictions from \emph{one} model join the training set of the \emph{other}. Because the two models see different features, they make different errors, and each corrects the other.
@@ -410,9 +407,8 @@ Each model trains on the labeled data using its own view. Each then labels the u
 A pedestrian detection system has two views: visual appearance (image pixels) and motion patterns (optical flow between consecutive frames). Model A learns from appearance; Model B learns from motion. Model A confidently identifies a stationary person at a crosswalk---easy to see in the image but invisible to motion. Model B confidently identifies a jogger in a cluttered background---hard to see in a single frame but obvious from motion. Each model's confident predictions become training data for the other, expanding what both can detect.
 \end{example}
 
-\begin{practicalnote}
 The co-training requirement for two independent, sufficient views is rarely met perfectly in practice. Common relaxations include using two different architectures on the same features, or random feature splits. These approximations often help, but the theoretical guarantees weaken. If your features do not naturally split into two independent views, self-training or the weak supervision methods below may be more practical.
-\end{practicalnote}
+\end{advancednote}
 
 \subsection{Pseudo-Label Quality and the Confidence Threshold}
 
@@ -454,6 +450,7 @@ Each labeling function covers only a subset of examples and may abstain (assign 
 
 \subsubsection{Data Programming: Combining Labeling Functions}
 
+\begin{advancednote}
 Individual labeling functions are noisy and incomplete. The insight of \emph{data programming} is to combine many of them into a single, higher-quality label estimate. The framework, developed in the Snorkel system, works as follows:
 
 \begin{enumerate}[leftmargin=*]
@@ -464,10 +461,9 @@ Individual labeling functions are noisy and incomplete. The insight of \emph{dat
 \end{enumerate}
 
 The label model is the critical component. It learns which labeling functions are accurate, which are correlated (and so provide redundant signal), and which disagree in informative ways. The output is a probabilistic (soft) label for each example, usable directly as a training target.
+\end{advancednote}
 
-\begin{practicalnote}
 Writing labeling functions is a way to encode domain knowledge. The quality of weak supervision depends on how much relevant knowledge you can express as simple rules. Start by interviewing domain experts: ``What patterns do you look for when labeling this task?'' Each answer is a candidate labeling function. Aim for 10--30 labeling functions with diverse coverage; a few high-precision functions (rarely wrong, often abstain) are more valuable than many low-precision ones.
-\end{practicalnote}
 
 \begin{warningbox}
 Correlated labeling functions treated as independent will cause the label model to overcount their shared signal. If three functions all check for keyword overlap with the same word list, the label model may treat their agreement as strong evidence when it is really one signal counted three times. Audit your labeling functions for correlation before training the label model.
@@ -542,9 +538,7 @@ Active learning, semi-supervised learning, and weak supervision are not competin
 \label{fig:label-acquisition-pipeline}
 \end{figure}
 
-\begin{thinkingtool}
 \textbf{Label-acquisition strategy.} Before building a model, ask the cheapest way to get labels that are good enough. If expert labels are cheap, label everything. If they are expensive, design a pipeline that combines cheap silver labels for coverage with strategic gold labels for quality. The label-acquisition strategy is as important as the model architecture.
-\end{thinkingtool}
 
 \section{Data Augmentation as a Modeling Decision}
 
@@ -610,13 +604,9 @@ Synthetic data is risky because it can encode unrealistic assumptions.
 
 \textbf{False confidence.} A model trained entirely on synthetic data may perform well on held-out synthetic test data but fail on real data. Evaluated against synthetic data, the numbers look good; real-world deployment reveals the gap. This is why evaluation discipline is critical: validate synthetic data against real held-out performance, never against itself.
 
-\begin{evidencebox}
 In autonomous-driving research, simulators like CARLA generate training data because real driving data is expensive to collect and label. Simulation studies repeatedly show that transfer depends on how closely the simulator matches the real sensing and control setting \citep{amini2020vista}. Rendered scenes can differ enough from real camera imagery that simulation-trained models fail to transfer unless the gap is measured and managed. Synthetic data is a starting point, not a complete replacement for real data.
-\end{evidencebox}
 
-\begin{advancednote}
 Some recent work uses large pretrained generative models to synthesize more realistic training data. The same evaluation discipline applies: validate the synthetic-augmented model on a real held-out test set, not only on synthetic test data. The false-confidence problem persists.
-\end{advancednote}
 
 \subsection{Evaluation Discipline for Synthetic Data}
 
@@ -715,9 +705,7 @@ Version and refresh plan & The current version, when the data was last updated, 
 
 \end{example}
 
-\begin{practicalnote}
 A data design card is not just documentation. It is a forcing function. Writing one exposes gaps in your understanding of the data. If you cannot fill the ``annotator agreement'' field, measure inter-annotator agreement before building a model. If you cannot describe the ``known gaps'' field clearly, investigate the data more carefully.
-\end{practicalnote}
 
 \section{Common Mistakes in Data Design}
 
@@ -725,11 +713,22 @@ Several mistakes recur when teams build datasets. The first is treating data as 
 
 \section{Looking Ahead}
 
-This chapter made dataset construction explicit. Collection, annotation, labeling protocol, class imbalance, active learning, semi-supervised learning, weak supervision, and augmentation are all design decisions that shape what the model learns. When labels are scarce, the label-acquisition strategy---which examples get gold labels, which get silver labels from heuristics, and which get pseudo-labels from the model itself---is as important as the model architecture. With the data now designed and documented, the next chapter returns to model architecture. With a better understanding of data, the architecture conversation becomes more sophisticated: not ``which model family is stronger?'' but ``what does this data allow the model to learn?''
+This chapter argued that dataset construction is a design choice, not preprocessing---the examples collected, the labels assigned, the imbalance handled or accepted, and the augmentations used all shape what the model can possibly learn.
 
-\section*{Chapter Summary}
+The next chapter takes that into the training loop: once the dataset is honestly constructed, how do we actually fit a model to it without wasted compute or hidden bias? Chapter~\ref{ch:optimization-neural-networks} treats optimization as a designed process. Two chapters later, Chapter~\ref{ch:probabilistic-models} treats model-family choice as a modeling judgment rather than a model-selection contest: what counts as a defensible probabilistic structure for the task, and where does that judgment come from?
 
-Dataset construction is a design choice, not preprocessing. The examples collected, the labels assigned, their distribution, and their quality determine what the model can learn. Labeling protocols, inter-annotator agreement, and the choice between soft and hard labels reflect the ambiguity or clarity of the task. Handle class imbalance based on the deployment distribution, not by defaulting to balance. The choice between collecting more data, cleaning existing labels, or improving coverage depends on whether the bottleneck is variance, bias, or noise. Active learning lets teams label strategically when labeling is expensive. When labeled data is scarce, semi-supervised learning uses unlabeled-data structure to improve models, and weak supervision generates cheap but noisy labels through heuristics and labeling functions. The label-acquisition strategy---combining gold, silver, and pseudo-labels---is itself a design decision. Augmentation and synthetic data are powerful but require careful validation to avoid false confidence. A data design card documents all of these choices, including the label-acquisition strategy, and makes assumptions explicit, protecting future users from discovering problems after deployment.
+Two chapters later, the same design discipline is pushed into evaluation: even with a well-designed dataset and a defensible model, what evidence justifies the claim the team wants to make about deployment behavior?
+
+\begin{chaptersummary}
+\item Datasets are designed objects. The collection plan, the labeling protocol, the class balance, and the augmentations encode claims about the world that the model will inherit and amplify.
+\item Inter-annotator agreement and label noise are information, not nuisance. A 65\% kappa is a fact about the task's ambiguity; soft labels, adjudication, or task redefinition are the design responses---never silent averaging.
+\item Class balance is a deployment question, not a default. Match the training distribution to the deployment distribution by default; depart from that only when the deployment cost structure or model class requires it, and document the departure.
+\item When labels are scarce, the label-acquisition strategy---which examples get gold labels, which get silver labels from heuristics, and which get pseudo-labels from the model itself---is the modeling decision, not the loss function.
+\item Active learning, semi-supervised learning, and weak supervision are not interchangeable. They answer different questions: which examples to label next, how to use unlabeled structure, and how to manufacture noisy labels at scale.
+\item Augmentation is a label-preserving claim about invariance. Each transformation says ``the label still holds.'' If that claim is wrong, augmentation injects noise faster than it adds signal.
+\item Synthetic data is useful only insofar as it has been validated against held-out real data. Without that validation, the sim-to-real gap silently becomes the deployment gap.
+\item The data design card is the chapter's artifact. Its job is to make the data assumptions visible so that a future reader can tell what the model was trained on and where it falls short.
+\end{chaptersummary}
 
 \begin{studyquestions}
 \item Why is dataset construction a modeling decision rather than just preprocessing?

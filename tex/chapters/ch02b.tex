@@ -1,17 +1,15 @@
 \chapter{Generalization, Leakage, and Evaluation Discipline}
 \label{ch:evaluation-discipline}
 
-Once a task has been framed and its success criteria stated, a harder question remains: when does the evidence deserve trust? Strong numbers can reflect real learning, but they can also come from leakage, weak baselines, unstable splits, or a test set that quietly became part of development.
+A team announces $0.91$ AUC on their early-warning model. The reviewer asks one question---``how was the test set chosen?''---and the number collapses. The team had used random row sampling, and the test set turned out to share students with the training set across different terms. The model was being scored on people it had already seen. With proper grouping by student, the AUC drops to $0.74$.
+
+When does evidence deserve trust? Strong numbers can reflect real learning, but they can also come from leakage, weak baselines, unstable splits, or a test set that quietly became part of development.
 
 This chapter turns evaluation discipline into procedure. It defines what should count as new evidence, why the train, validation, and test roles must stay separate, and which simple checks keep a promising result honest. By the end, the reader should be able to write a minimal evaluation plan that makes a model claim credible on genuinely new data.
 
-\begin{problemsolvinglens}
 Protect the claim by keeping development, external evidence, and baseline comparison separate. A strong-looking score is not enough if the workflow that produced it made the result too easy to win.
-\end{problemsolvinglens}
 
-\begin{thinkingtool}
 \textbf{Claim protection.} Before trusting a win, ask what part of the pipeline could have let future information, duplicate cases, excessive tuning, or a weak baseline inflate the score.
-\end{thinkingtool}
 
 \section{Opening Dilemma: The Validation Score Looks Great. Can We Trust It?}
 
@@ -33,13 +31,11 @@ One way to see this is the \emph{generalization gap}: the difference between tra
 
 Model capacity---how complex a pattern the model can represent---plays a central role. A more flexible model can represent more complicated functions. That flexibility helps when the data contains real structure, but it hurts when the data is limited or noisy. Overfitting is not evidence of intelligence. It is evidence that the experimental setup let memorization or unstable pattern matching masquerade as learning.
 
-\begin{mathlens}
-\textbf{Bias--variance decomposition.} Underfitting and overfitting have a precise mathematical reading. For a regression target $y = f^*(x) + \epsilon$ with irreducible noise variance $\sigma^2$, the expected squared error of a learned predictor $\hat f$ at a point $x$ decomposes as
+\textbf{Bias--variance decomposition (statement).} Underfitting and overfitting have a precise mathematical reading. For a regression target $y = f^*(x) + \epsilon$ with irreducible noise variance $\sigma^2$, the expected squared error of a learned predictor $\hat f$ at a point $x$ decomposes as
 \[
 \mathbb{E}\bigl[(y - \hat f(x))^2\bigr] = \underbrace{\bigl(\mathbb{E}[\hat f(x)] - f^*(x)\bigr)^2}_{\text{bias}^2} + \underbrace{\mathbb{E}\bigl[(\hat f(x) - \mathbb{E}[\hat f(x)])^2\bigr]}_{\text{variance}} + \underbrace{\sigma^2}_{\text{noise}},
 \]
-where the expectation is over training samples. \emph{Bias} measures systematic miss: a model class too restricted to represent the true function. \emph{Variance} measures sensitivity: how much the fit fluctuates as the training sample changes. Underfitting corresponds to high bias; overfitting to high variance. Total error is the sum; reducing one usually requires accepting a little of the other. The classification case is messier, but the same intuition---bias from a restricted model class, variance from finite-sample sensitivity---carries over.
-\end{mathlens}
+where the expectation is over training samples. \emph{Bias} measures systematic miss: a model class too restricted to represent the true function. \emph{Variance} measures sensitivity: how much the fit fluctuates as the training sample changes. Underfitting corresponds to high bias; overfitting to high variance. Total error is the sum; reducing one usually requires accepting a little of the other. The classification case is messier, but the same intuition---bias from a restricted model class, variance from finite-sample sensitivity---carries over. The derivation (add-and-subtract trick, cross-term cancellation) and a simulation that estimates each term directly are given in Section~\ref{sec:bias-variance} of Chapter~\ref{ch:linear-models}; for this chapter, the statement is enough to discuss generalization.
 
 If generalization is the real target, evaluation cannot be improvised after training. It has to be built into the experimental workflow from the start.
 
@@ -82,21 +78,19 @@ If generalization is the real target, evaluation cannot be improvised after trai
 \label{fig:underfit-healthy-overfit}
 \end{figure}
 
-\begin{evidencebox}
 Zech et al.\ studied pneumonia detection from chest radiographs across multiple hospital systems. Generalization changed substantially across institutions, and hospital-specific cues acted as confounders \citep{zech2018}. That is the chapter's lesson in concrete form: success on familiar held-out data is not the same as robust generalization after deployment.
-\end{evidencebox}
 
 \section{Protected Evaluation Workflow}
 
 The next question is procedural rather than mathematical: how do we protect evaluation from development? The answer is the disciplined split between training, validation, and test data. This is the chapter's workflow spine, because every later safeguard depends on these roles staying distinct. The \emph{training set} fits parameters. The \emph{validation set} chooses tuning settings, model structures, thresholds, or stopping points. The \emph{test set} is reserved for the final report after the important decisions are already made.
 
-\begin{practicalnote}
 The workflow is simple enough to state plainly: split first, fit preprocessing on train only, train candidate models on train, choose among them on validation, and touch the test set once at the end.
-\end{practicalnote}
 
 Students often understand the definitions and still run the workflow incorrectly. What matters is not only the names of the sets but the order in which they are used. Once information crosses from held-out evidence back into development, the claim is weaker even when the code runs cleanly.
 
 A protected test set matters statistically as well as procedurally. When a bounded metric is averaged over independent held-out examples, its empirical value concentrates around the true expected performance.
+
+The Hoeffding bound below makes the headline ``a larger untouched test set gives a tighter estimate'' formal. A first-pass reader can take that headline and skip the inequality; the formal statement and the numerical scale check that follows are for readers who want to know how big ``large enough'' really is.
 
 \begin{theorem}[Hoeffding Bound for Held-Out Evaluation {\citep{hoeffding1963}}]
 Let $Z_1,\ldots,Z_n$ be independent random variables with $0 \le Z_i \le 1$, and let
@@ -113,13 +107,11 @@ The practical point is not that a held-out score is infallible. It is that an un
 
 If the held-out metric is an average of bounded per-example quantities, such as accuracy indicators or a loss rescaled into $[0,1]$, this inequality explains why larger protected test sets produce more stable evidence and why repeated peeking at the same hold-out set is so damaging.
 
-\begin{mathlens}
 For a rough scale check, plug in \(\varepsilon=0.10\). With \(n=100\) held-out examples, Hoeffding gives
 \[
 P(|\bar Z-\mathbb{E}\bar Z|\ge 0.10)\le 2e^{-2}=0.27.
 \]
 With \(n=1000\), the same deviation bound becomes \(2e^{-20}\), essentially zero in practice. This does not mean the estimate is unbiased under distribution shift, duplicate examples, leakage, or test-set reuse. Under the stated independence and boundedness assumptions, larger untouched samples merely shrink random sampling noise.
-\end{mathlens}
 
 Here \emph{preprocessing} means data transformations such as scaling, normalization, or feature extraction that are learned from the training data and then applied unchanged to validation and test data.
 
@@ -179,9 +171,7 @@ Here \emph{preprocessing} means data transformations such as scaling, normalizat
 \label{fig:evaluation-workflow}
 \end{figure}
 
-\begin{thinkingtool}
 \textbf{Protected test set.} The test set is for one final report, not for development. Once test results influence model choice, the test set stops being an external check.
-\end{thinkingtool}
 
 This logic can be expressed as simple pseudocode:
 
@@ -199,11 +189,65 @@ final_score = evaluate_once(chosen_model, test_ready)
 print(final_score)
 \end{codeexample}
 
-Cross-validation is a useful extension when data is limited. Instead of relying on one validation split, the training data is partitioned into several folds (several train-validation partitions), and the validation role is rotated across them. A final untouched test set remains valuable when possible.
+Cross-validation is a useful extension when data is limited. Instead of relying on one validation split, the training data is partitioned into several folds (several train-validation partitions), and the validation role is rotated across them. A final untouched test set remains valuable when possible. The next subsections take this from sketch to procedure.
 
-\begin{practicalnote}
-Chapter~\ref{ch:evaluation-discipline} establishes minimal experimental discipline for one credible result. Chapter~\ref{ch:experiments-claims} returns to the same logic at larger scale with repeated runs, ablations, slice analysis, and stronger empirical claims.
-\end{practicalnote}
+\subsection{The Decision Policy Is Part of Model Selection}
+
+Thresholds, calibration methods, regularization strengths, stopping points, and even model families are not innocent details bolted on after the score. They are part of model selection. If the final test results guide those choices, the test set stops being external evidence and becomes another development tool.
+
+The core logic is short. Training data teaches the model parameters. Validation data chooses among serious alternatives: which threshold or ranking cutoff is usable, whether calibration is needed, and which tuned settings make the decision policy work best. The test data is touched once, after those choices are frozen, to check whether the chosen policy still looks defensible on new cases.
+
+\begin{example}[Threshold Choice Is Part of Model Selection]
+Suppose a student-support team considers thresholds $0.40$, $0.55$, and $0.70$ on the validation set. Under the team's weekly review constraint, threshold $0.40$ catches more true positives but creates too many flags. Threshold $0.70$ keeps the queue small but misses too many students in need. Threshold $0.55$ gives the best recall while staying within review capacity, so it becomes the chosen policy. If the team then checks the test set, dislikes the result, and moves the threshold again, the test set has quietly become part of development. The number is still computed correctly, but it is no longer external evidence.
+\end{example}
+
+\subsection{Cross-Validation When Data Is Limited}
+
+With abundant data, one protected validation split is usually enough to choose among candidate settings. With limited data, a single split can be too noisy. Cross-validation repairs that weakness by rotating the validation role across several folds of the development data.
+
+The idea is simple. Partition the development data into several folds. Hold one fold out as validation, train on the rest, record the decision-relevant metric, and rotate. Average the fold-level validation results and choose the setting that behaves best on average.
+
+The important point is conceptual, not procedural. Cross-validation is not a replacement for external evidence. It is a stronger way to use the development data when one validation split would be unstable. If a final test set is available, it should still stay outside the cross-validation loop.
+
+\begin{codeexample}[caption={Selection discipline when the decision policy is part of the model choice}]
+development_data, test_data = split_once(raw_data)
+
+candidate_settings = propose_settings()
+best_setting = None
+best_value = float("-inf")
+
+for setting in candidate_settings:
+    fold_values = []
+    for train_fold, validation_fold in make_folds(development_data):
+        model = fit_model(train_fold, setting)
+        scores = model.predict_scores(validation_fold)
+        value = evaluate_policy(scores, validation_fold.labels, setting)
+        fold_values.append(value)
+    mean_value = average(fold_values)
+    if mean_value > best_value:
+        best_value = mean_value
+        best_setting = setting
+
+final_model = fit_model(development_data, best_setting)
+final_value = evaluate_policy(
+    final_model.predict_scores(test_data),
+    test_data.labels,
+    best_setting
+)
+print(final_value)
+\end{codeexample}
+
+In this skeleton, \texttt{setting} may bundle more than one kind of choice: regularization strength, tree depth, threshold, ranking cutoff, or calibration rule. The deeper lesson is that the decision policy is not outside the experiment. It is part of what is being selected.
+
+\subsection{Hyperparameter Search Without Test Leakage}
+
+A \emph{hyperparameter} is a setting chosen by the experimenter rather than learned by the basic fitting rule. Examples include the number of neighbors in k-nearest neighbors, the depth of a tree, the strength of regularization, the learning rate of an optimizer, and the threshold that turns scores into action. These choices are often necessary. The mistake is not searching over them. The mistake is letting the final test result guide the search.
+
+Once this is clear, the workflow becomes straightforward. Search over alternatives on training and validation data, or inside cross-validation on the development set. Freeze one configuration. Then evaluate once on the test set. The test set should answer ``did this chosen system survive new data?'' rather than ``which of these many systems should we keep?''
+
+Metric choice, threshold choice, calibration, and selection protocol belong to one judgment chain. Protected splits, leakage discipline, and baseline practice---the rest of this chapter---are what keep that chain honest.
+
+This chapter establishes minimal experimental discipline for one credible result. Chapter~\ref{ch:experiments-claims} returns to the same logic at larger scale with repeated runs, ablations, slice analysis, and stronger empirical claims.
 
 \section{How Experiments Lie: Leakage}
 
@@ -309,13 +353,15 @@ Baselines are more than practical convenience. They are part of the philosophy o
 
 The same habit shows up in good course design and good benchmark practice. Starter baselines, public datasets, and example solutions do not make the work trivial. They make the claim legible.
 
-\begin{practicalnote}
 Two sanity checks should become automatic. First, run a \emph{shuffled-label check}: randomly reassign the labels and confirm that performance collapses toward a non-informative baseline. If it does not, the pipeline is broken. Second, inspect \emph{split stability}: if validation performance swings wildly under small changes in the train-validation split, the setup is too fragile for a strong conclusion.
-\end{practicalnote}
 
 \begin{warningbox}
 The shuffled-label sanity check runs as follows. Split first. Randomly permute only the training labels so they no longer correspond to the training inputs. Retrain the model from scratch. Evaluate on the unchanged validation set. Compare against the metric-specific null baseline, and repeat if variance is high. If the model still achieves non-trivial performance, the pipeline is broken: it is learning from data artifacts (leaky features, duplicate rows, or preprocessing that encodes the target) rather than genuine signal. A properly constructed pipeline should fall back to the weak baseline implied by the metric and class balance, not retain meaningful predictive power.
 \end{warningbox}
+
+\begin{advancednote}
+\textbf{The Bonferroni cost of peeking at the test set.} If you check the test set $k$ times---with $k$ candidate models, $k$ hyperparameter settings, or $k$ adjacent variants---the probability that at least one beats the baseline by chance under the null grows as $1 - (1-\alpha)^k \approx k\alpha$ for small $\alpha k$. This is the Bonferroni / \v{S}id\'ak inflation. A Type-I error rate of $\alpha = 0.05$ becomes effectively $0.40$ at $k = 10$ peeks and $\approx 0.99$ at $k = 100$. The operational consequence: the headline number from ``we tried 20 architectures and picked the best one'' has been quietly inflated, and the honest claim requires either a Bonferroni-corrected threshold ($\alpha' = \alpha/k$), a fresh held-out set, or pre-registration of the model selection rule. \emph{This is the formal reason ``the test set is the test set''---peeking destroys the operational meaning of $\alpha$.}
+\end{advancednote}
 
 \section{When Good Numbers Still Support Weak Claims}
 
@@ -352,9 +398,7 @@ A probability model may reduce average log loss while becoming slightly worse ca
 
 The lesson is not that metrics are untrustworthy. Every metric answers a narrower question than students first assume. Good evaluation asks not only ``what is the score?'' but also ``what behavior is this score summarizing, and what important behavior is still outside it?''
 
-\begin{thinkingtool}
 \textbf{Claim failure gallery.} Whenever a headline number looks persuasive, name one failure mode it cannot rule out. If no such failure mode comes to mind, the evaluation is still shallowly understood.
-\end{thinkingtool}
 
 \section{Chapter Artifact: A Minimal Evaluation Plan}
 
@@ -399,9 +443,7 @@ For the student-support framing from Chapter~\ref{ch:framing-learning-problems},
 \textbf{Claim statement:} ``The all-features logistic model identifies students at risk of the early-support proxy event with higher recall than GPA-only screening when the advising team reviews the top 15\% of the ranked list, on a held-out semester.''
 \end{example}
 
-\begin{thinkingtool}
 \textbf{Evaluation plan.} Before reporting a score, write down the decision context, primary and supporting metrics, threshold or ranking policy, calibration check, split protocol, leakage controls, baseline ladder, and final claim sentence.
-\end{thinkingtool}
 
 \section{Common Mistakes in Evaluation}
 
@@ -413,7 +455,7 @@ This chapter made evaluation discipline explicit: generalization, protected evid
 
 \section*{Chapter Summary}
 
-This chapter shifts the focus from judging model behavior to judging the evidence for that judgment. Training fit is not enough; the real standard is generalization. That is why train, validation, and test roles must remain protected and why leakage, weak baselines, and repeated test-set tuning are so damaging. Sanity checks and simple baselines are part of interpretation, not optional extras. The chapter ends with a minimal evaluation plan that makes the claim, the split protocol, the leakage controls, and the comparison standard explicit before any result is presented.
+This chapter shifts the focus from judging model behavior to judging the evidence for that judgment. Training fit is not enough; the real standard is generalization. That is why train, validation, and test roles must remain protected and why leakage, weak baselines, and repeated test-set tuning are so damaging. Sanity checks and simple baselines are part of interpretation, not optional extras. The chapter ends with a minimal evaluation plan that makes the claim, the split protocol, the leakage controls, and the comparison standard explicit before any result is presented. Evaluation is already part of the model: every protocol choice---which split, which baseline, which metric, which slice---narrows what the model is allowed to claim.
 
 \begin{studyquestions}
 \item Why is generalization a better judgment question than training loss alone?

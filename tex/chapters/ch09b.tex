@@ -19,9 +19,7 @@ A reasonable first instinct, especially after a course that emphasized neural ne
 
 The dilemma the chapter opens with is therefore not architectural but methodological. Treating tabular ML as ``just supervised learning'' or as ``a problem deep networks should solve'' misses what is actually hard about it. The hard parts are the parts the algorithm never sees: which columns to encode and how, where the time boundary is, which rows belong to the same entity, what the label leak looks like, how the schema will change six months from now, and whether the deployed model's confidence numbers can be trusted by a downstream automated decision.
 
-\begin{problemsolvinglens}
 On tabular data, the bottleneck is rarely the model family. It is the data preparation and the evaluation protocol. A gradient-boosted tree ensemble with sloppy validation will lose to a worse model with disciplined validation, because the sloppy pipeline silently optimizes for a problem that is not the deployment problem.
-\end{problemsolvinglens}
 
 \section{Tabular as a Modality}
 \label{sec:tabular-modality}
@@ -52,9 +50,7 @@ Tabular ML deployments often live inside regulated processes: credit decisions, 
 
 Tabular models often run nightly. Each morning the model scores the day's transactions, students, or accounts. Daily retraining is common. Monitoring is usually slice-based: how does precision at the operating threshold look this week for the West Coast region, for new accounts, for the third-party data source that started feeding rows last month? Schema drift, where a column's meaning changes upstream, is a routine cause of silent failure. The discipline of dataset design from Chapter~\ref{ch:dataset-design} is not optional in tabular work; it is the daily job.
 
-\begin{thinkingtool}
 \textbf{Modality audit for tabular data.} Before training, write down the column types, the columns whose missingness is informative, the entity each row represents (a customer? a transaction? a customer-week?), the time field that separates train from test, and the categorical columns whose cardinality is high enough to need a coded representation rather than one-hot vectors.
-\end{thinkingtool}
 
 \section{The Dominant Baseline: Gradient-Boosted Trees}
 \label{sec:gbt}
@@ -72,13 +68,81 @@ F_m(x) = F_{m-1}(x) + \nu \, h_m(x),
 \]
 where $\nu$ is the learning rate (often $0.05$ or $0.1$). For squared error, the negative gradient is the residual $y - F_{m-1}(x)$, and boosting recovers the classical least-squares fitting story. For logistic loss, the negative gradient is the per-example margin gap, and each round nudges the ensemble toward classifying the still-misclassified examples better.
 
-\begin{mathlens}
 For a differentiable loss $\ell(y, F(x))$ and an ensemble $F_{m-1}$, the gradient-boosting update fits a weak learner $h_m$ to the per-example pseudo-residuals
 \[
 r_i^{(m)} = -\left.\frac{\partial \ell(y_i, F(x_i))}{\partial F(x_i)}\right|_{F = F_{m-1}}.
 \]
 The new ensemble is $F_m = F_{m-1} + \nu \, h_m$. Two ingredients earn boosting its tabular reputation: the weak learners are short trees, which compose region-specific rules naturally, and the gradient view turns ``focus on what the current ensemble gets wrong'' into a precise mathematical instruction rather than a heuristic.
-\end{mathlens}
+
+\textbf{Second-order split-finding (Advanced; first-order ``fit a tree to residuals'' is enough for the Core path).} Modern boosting libraries use a second-order Taylor expansion of the loss around the current ensemble, not just the first-order gradient. Writing $g_i = \partial \ell / \partial F(x_i)$ and $h_i = \partial^2 \ell / \partial F(x_i)^2$ at $F = F_{m-1}$,
+\[
+\ell(y_i, F_{m-1}(x_i) + w) \;\approx\; \ell(y_i, F_{m-1}(x_i)) \;+\; g_i\, w \;+\; \tfrac{1}{2} h_i\, w^2.
+\]
+For a single leaf containing examples $I$ with constant output $w$ and an $\ell_2$ leaf penalty $\lambda$, the total loss is $\sum_{i \in I}(g_i w + \tfrac{1}{2} h_i w^2) + \tfrac{1}{2}\lambda w^2$. Setting the derivative in $w$ to zero gives the optimal leaf weight $w^*_I = -\frac{\sum_{i \in I} g_i}{\sum_{i \in I} h_i + \lambda}$ and the leaf's contribution to the loss reduction $-\tfrac{1}{2}\,\frac{(\sum_{i \in I} g_i)^2}{\sum_{i \in I} h_i + \lambda}$. A split of leaf $I$ into $L \cup R$ therefore reduces the loss by the XGBoost \emph{gain}:
+\[
+\mathrm{Gain} \;=\; \tfrac{1}{2}\Bigl[\tfrac{G_L^2}{H_L + \lambda} + \tfrac{G_R^2}{H_R + \lambda} - \tfrac{(G_L + G_R)^2}{H_L + H_R + \lambda}\Bigr] - \gamma,
+\]
+where $G_\bullet = \sum_{i \in \bullet} g_i$, $H_\bullet = \sum_{i \in \bullet} h_i$, and $\gamma$ is a complexity penalty per added leaf. The tree-builder enumerates candidate splits and keeps the one with the largest positive gain. This formula---not the heuristic "fit a tree to residuals" story---is what makes XGBoost and its cousins fast and competitive: every split decision becomes a closed-form score over already-tabulated $g_i, h_i$ statistics, and parallelism over features becomes straightforward.
+
+\textbf{Histogram-based split finding.} For each feature, bucket its values into $B$ bins (typically $B \approx 255$) and accumulate $G_\bullet, H_\bullet$ per bin once. Candidate split thresholds are now bin boundaries, not all $N$ distinct values, so the per-feature split search drops from $O(N)$ to $O(B)$ at the cost of one $O(N)$ binning pass. LightGBM is fastest at scale because of this trade.
+
+The whole boosting outer loop fits in twenty lines of numpy when stumps (depth-1 trees) are used as weak learners. The next snippet runs one full iteration on a small dataset and shows the residual structure changing as the ensemble grows.
+
+\begin{codeexample}
+import numpy as np
+
+def best_stump(x_col, residuals):
+    """Find threshold and left/right means that minimize squared error."""
+    order   = np.argsort(x_col)
+    x_sort  = x_col[order]
+    r_sort  = residuals[order]
+    n       = len(x_sort)
+    cum_sum = np.concatenate([[0.0], np.cumsum(r_sort)])
+    cum_sq  = np.concatenate([[0.0], np.cumsum(r_sort ** 2)])
+    best_loss, best_t, best_L, best_R = np.inf, None, 0.0, 0.0
+    for k in range(1, n):
+        if x_sort[k] == x_sort[k - 1]:
+            continue
+        nL, nR = k, n - k
+        sL, sR = cum_sum[k], cum_sum[n] - cum_sum[k]
+        # Squared-error loss under per-side mean prediction
+        loss = (cum_sq[n] - sL ** 2 / nL - sR ** 2 / nR)
+        if loss < best_loss:
+            best_loss = loss
+            best_t    = 0.5 * (x_sort[k - 1] + x_sort[k])
+            best_L    = sL / nL
+            best_R    = sR / nR
+    return best_t, best_L, best_R
+
+def gradient_boost(X, y, n_trees=50, learning_rate=0.1):
+    F     = np.full_like(y, y.mean(), dtype=float)        # initial F_0 = y_bar
+    trees = []
+    for m in range(n_trees):
+        residuals = y - F                                  # pseudo-residuals for L2 loss
+        t, L, R   = best_stump(X[:, 0], residuals)         # fit stump to residuals
+        h         = np.where(X[:, 0] <= t, L, R)
+        F        += learning_rate * h                      # F_m = F_{m-1} + nu * h_m
+        trees.append((t, L, R))
+    return F, trees
+
+# Toy 1D regression: y = sin(2*pi*x) + small noise
+rng = np.random.default_rng(0)
+x   = rng.uniform(0, 1, size=80).reshape(-1, 1)
+y   = np.sin(2 * np.pi * x[:, 0]) + 0.1 * rng.standard_normal(80)
+F, trees = gradient_boost(x, y, n_trees=50, learning_rate=0.1)
+print(f"train MSE after 50 stumps = {np.mean((F - y) ** 2):.4f}")
+\end{codeexample}
+
+The function makes the algorithm visible end to end: $F_0$ is the mean of the targets; each round computes pseudo-residuals (for squared loss these are the ordinary residuals), fits a depth-1 stump to them by enumerating thresholds, and adds the stump's prediction to the running ensemble with the shrinkage factor $\nu$. Real implementations replace the stump with depth-$D$ trees, replace squared-error split selection with the second-order gain formula above, and replace the full-scan split search with the histogram trick---but the outer loop is the same eight lines.
+
+For an ensemble of $M$ trees of depth $D$ trained on $N$ rows with $F$ features:
+\begin{itemize}[leftmargin=*,nosep]
+\item \textbf{Pre-sort training.} $O(M \cdot N F \log N)$ time and $O(NF)$ memory. Each tree builds $2^D - 1$ internal nodes; each split scan touches every (row, feature) pair, dominated by the sort.
+\item \textbf{Histogram training.} $O(M \cdot N F + M \cdot B F \cdot 2^D)$ time and $O(NF + BF)$ memory, where $B$ is the bin count per feature. Replacing $\log N$ with $B$ is the LightGBM speedup.
+\item \textbf{Prediction.} $O(M \cdot D)$ per row to walk each tree to a leaf. The cost is independent of $N$ and $F$, which is why a 1{,}000-tree GBM still serves predictions in microseconds.
+\item \textbf{Memory at inference.} $O(M \cdot 2^D)$ to store the trees themselves---roughly a few megabytes for typical $M = 1000, D = 6$ ensembles.
+\end{itemize}
+The $O(NF)$ memory floor is what really separates gradient boosting from deep tabular models: a 10-million-row, 200-feature problem fits in main memory for boosting and routinely does not for a neural alternative with the same effective capacity.
 
 \subsection{Why Trees Win on Tabular Data}
 
@@ -101,10 +165,26 @@ FT-Transformer \citep{gorishniy2021fttransformer},
 and TabPFN \citep{hollmann2023tabpfn},
 the last using in-context learning over a transformer pretrained on synthetic tabular data. These methods sometimes match or beat gradient-boosted trees, especially on very large datasets, on multi-task pretraining setups, or when there is meaningful structure (text fields, embedded ID columns) that benefits from learned representations.
 
-\begin{claimdefense}
 The honest claim is narrow. Neural tabular methods are catching up; on most public tabular benchmarks, gradient-boosted tree ensembles still win the median comparison \citep{grinsztajn2022tabularnn,shwartz2022tabular}.
 The right defensive posture for a new tabular project in 2026 is to fit a gradient-boosted baseline first, document its performance carefully, and only escalate to a neural alternative if you have a specific reason---scale, multi-task structure, or text-rich columns---to expect the neural method to add real value.
-\end{claimdefense}
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{p{2.3cm}p{3.6cm}p{4.0cm}p{2.5cm}}
+\toprule
+Method & Best on & Avoids & Cost \\
+\midrule
+TabNet & Small-to-mid tabular with categorical structure & Explicit feature engineering via sequential attention over features & Mid training cost \\
+FT-Transformer & Small-to-large tabular with sufficient training data & Manual interaction terms via attention over numerical and categorical tokens & High training cost \\
+TabPFN & Very small tabular ($\le 1000$ rows) & Training entirely; uses a pretrained meta-learner & Very low inference cost; limited to small data \\
+\bottomrule
+\end{tabular}
+\caption{Neural tabular methods worth knowing, with the data regime each is best suited to.}
+\label{tab:neural-tabular-methods}
+\end{table}
+
+On most tabular problems, a gradient-boosted tree ensemble is still the right default; reach for these neural methods when the data regime or feature structure makes them concretely better, not because neural is the modern path.
 
 \begin{decisionbox}
 \textbf{Default model choice for a new tabular project.} Start with LightGBM or XGBoost using sensible defaults (learning rate 0.05, max depth 6, early stopping on a held-out set). Treat this as the baseline a neural alternative must convincingly beat on the deployment-relevant slices, not the leaderboard average.
@@ -153,7 +233,9 @@ Linear models gain a lot from explicit interaction features (Chapter~\ref{ch:lin
 Target encoding is the textbook example of a feature-engineering technique that is powerful when done correctly and silently catastrophic when done naively. The naive version:
 
 \begin{verbatim}
-df['section_te'] = df.groupby('section_id')['y'].transform('mean')
+df['section_te'] = (
+    df.groupby('section_id')['y'].transform('mean')
+)
 \end{verbatim}
 
 \noindent
@@ -167,13 +249,11 @@ which includes $y_i$ in its average. The model has been handed, as a feature, a 
 
 \subsection{The Leakage Condition, Stated Carefully}
 
-\begin{mathlens}
 Let $\hat{y}_s(i)$ denote the target-encoded value used as a feature for row $i$ in category $s$. The encoding is leakage-free for row $i$ if
 \[
 \hat{y}_s(i) = \mathbb{E}\!\left[Y \mid S = s\right]
 \]
 is estimated from rows that exclude row $i$ entirely. Naive encoding violates this because $\hat{y}_s(i) = \tfrac{1}{|s|} \sum_{j \in s} y_j$ includes $y_i$ in the sum. The bias is largest for small categories: if $|s|=1$, naive encoding sets the feature exactly equal to the label.
-\end{mathlens}
 
 \subsection{Out-of-Fold Target Encoding}
 
@@ -284,13 +364,21 @@ Chapter~\ref{ch:prediction-loss-decision}'s calibration section introduced the E
 \item Report ECE and a reliability diagram on a final held-out test fold.
 \end{enumerate}
 
-\begin{practicalnote}
 Random forests are often closer to calibrated than gradient-boosted trees by accident: the averaging across diverse trees pulls extreme probabilities toward the middle. Gradient boosting does not have this implicit averaging, and uncalibrated boosted scores are frequently overconfident at both extremes. If the downstream user is going to interpret the score as a probability, plan for calibration before training, not after.
-\end{practicalnote}
 
 \subsection{When Calibration Matters Operationally}
 
 Not every tabular problem needs calibration. If the only use of the model output is to rank rows---``send the top 200 fraud alerts to the review team''---a well-calibrated probability adds nothing over a well-discriminating rank. Calibration matters when the score is interpreted on its own scale: an automated threshold rule (``approve loans with score below 0.05''), a cost-sensitive abstention policy, or a downstream ensemble that expects probabilities as inputs. The decision to calibrate is therefore tied to how the score will be used, not to the model family.
+
+\begin{advancednote}
+\textbf{Calibrated prediction intervals: quantile regression forests and NGBoost.}
+
+A calibrated GBDT predicts a \emph{point} probability or a point regression value. For risk scoring, financial forecasting, and many operational tabular tasks, the reader often needs a calibrated \emph{prediction interval}---a $[\text{low},\,\text{high}]$ range that contains the true value with stated probability (e.g.\ $90\%$). Two practical extensions handle this directly without bolting a calibration step onto the back of a point predictor.
+
+Quantile regression forests (Meinshausen, 2006) generalize random forests by storing the full per-leaf sample of training targets rather than just leaf means, then reading out empirical quantiles at prediction time. The result is a calibrated prediction interval that comes for free from the same trained model---no separate calibration fold, no isotonic step. NGBoost (Duan et al., 2019) extends gradient boosting to predict full probability distributions (parametric families such as Normal or Laplace) rather than point estimates. Its natural-gradient training rule updates the distributional parameters in a geometry that keeps the predicted distribution calibrated, so the variance prediction is itself trustworthy and not just a regularized point estimate.
+
+When to use each. Reach for quantile regression forests when the target is continuous and the downstream decision needs an interval (inventory bounds, capacity planning, prediction-with-uncertainty for a human reviewer). Reach for NGBoost when the downstream system needs a full distributional output---a probability density, not just an interval---for example to combine with other distributions or to compute expected losses under custom cost functions. For binary classification, a calibrated point probability from a Platt or isotonic-tuned GBDT is usually sufficient; quantile and distributional methods earn their keep on regression problems where intervals or full distributions are operationally meaningful.
+\end{advancednote}
 
 \section{Distribution Shift in Tabular Deployment}
 \label{sec:tabular-shift}
@@ -415,6 +503,7 @@ This chapter treated tabular data as a modality with its own concerns: heterogen
 \item Tree ensembles rank well and calibrate poorly. Post-hoc calibration on a held-out fold is mandatory whenever the score is interpreted on its own scale.
 \item Distribution shift in tabular deployment includes covariate shift, schema drift, and missingness-pattern shift. Each requires its own monitor.
 \item The tabular design card records the modeling and validation choices that distinguish a robust tabular pipeline from a leaderboard-tuned one.
+\item Tabular is already a modeling problem: column semantics, missingness, leakage, calibration, and shift are not preprocessing chores---they are where the model's commitments to its data get written down or quietly hidden.
 \end{itemize}
 
 \begin{studyquestions}
@@ -446,7 +535,7 @@ Compute the ECE using two equal-width bins of probability, $[0,0.5)$ and $[0.5,1
 \item \exercisetag{Calculation}{Intermediate}Suppose a binary classifier's predictions are well-ranked but uncalibrated. The score-sorted positives are concentrated in the top-quartile of scores, but the score histogram has 90\% of mass below $0.3$ and almost no mass above $0.5$. Sketch what isotonic calibration would do to the score-to-probability mapping, and explain why the rank ordering is preserved.
 \item \exercisetag{Concept}{Core}For each of the following columns, decide whether it is a legitimate feature or a leak when predicting a student's missed-submission risk on Monday morning. Justify briefly. (a) Number of forum posts in the prior 7 days. (b) Final grade in the course. (c) Whether the student appealed a late penalty this term. (d) Days since the last LMS login. (e) The student's grade on the assignment being predicted.
 \item \exercisetag{Concept}{Intermediate}A new feature engineered by a teammate is reported to give a 4-point AUC boost over the prior baseline. Its importance under SHAP is by far the largest. Name three diagnostic checks you would run before believing the result.
-\item \exercisetag{Implementation}{Core}Implement a function \verb|group_temporal_split(df, time_col, group_col, train_end, val_end)| that returns row indices for train, validation, and test splits where (a) all training rows have \verb|time_col| $\le$ \verb|train_end|, (b) validation rows are in $(\verb|train_end|, \verb|val_end|]$, (c) test rows are after \verb|val_end|, and (d) within each split, all rows for a given \verb|group_col| value stay together. Verify on a synthetic table that no group-id appears across two splits and no train timestamp exceeds any test timestamp.
+\item \exercisetag{Implementation}{Core}Implement a function \texttt{group\_temporal\_split(df, time\_col, group\_col, train\_end, val\_end)} that returns row indices for train, validation, and test splits where (a) all training rows have \verb|time_col| $\le$ \verb|train_end|, (b) validation rows are in $(\verb|train_end|, \verb|val_end|]$, (c) test rows are after \verb|val_end|, and (d) within each split, all rows for a given \verb|group_col| value stay together. Verify on a synthetic table that no group-id appears across two splits and no train timestamp exceeds any test timestamp.
 \item \exercisetag{Implementation}{Core}Implement an out-of-fold target encoder for a single categorical column with smoothing $m$, using $K$-fold cross-validation. Test it by feeding in a synthetic dataset where the label is a deterministic function of the category. Compare the cross-validated AUC of a downstream model trained on (i) the naive in-fold target encoding and (ii) your out-of-fold encoder. Report the gap and explain it.
 \item \exercisetag{Implementation}{Intermediate}On any public tabular classification dataset (e.g., the UCI Adult or the Kaggle Telco churn dataset), train a LightGBM classifier with default hyperparameters. Then fit isotonic calibration on a held-out fold, and report ECE before and after. Plot reliability diagrams for both. Comment on which probability bins moved most.
 \item \exercisetag{Diagnosis}{Intermediate}You are given a tabular pipeline with a 5-fold cross-validated AUC of $0.94$, but the model achieves only $0.71$ on a fresh week of held-out data. Hypothesize three different causes consistent with this gap and describe a specific diagnostic test for each.

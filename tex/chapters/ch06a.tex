@@ -1,17 +1,15 @@
 \chapter{Generative Representations}
 \label{ch:generative-representations}
 
+\emph{Opening dilemma.} The course-support team has 200 labeled URGENT messages and 18{,}000 ROUTINE ones. Their triage model collapses to ``always predict routine'' before training even finishes. They consider three responses. Hire annotators to label more urgent cases --- expensive and slow. Oversample the 200 they already have --- the model memorizes the rare class instead of generalizing. Or generate synthetic urgent messages from a model trained on the few they have --- cheap, fast, and potentially worthless if the generated messages just average together what the real urgent messages had in common. The chapter's running question is the last one: can we generate examples that genuinely add information about the underrepresented region of the data space, and how would we know the synthetic ones are not just elaborate memorization?
+
 The previous chapter treated representations as tools for \emph{understanding}---spaces that make downstream tasks easier. Representations can also \emph{generate}: produce new data points that resemble the training data but were never observed. A course-support system that generates realistic synthetic student messages can augment scarce labeled data. A pedestrian detector that generates novel nighttime scenes can fill gaps in its training distribution. The same latent spaces that enable generation also enable interpolation, anomaly detection, and controllable editing.
 
 This chapter introduces three families of generative models---variational autoencoders, generative adversarial networks, and diffusion models. Each learns a latent representation from which new data can be sampled \citep{kingma2014vae,goodfellow2014gan,ho2020ddpm}. The probabilistic foundations from Chapter~\ref{ch:probabilistic-models} motivate VAEs and latent-variable sampling; GANs introduce adversarial training. One practical question runs through all three: how do you know if generated data is any good?
 
-\begin{problemsolvinglens}
 Generation is not an end in itself. Every generative model encodes assumptions about which variations matter and which should be preserved. The design question is not ``can the model generate?'' but ``does what it generates serve the downstream task, and how would we know?''
-\end{problemsolvinglens}
 
-\begin{thinkingtool}
 \textbf{Representation for generation.} When evaluating a generative model, ask what the latent space \emph{means}. Can you move through the latent space and predict how the output will change? If not, the model may still generalize, but the latent space becomes harder to trust for controlled generation or interpretation.
-\end{thinkingtool}
 
 \begin{practicalnote}
 \textbf{Depth guide.} In a first course, the core expectation is to compare generative families, explain their objectives at a design level, and evaluate their downstream risks. Training stable GANs, deriving diffusion objectives in full, or building a production generator belongs in extended projects.
@@ -61,17 +59,38 @@ The total loss is:
 
 This is the negative \emph{evidence lower bound} (ELBO) used in variational autoencoders \citep{kingma2014vae,rezende2014sgvb}. Minimizing it improves reconstruction while keeping the latent space organized.
 
-\begin{mathlens}
+\begin{prereqbridge}
+\textbf{Why we cannot just maximize $\log p(x)$.} The marginal $p(x) = \int p(x \mid z) p(z)\, dz$ integrates over every latent code that could have produced $x$. For all but trivial $p(x\mid z)$ this integral has no closed form and is too high-dimensional to evaluate by quadrature, so direct gradient ascent on $\log p(x)$ is not an option. The ELBO replaces that intractable objective with a tractable lower bound; the slack between the two is exactly the gap between the approximating posterior $q(z\mid x)$ and the true posterior.
+\end{prereqbridge}
+
+\textbf{Why the ELBO lower-bounds $\log p(x)$ (skip on a first pass).} The argument is one application of Jensen's inequality (Mathematical Bridge II). The marginal log-likelihood of the data is
+\[
+\log p(x) \;=\; \log \int p(x \mid z)\, p(z)\, dz.
+\]
+For any approximating distribution $q(z \mid x)$ with full support on the relevant $z$, multiply and divide by $q(z \mid x)$ inside the integral:
+\[
+\log p(x) \;=\; \log \mathbb{E}_{q(z \mid x)}\!\left[\frac{p(x \mid z)\, p(z)}{q(z \mid x)}\right]
+\;\ge\; \mathbb{E}_{q(z \mid x)}\!\left[\log\frac{p(x \mid z)\, p(z)}{q(z \mid x)}\right],
+\]
+where the inequality is Jensen's: $\log$ is concave, so $\log \mathbb{E}[Z] \ge \mathbb{E}[\log Z]$. Splitting the right-hand side into reconstruction and regularization terms gives
+\[
+\mathrm{ELBO}(x; \theta, \phi) \;=\; \underbrace{\mathbb{E}_{q(z \mid x)}[\log p(x \mid z)]}_{\text{reconstruction (negate this term)}} \;-\; \underbrace{D_{\mathrm{KL}}\bigl(q(z \mid x)\,\|\,p(z)\bigr)}_{\text{regularization}}.
+\]
+The slack is exactly $\log p(x) - \mathrm{ELBO} = D_{\mathrm{KL}}\bigl(q(z \mid x) \,\|\, p(z \mid x)\bigr) \ge 0$, with equality only when the approximating posterior matches the true one. Maximizing the ELBO with respect to both the encoder $\phi$ and the decoder $\theta$ therefore pushes $\log p(x)$ up while pushing $q$ toward the true posterior. The VAE training loss is $-\mathrm{ELBO}$, which is the expression at the top of the section.
+
+\textbf{Closed-form KL for diagonal Gaussians.} For $q(z \mid x) = \mathcal{N}(\mu, \mathrm{diag}(\sigma^2))$ and $p(z) = \mathcal{N}(0, I)$ in $d$ dimensions,
+\[
+D_{\mathrm{KL}}\bigl(q \,\|\, p\bigr) \;=\; \tfrac{1}{2}\sum_{j=1}^{d}\bigl(\mu_j^2 + \sigma_j^2 - \log \sigma_j^2 - 1\bigr).
+\]
+The formula is what the implementation actually computes; expanding the Gaussian densities and integrating term by term recovers it. The reconstruction term, $-\mathbb{E}_{q(z|x)}[\log p(x \mid z)]$, has no closed form in general and is estimated by a one-sample Monte Carlo at each gradient step---which is what the reparameterization trick below makes practical.
+
 For one input, the encoder might output \(\mu=(0.4,-0.2)\) and \(\log\sigma^2=(-1.0,0.2)\). The model samples noise \(\epsilon\sim\mathcal{N}(0,I)\), forms \(z=\mu+\sigma\odot\epsilon\), decodes \(z\), and measures the reconstruction loss. For a diagonal Gaussian, the KL term reduces to
 \[
 \frac{1}{2}\sum_j \left(\mu_j^2+\sigma_j^2-\log\sigma_j^2-1\right).
 \]
 Large means or extreme variances inflate this penalty. The encoder is therefore rewarded for choosing a latent distribution that reconstructs the input while staying close enough to the shared prior for sampling to remain meaningful.
-\end{mathlens}
 
-\begin{practicalnote}
 A weighting factor $\beta$ controls the balance between reconstruction and regularization (the ``$\beta$-VAE'' variant). At $\beta = 1$, the objective is the standard ELBO; even then, the two terms need not be equal in scale or contribution. Larger $\beta$ raises the KL pressure, often producing a more structured, disentangled latent space at the cost of blurrier reconstructions. Smaller $\beta$ does the opposite: sharper reconstructions, less-organized latent space. In practice, tuning $\beta$ is often necessary to get useful results for the downstream task.
-\end{practicalnote}
 
 \subsection{The Reparameterization Trick}
 
@@ -81,6 +100,35 @@ z = \mu(x) + \sigma(x) \odot \epsilon, \quad \epsilon \sim \mathcal{N}(0, I)
 \]
 
 The randomness now lives entirely in $\epsilon$, which is independent of the model parameters. Gradients flow through $\mu$ and $\sigma$ back to the encoder. This trick makes VAE training practical with standard backpropagation.
+
+The whole VAE training step fits in twenty lines of numpy-style pseudocode. The next snippet wraps a forward pass, the reparameterized sample, the decoder, the closed-form Gaussian KL, and the per-batch loss the autodiff system would differentiate.
+
+\begin{codeexample}
+import numpy as np
+
+def vae_step(x, encoder, decoder, rng, beta=1.0):
+    """One forward pass of a VAE: returns loss and its components.
+    encoder(x) -> (mu, log_sigma2), each of shape (batch, latent_dim).
+    decoder(z) -> x_recon of the same shape as x (Gaussian-decoder mean).
+    """
+    # 1. Encode the input to the variational posterior.
+    mu, log_sigma2 = encoder(x)
+    sigma          = np.exp(0.5 * log_sigma2)
+    # 2. Reparameterized sample: z = mu + sigma * eps, with eps ~ N(0, I).
+    eps  = rng.standard_normal(size=mu.shape)
+    z    = mu + sigma * eps
+    # 3. Decode and compute Gaussian negative log-likelihood
+    #    (here written as squared error, which is -log N(x | x_recon, I) + const).
+    x_recon = decoder(z)
+    recon_term = 0.5 * np.sum((x - x_recon) ** 2, axis=-1)        # per example
+    # 4. Closed-form diagonal-Gaussian KL.
+    kl_term    = 0.5 * np.sum(mu ** 2 + sigma ** 2 - log_sigma2 - 1.0, axis=-1)
+    # 5. ELBO loss = -ELBO = reconstruction NLL + beta * KL, averaged over batch.
+    loss = (recon_term + beta * kl_term).mean()
+    return loss, recon_term.mean(), kl_term.mean()
+\end{codeexample}
+
+The five-step structure is the algorithm. In a real PyTorch or JAX implementation, every named variable is a tensor with autograd tracking enabled, and the framework's autodiff produces gradients of the loss with respect to all encoder and decoder parameters in one backward pass. The reparameterized $z = \mu + \sigma \odot \epsilon$ is the line that makes that backward pass possible: $\epsilon$ has no gradient because it is sampled from a fixed distribution, so the gradient of any function of $z$ flows directly into $\mu$ and $\sigma$ through their algebraic dependencies.
 
 \subsection{What VAEs Are Good For}
 
@@ -98,8 +146,14 @@ The course-support team has 200 labeled URGENT messages but needs more to train 
 VAE-generated samples tend to be blurrier than real data, especially for images. The Gaussian decoder assumption and the reconstruction loss, which averages over possible outputs, are responsible. For tasks where sharp, realistic detail matters---generating training images for a pedestrian detector, for example---GANs or diffusion models often produce better samples. For tasks where diversity and coverage matter more than sharpness, such as generating text variations, VAEs are usually sufficient.
 \end{warningbox}
 
+\begin{failurebox}
+\textbf{Posterior collapse.} A subtler VAE failure than blurriness is \emph{posterior collapse}: the encoder learns to ignore the input entirely and outputs the prior $q(z \mid x) \approx p(z)$ for every $x$, regardless of what $x$ is. The KL term in the ELBO is then zero (the encoder matches the prior exactly), and the decoder learns to do everything from the unconditional prior --- in effect, the VAE becomes an unconditional generator with the encoder doing nothing. This is especially common with very expressive decoders (e.g., autoregressive RNNs or transformers as the decoder $p(x \mid z)$), because such decoders can model $p(x)$ well without needing any latent information. Diagnose it by watching the KL term during training: if it drops sharply to near zero and stays there, the posterior has collapsed. The standard mitigations are \emph{KL annealing} (ramp $\beta$ from $0$ up to $1$ during training so the reconstruction term anchors $z$ first), \emph{free bits} (skip the KL gradient when it falls below a per-dimension floor), and constraining the decoder so it cannot model $p(x)$ unconditionally well.
+\end{failurebox}
+
 \section{Generative Adversarial Networks}
 \label{sec:gan}
+
+\emph{Back to the running dilemmas.} VAE samples for the course-support team are smooth, easy to interpolate, and visibly blurry --- a synthetic ``urgent'' message reads like an average of urgency rather than any particular case. The pedestrian-detector team has the same complaint about VAE-generated nighttime frames: the silhouettes are placed correctly, but the textures lack the sharp detail a downstream detector needs to learn from. GANs sit at the opposite end of the trade: sharp, photorealistic samples produced by a generator that has been trained against a discriminator, with all the training-stability costs that ``two networks chasing each other'' implies.
 
 \subsection{The Adversarial Idea}
 
@@ -117,6 +171,20 @@ This is the original minimax GAN objective from \citet{goodfellow2014gan}; pract
 
 At equilibrium, in theory, the generator produces data indistinguishable from real data, and the discriminator outputs 0.5 for everything.
 
+\textbf{The optimal discriminator and the JS-divergence connection (Extension).} Fix the generator $G$ and ask which $D$ maximizes the inner objective. Writing $p_g$ for the distribution of generated samples, the discriminator's expected payoff is
+\[
+V(D) \;=\; \int \bigl[p_\text{data}(x)\,\log D(x) + p_g(x)\,\log(1 - D(x))\bigr]\,dx.
+\]
+Pointwise this is $a \log d + b \log(1 - d)$ with $a = p_\text{data}(x)$, $b = p_g(x)$, $d = D(x)$; setting the derivative to zero gives the optimum $d^\star = a/(a+b)$, so
+\[
+D^\star(x) \;=\; \frac{p_\text{data}(x)}{p_\text{data}(x) + p_g(x)}.
+\]
+Substituting this back into the generator's objective and rewriting the integrand using the average distribution $m(x) = \tfrac{1}{2}(p_\text{data}(x) + p_g(x))$ gives, up to an additive constant,
+\[
+\max_D V(G, D) \;=\; -\log 4 \;+\; 2 \cdot D_\mathrm{JS}\bigl(p_\text{data} \,\|\, p_g\bigr),
+\]
+where $D_\mathrm{JS}(p \,\|\, q) = \tfrac{1}{2} D_\mathrm{KL}(p \,\|\, m) + \tfrac{1}{2} D_\mathrm{KL}(q \,\|\, m)$ is the Jensen--Shannon divergence. So with an optimal discriminator the generator is, in principle, minimizing JS divergence to the data distribution. Two things follow. First, the global optimum is $p_g = p_\text{data}$, at which point $D^\star \equiv \tfrac{1}{2}$ everywhere and the loss equals $-\log 4$. Second, when the supports of $p_g$ and $p_\text{data}$ are disjoint (a common case early in training when the generator is bad), $D_\mathrm{JS}$ saturates at $\log 2$ and its gradient with respect to the generator's parameters \emph{vanishes}: the discriminator can perfectly separate real from fake, but the JS landscape is locally flat for the generator. This is the formal reason GAN training stalls when the discriminator is too good, and the motivation for the Wasserstein GAN, which replaces JS with the Earth-Mover (Wasserstein-1) distance whose gradient remains informative even under disjoint support.
+
 \subsection{Why GANs Produce Sharp Samples}
 
 VAEs optimize a reconstruction loss that averages over uncertainty, producing blurry outputs. GANs instead use a discriminator that penalizes any detectable difference from real data. This adversarial pressure pushes the generator toward sharp, realistic outputs. The visual difference is striking: GAN-generated faces can be nearly photorealistic, while VAE-generated faces are typically smoother and less detailed.
@@ -131,11 +199,12 @@ Adversarial training is inherently unstable. The generator and discriminator mus
 
 \textbf{Vanishing gradients.} An overconfident discriminator (outputs near 0 or 1) provides almost no gradient signal to the generator, stalling training.
 
+All three failures share a single mathematical cause: when $p_\text{data}$ and $p_g$ have disjoint or nearly-disjoint support, $\mathrm{JSD}(p_\text{data} \,\|\, p_g) \to \log 2$ regardless of how far apart they are. The discriminator can perfectly distinguish them ($D^\star$ saturates at $0$ or $1$), the gradient $\nabla_g \log(1 - D(G(z)))$ vanishes wherever $D$ is saturated, and the generator receives no useful signal about which direction to move. Mode collapse, oscillation, and vanishing gradients are three behavioral symptoms of the same geometric problem: JS-divergence is constant once the supports separate, and so is the gradient. The Wasserstein-GAN fix replaces JS-divergence with the Earth Mover's distance, which scales with how far apart the supports are even when they are disjoint, restoring a meaningful gradient signal.
+
 \begin{warningbox}
 Mode collapse is insidious because standard training metrics may not detect it. The discriminator loss can converge, the generator loss can decrease, and individual samples can look realistic---yet the \emph{distribution} of generated samples may cover only a fraction of the real distribution. Always inspect the diversity of generated samples, not just their quality.
 \end{warningbox}
 
-\begin{practicalnote}
 Several techniques improve GAN training stability:
 \begin{itemize}[leftmargin=*]
 \item \emph{Wasserstein GAN (WGAN):} Replaces the original objective with the Wasserstein distance, which provides smoother gradients even when the discriminator is strong.
@@ -144,7 +213,6 @@ Several techniques improve GAN training stability:
 \item \emph{Two-timescale learning rates:} Uses a higher learning rate for the discriminator to keep it slightly ahead of the generator and provide useful gradients.
 \end{itemize}
 None of these fully solves the stability problem. GAN training demands more monitoring and hyperparameter tuning than standard supervised training.
-\end{practicalnote}
 
 \subsection{Conditional Generation}
 
@@ -156,6 +224,8 @@ A pedestrian detection team wants to augment its training data with nighttime sc
 
 \section{Diffusion Models}
 \label{sec:diffusion}
+
+\emph{Why the pedestrian-detector team will use this section.} VAEs produced smooth but soft synthetic frames; GANs produced sharp ones but with mode collapse and training pain. Diffusion sits at a third corner of the trade: training is regression-stable, sample quality typically exceeds GANs on natural images, and conditioning (``pedestrian crossing a wet road at dusk'') is straightforward. The cost is inference latency --- many forward passes per sample --- which matters whether the synthetic frames are for offline data augmentation (latency is tolerable) or for real-time use (it isn't). The chapter's running dilemma about whether synthetic data adds information becomes more answerable here, because diffusion's mode coverage tends to be better than GANs.
 
 \subsection{The Denoising Idea}
 
@@ -170,6 +240,86 @@ The training objective is simple. Minimize the mean squared error between the pr
 \mathcal{L}_{\text{diffusion}} = \mathbb{E}_{t, x_0, \epsilon}\bigl[\|\epsilon - \epsilon_\theta(x_t, t)\|^2\bigr]
 \]
 
+\textbf{The forward process has a closed form.} Each forward step adds Gaussian noise according to a chosen variance schedule $\beta_t \in (0, 1)$:
+\[
+q(x_t \mid x_{t-1}) \;=\; \mathcal{N}\bigl(x_t;\; \sqrt{1 - \beta_t}\, x_{t-1},\; \beta_t I\bigr).
+\]
+Writing $\alpha_t = 1 - \beta_t$ and $\bar\alpha_t = \prod_{s=1}^{t} \alpha_s$, the marginal at step $t$ given the original $x_0$ collapses, by closure of Gaussians under convolution, to a single Gaussian:
+\[
+q(x_t \mid x_0) \;=\; \mathcal{N}\bigl(x_t;\; \sqrt{\bar\alpha_t}\, x_0,\; (1 - \bar\alpha_t)\, I\bigr),
+\quad\text{equivalently}\quad
+x_t \;=\; \sqrt{\bar\alpha_t}\, x_0 + \sqrt{1 - \bar\alpha_t}\, \epsilon,\; \epsilon \sim \mathcal{N}(0, I).
+\]
+This is what makes diffusion training tractable. Rather than unrolling $t$ noising steps one at a time, we sample $t$ uniformly, sample one $\epsilon$, form $x_t$ in one shot, and ask the network to predict the $\epsilon$ that produced it. The MSE objective above is a reweighted variational bound on $\log p(x_0)$; choosing the noise-prediction parameterization and dropping the per-$t$ weights produces a clean training signal that empirically works better than the strict ELBO version.
+
+\begin{advancednote}
+\textbf{Denoising is score matching: the Tweedie identity.} Tweedie's formula states that for $x \sim \mathcal{N}(\mu, \sigma^2 I)$, the posterior mean of $\mu$ given $x$ is
+\[
+\mathbb{E}[\mu \mid x] \;=\; x + \sigma^2 \nabla_x \log p(x).
+\]
+Apply this to the diffusion forward marginal $x_t \mid x_0 \sim \mathcal{N}(\sqrt{\bar\alpha_t}\, x_0,\; (1 - \bar\alpha_t) I)$. Reading off $\mu = \sqrt{\bar\alpha_t}\, x_0$ and $\sigma^2 = 1 - \bar\alpha_t$, and using the reparameterization $x_t = \sqrt{\bar\alpha_t}\, x_0 + \sqrt{1 - \bar\alpha_t}\, \epsilon$, a few lines of algebra give the optimal noise predictor
+\[
+\epsilon^\star(x_t, t) \;=\; -\sqrt{1 - \bar\alpha_t}\, \nabla_{x_t} \log p_t(x_t),
+\]
+where $p_t$ is the marginal of $x_t$ under the forward process.
+
+This is the identity that makes ``noise prediction'' (used in DDPM training) and ``score matching'' (used in score-based generative models, Song and Ermon 2019) two views of the same object. Training a network $\epsilon_\theta(x_t, t)$ to predict the noise $\epsilon$ added in the forward process is equivalent --- up to the fixed scaling $-\sqrt{1 - \bar\alpha_t}$ --- to learning the score $\nabla_{x_t} \log p_t(x_t)$ of the noisy marginal. The reverse-time SDE that turns noise back into data only needs the score, so either parameterization plugs into the same sampler.
+
+The implication is conceptual, not just notational: denoising-diffusion and score-based generative modeling are not parallel ideas, but the same algorithm written in different parameterizations.
+\end{advancednote}
+
+\begin{example}[The Forward Chain by Hand]
+Take a scalar $x_0 = 2.0$, a three-step schedule $\beta_1 = 0.1,\, \beta_2 = 0.2,\, \beta_3 = 0.3$, and three independent noise draws $\epsilon_1 = 0.5,\, \epsilon_2 = -0.3,\, \epsilon_3 = 1.2$ from $\mathcal{N}(0, 1)$. The iterative form $x_t = \sqrt{1 - \beta_t}\, x_{t-1} + \sqrt{\beta_t}\, \epsilon_t$ walks the chain one step at a time:
+\begin{align*}
+x_1 &= \sqrt{0.9}\,(2.0) + \sqrt{0.1}\,(0.5)  \approx 1.897 + 0.158 = 2.056,\\
+x_2 &= \sqrt{0.8}\,(2.056) + \sqrt{0.2}\,(-0.3) \approx 1.839 - 0.134 = 1.704,\\
+x_3 &= \sqrt{0.7}\,(1.704) + \sqrt{0.3}\,(1.2)   \approx 1.426 + 0.657 = 2.083.
+\end{align*}
+The closed form skips the intermediates. Compute $\bar\alpha_3 = 0.9 \cdot 0.8 \cdot 0.7 = 0.504$, so
+\[
+x_3 \;=\; \sqrt{0.504}\,(2.0) + \sqrt{0.496}\,\epsilon \;\approx\; 1.420 + 0.704\,\epsilon,\quad \epsilon \sim \mathcal{N}(0, 1).
+\]
+A single $\epsilon$ here is the convolution of the three step noises, weighted by the geometry of the chain; the iterative draw above happens to correspond to $\epsilon \approx 0.94$. Both forms give the same marginal $q(x_3 \mid x_0) = \mathcal{N}(1.420,\, 0.496)$, and the closed form is what training actually samples from.
+
+The diffusion forward process is a deterministic shrinkage of the data signal by $\sqrt{\bar\alpha_t}$ combined with progressively dominant Gaussian noise of variance $1 - \bar\alpha_t$. By step $T$, $\bar\alpha_T \to 0$, the signal is gone, and $x_T$ is approximately $\mathcal{N}(0, 1)$---which is exactly where the reverse process starts.
+\end{example}
+
+\textbf{The reverse step has a closed form too (Extension).} A first-pass reader can take the DDPM sampling code below as the operational rule and skip the derivation; the construction here is for readers who want to see where the update comes from. A short Bayes-rule calculation gives the posterior $q(x_{t-1} \mid x_t, x_0)$ as Gaussian with mean $\tilde\mu_t(x_t, x_0)$ depending on $x_t$ and $x_0$. Substituting the predictor $\epsilon_\theta(x_t, t)$ for $\epsilon$ via $x_0 \approx (x_t - \sqrt{1-\bar\alpha_t}\,\epsilon_\theta)/\sqrt{\bar\alpha_t}$ gives the DDPM sampling update:
+\[
+x_{t-1} \;=\; \frac{1}{\sqrt{\alpha_t}}\!\left(x_t - \frac{1 - \alpha_t}{\sqrt{1 - \bar\alpha_t}}\,\epsilon_\theta(x_t, t)\right) \;+\; \sigma_t\, z,\quad z \sim \mathcal{N}(0, I),
+\]
+with $\sigma_t^2$ chosen from the same $\beta$-schedule (typically $\sigma_t^2 = \beta_t$ or the smaller $\tilde\beta_t = \frac{1-\bar\alpha_{t-1}}{1-\bar\alpha_t}\beta_t$). At $t = 1$ the noise term is dropped to get a deterministic final denoising. The sampling loop runs this update for $t = T, T-1, \ldots, 1$ starting from $x_T \sim \mathcal{N}(0, I)$; DDIM's deterministic variant sets $\sigma_t = 0$ and skips intermediate $t$'s, which is why it produces high-quality samples in $10$--$50$ steps rather than the original $T = 1000$.
+
+\begin{codeexample}
+import numpy as np
+
+def ddpm_sample(epsilon_theta, shape, betas, rng):
+    """Sample one image from a trained DDPM noise predictor.
+    epsilon_theta(x_t, t) -> predicted noise (same shape as x_t).
+    betas: length-T variance schedule.
+    """
+    T          = len(betas)
+    alphas     = 1.0 - betas
+    alpha_bars = np.cumprod(alphas)
+    x = rng.standard_normal(size=shape)        # x_T ~ N(0, I)
+    for t in reversed(range(T)):
+        eps_pred = epsilon_theta(x, t)
+        coef1    = 1.0 / np.sqrt(alphas[t])
+        coef2    = (1.0 - alphas[t]) / np.sqrt(1.0 - alpha_bars[t])
+        mean     = coef1 * (x - coef2 * eps_pred)
+        if t > 0:
+            sigma = np.sqrt(betas[t])           # simple variance choice
+            z     = rng.standard_normal(size=shape)
+            x     = mean + sigma * z
+        else:
+            x     = mean                        # last step: no noise
+    return x                                    # x_0 sample
+\end{codeexample}
+
+The loop is the algorithm. The schedule $\bar\alpha_t$ is precomputed once; the only per-step learned quantity is the noise prediction $\epsilon_\theta(x_t, t)$; the rest of the step is scalar arithmetic from the closed-form posterior above. Real implementations differ in three places: the schedule (linear, cosine, or learned), the variance choice $\sigma_t^2$, and the number of effective steps (the DDIM trick skips most of them by reusing the closed-form $q(x_t \mid x_0)$ identity rather than walking the original Markov chain). The core update is the same.
+
+DDPM sampling costs $T$ forward passes through the noise predictor per generated sample, where each forward pass is an $O(\text{model FLOPs})$ U-Net or transformer evaluation. For $T = 1000$ and a model that runs in $1$ ms per pass on a modern GPU, that's about a second per image---two to three orders of magnitude slower than a single-pass VAE decoder or GAN generator. The accelerated samplers (DDIM, DPM-Solver, consistency models) trade quality for compute by reducing the effective $T$ to $10$--$50$ at the price of a small FID degradation. Training cost is dominated by the same forward-and-backward pass over many random $t$'s and is comparable to other large generative models; the asymmetry is concentrated at inference.
+
 \subsection{Why Diffusion Models Work Well}
 
 Diffusion models have several advantages over VAEs and GANs:
@@ -182,9 +332,7 @@ Diffusion models have several advantages over VAEs and GANs:
 
 The main disadvantage is computational cost. Generation requires running the denoising network for hundreds or thousands of steps---one forward pass per step---making it much slower than a single-pass GAN or VAE decoder.
 
-\begin{practicalnote}
 Accelerated sampling methods such as DDIM and DPM-Solver reduce the number of denoising steps, trading some quality for speed \citep{song2020ddim,lu2022dpmsolver}. Tens of sampling steps often suffice in practice, compared with the original 1000-step schedule. During training, implementations typically sample timesteps from that schedule rather than unrolling every step for every example. For applications where generation speed matters---real-time augmentation during training, for example---this tradeoff is important.
-\end{practicalnote}
 
 \subsection{Guidance: Controlling What Gets Generated}
 
@@ -199,9 +347,9 @@ Higher guidance matches the condition more faithfully but produces less diversit
 A team building a pedestrian detector needs training images of ``pedestrian crossing a wet road at dusk.'' A text-conditioned diffusion model generates 500 such images. With low guidance ($w=2$), the images are diverse---some show the road clearly, others are more abstract---but not all are realistic enough for training. With high guidance ($w=10$), the images are more uniform and realistic but lack diversity, with similar poses and similar lighting. The team settles on medium guidance ($w=5$) and post-filters the outputs, keeping 300 images that pass a visual quality check. These are then evaluated against real test frames to measure the sim-to-real gap.
 \end{example}
 
-\subsection{Brief Note: Normalizing Flows and Flow Matching}
+\subsection*{Extension: Normalizing Flows and Flow Matching}
 
-Two other generative approaches deserve mention. \emph{Normalizing flows} define an explicit, invertible mapping between a simple distribution (typically Gaussian) and the data distribution \citep{dinh2017realnvp}. Because the mapping is invertible, exact likelihood computation is possible---unlike VAEs, which use a lower bound, or GANs, which have no likelihood. The catch is that every transformation must be invertible with a tractable Jacobian, which limits architectural flexibility.
+Two other generative approaches deserve mention; the rest of the book does not depend on this subsection. \emph{Normalizing flows} define an explicit, invertible mapping between a simple distribution (typically Gaussian) and the data distribution \citep{dinh2017realnvp}. Because the mapping is invertible, exact likelihood computation is possible---unlike VAEs, which use a lower bound, or GANs, which have no likelihood. The catch is that every transformation must be invertible with a tractable Jacobian, which limits architectural flexibility.
 
 \emph{Flow matching} relaxes this constraint by defining a continuous-time flow from noise to data, trained with a regression objective related to diffusion and continuous-normalizing-flow views \citep{lipman2023flowmatching}. Sampling still requires numerically integrating the learned flow over multiple solver steps, but in practice fewer or cheaper steps than standard diffusion sampling can suffice while maintaining high sample quality. Flow matching is an active research area; treat it as a fast-moving family rather than a settled recipe.
 
@@ -234,13 +382,9 @@ For many applications, human evaluation remains essential. Common protocols incl
 \item \emph{Task-specific evaluation.} When generated data is used for augmentation, the downstream task metric---classification accuracy on real test data, for example---is the ultimate evaluation. A model that produces beautiful images that do not help the downstream task is not useful.
 \end{itemize}
 
-\begin{practicalnote}
 When generated data is used for training---data augmentation or synthetic training---the only evaluation that ultimately matters is downstream performance on a held-out \emph{real} test set. FID and IS are useful during development for comparing model variants, but the decision to ship should hinge on whether the generated data actually improves the system it supports.
-\end{practicalnote}
 
-\begin{evidencebox}
 A useful claim audit for generated pedestrian scenes runs as follows. \emph{Claim}: synthetic dusk scenes improve the real pedestrian detector under low-light conditions. \emph{Evidence available}: detector performance on a real held-out dusk slice before and after synthetic augmentation. \emph{Missing evidence}: whether gains persist across cameras, weather, and rare occlusions. \emph{Decision}: use synthetic data only if real-slice performance improves without degrading daytime or high-risk cases.
-\end{evidencebox}
 
 \section{Chapter Artifact: The Generative Model Audit Card}
 \label{sec:gen-audit}
@@ -336,7 +480,13 @@ Best for & Latent interpolation, anomaly detection, augmentation & Sharp image g
 
 \section{Common Mistakes in Generative Modeling}
 
-Several mistakes recur when building and deploying generative models. The first is evaluating only sample quality and ignoring diversity: a model that produces 100 beautiful but nearly identical images is useless for data augmentation. The second is trusting FID as a definitive quality measure. FID depends on the feature extractor, the sample size, and the data domain, and a low FID does not guarantee that generated data is useful for the downstream task. The third is using generated data for both training and evaluation. If synthetic data augments the training set, the test set must stay real and untouched. The fourth is ignoring the model's failure modes. If the model cannot generate rare events or underrepresented conditions, using its output as training data will not fix the very coverage gap it was meant to address. Finally, deploying a generative model without considering misuse---realistic fake images, synthetic text used for deception---is an ethical failure that the generative model audit card is designed to prevent.
+\textbf{Evaluating quality and ignoring diversity.} A model that produces a hundred beautiful but nearly identical samples is useless for data augmentation and dangerous as a basis for downstream training. Sample quality without a diversity audit hides mode collapse behind a flattering grid.
+
+\textbf{Trusting FID alone.} FID depends on the feature extractor, the sample size, and the data domain, and small differences can flip rankings between extractors. A low FID is a proxy, not a guarantee that generated data will help on the downstream task.
+
+\textbf{Letting generated data contaminate evaluation.} If synthetic samples augment the training set, the test set must stay real and untouched. Mixing generated and real data into evaluation turns the model into the judge of its own output.
+
+\textbf{Ignoring the model's failure modes.} If the generator cannot produce rare events or underrepresented conditions, using its output as training data will not fix the coverage gap it was meant to address---and may amplify it. Deploying generated content without considering misuse compounds the problem; the generative model audit card exists to force these questions before release.
 
 \section{Looking Ahead}
 
@@ -362,6 +512,8 @@ Generative models learn to produce new data from latent representations. Variati
 \end{studyquestions}
 
 \begin{exercises}
+\item \exercisetag{Calculation}{Core}Compute the closed-form Gaussian KL by hand. For $q(z) = \mathcal{N}(\mu, \sigma^2)$ and $p(z) = \mathcal{N}(0, 1)$ in one dimension, the formula $D_\text{KL}(q \,\|\, p) = \tfrac{1}{2}(\mu^2 + \sigma^2 - \log \sigma^2 - 1)$ should give exactly $0$ when $\mu = 0$ and $\sigma^2 = 1$. Verify this by substitution. Then compute the KL for $(\mu, \sigma^2) = (0, 4)$ and $(\mu, \sigma^2) = (3, 1)$, and explain in one sentence which of the two posteriors is being penalized more by the KL regularizer and why.
+\item \exercisetag{Proof}{Advanced}Re-derive the ELBO from the marginal log-likelihood. Starting from $\log p(x) = \log \int p(x \mid z) p(z)\,dz$, multiply and divide the integrand by $q(z \mid x)$, apply Jensen's inequality (recall $\log$ is concave), and split the resulting lower bound into the reconstruction and KL-regularization terms. Then identify the slack between $\log p(x)$ and the ELBO as a KL divergence between $q(z \mid x)$ and the true posterior $p(z \mid x)$.
 \item \exercisetag{Implementation}{Advanced}Train a VAE on MNIST or Fashion-MNIST. Visualize the latent space (using a 2D latent code) by coloring points by their class label. Do classes form distinct regions? Sample new digits by decoding random latent points and inspect the results.
 \item \exercisetag{Implementation}{Intermediate}Using the trained VAE from the previous exercise, interpolate between two digits in latent space (e.g., from a ``3'' to a ``7''). Show the decoded images at 5 equally spaced points along the interpolation path. Is the transition smooth?
 \item \exercisetag{Diagnosis}{Intermediate}Given two provided sample grids, one from a VAE-like model and one from a GAN-like model, assess: (a) visual quality of individual samples, (b) diversity across the samples. Which model appears sharper? Which appears more diverse? State what evidence the sample grids cannot provide.

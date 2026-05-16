@@ -1,11 +1,35 @@
 \chapter{From Models to Systems}
 \label{ch:models-systems}
 
-A good model is not yet a good system. Once predictions enter a real workflow, the question shifts from whether the model is accurate to whether the surrounding service is useful, stable, and governable. Inputs must arrive in the right form. Thresholds become operational policies. Human review creates queues and bottlenecks. Monitoring must continue after launch. This chapter asks whether the entire decision pipeline improves the real task under real organizational constraints. By the end, you should be able to write a system-readiness brief that ties model quality to operational reality. A \emph{service-level objective} is a measurable promise about latency, backlog, coverage, or severe-error control. A \emph{data contract} states what inputs, units, and preprocessing rules must hold before the service may act.
+It is Tuesday. The risk-scoring service has been live for three weeks. This morning, the on-call engineer notices that the queue of human-reviewed cases has tripled overnight, with no change to the model. By lunch, the support staff are five hours behind. Offline accuracy is unchanged. The shift came from upstream: a registrar export now sends \texttt{enrolled\_courses} as a comma-separated string instead of a list, and the feature pipeline has been quietly setting the count to zero. Every student now looks under-enrolled. Every score is too high. Every score crosses the alert threshold.
 
-Keep the same running case in view from the earlier language, experiments, and reliability chapters: a grounded course-support assistant that routes student messages, retrieves institutional policy, drafts bounded answers for routine cases, and escalates uncertain or high-risk cases to humans. This chapter asks whether that system is ready to launch as a real service rather than an impressive demo.
+Once predictions enter a real workflow, the question is no longer whether the model is accurate but whether the surrounding service is useful, stable, and governable.
 
-The language workflow remains the primary capstone because it makes contracts, retrieval, escalation, and review paths easy to see. It also gives the chapter its spine: service objective first, then requirements and contracts, then action policy, then monitoring and launch readiness. But the same systems questions must hold outside one domain, so we will repeatedly contrast it with the dashboard-camera pedestrian detector from Chapter~\ref{ch:vision}. The aim is to show that the systems lesson is broader than educational NLP.
+Inputs must arrive in the right form. Thresholds become operating policies. Human review creates queues and bottlenecks. Monitoring must continue after launch. Someone must own the rollback path. This chapter asks whether the entire decision pipeline improves the real task under real organizational constraints, and what evidence justifies calling it ready to launch.
+
+\section{Problem-Solving Technique: The System-Readiness Brief}
+
+A model is a function. A system is a contract. Read every deployment decision as a commitment about what inputs the service will accept, what actions it will take, what it will defer to humans, what it will log, and who can turn it off when it drifts.
+
+\textbf{System-readiness brief.} Before launch, write the service objective, the input contract, the operating policy, the fallback path, the monitoring signals, and the named owner with rollback authority. A service whose readiness brief cannot be written in one page is not ready, regardless of its offline metrics.
+
+Strong offline numbers are necessary but not sufficient to ship. The most common failure pattern at this stage is treating launch as a model-quality decision when it is really a workflow-capacity decision: the system improves answer accuracy by two points and simultaneously overwhelms the human reviewers it depends on.
+
+\section{Opening Dilemma: When the Demo Becomes a Service}
+
+Suppose the grounded course-support assistant has passed every offline check that earlier chapters demanded. The proxy target is defensible, the experiment is honest, the reliability review is filed. A pilot week is scheduled. On day three of the pilot, the queue of human-review cases doubles, two advisers escalate to the project owner, and the system begins citing a policy document that was rewritten that morning but not yet revalidated against the retrieval index.
+
+None of the failures is a model failure. The model behaves exactly as it did during evaluation. What changed is that the model now sits inside an organization with finite review capacity, a content team that updates policy pages on its own schedule, and a service-level expectation about response time that the offline experiment never measured.
+
+The chapter is about the move from the first description of that service to the second. A model objective is narrow: minimize a training loss, maximize a held-out metric. A service objective is broader: improve a workflow while respecting the constraints---latency, review capacity, contract on inputs, rollback authority---that the workflow actually has.
+
+\begin{quote}\itshape
+The model becomes a system when someone has to be able to turn it off on a Tuesday afternoon and still serve the next student in line.
+\end{quote}
+
+The running case stays the same: a grounded course-support assistant that routes student messages, retrieves institutional policy, drafts bounded answers for routine cases, and escalates uncertain or high-risk cases to humans. The dashboard-camera pedestrian detector from Chapter~\ref{ch:vision} returns as the cross-domain contrast, so the system lesson does not collapse into one application area.
+
+The chapter is organized around the system-readiness brief. The next section writes the service objective and the input contract. Later sections fix the operating policy and fallback path, the monitoring signals, and the rollback authority. The chapter artifact at the end is the brief itself: a one-page document whose absence is, in this book's view, the single best predictor of a system that ships and then quietly fails.
 
 \begin{figure}[t]
 \centering
@@ -83,20 +107,20 @@ An operational requirement is a concrete condition that the deployed system must
 \end{definition}
 
 \subsection{Worked Example: Queue Capacity Changes the Threshold}
+\label{subsec:queue-capacity-threshold}
 
 Suppose the advising team behind the course-support assistant can inspect at most $30$ escalated messages per day. The system assigns each incoming message an \emph{escalation score}, where larger values mean stronger reason to defer to a human. On a $200$-message day, a lower escalation threshold sends $78$ messages to humans. A stricter threshold sends $26$.
 
 If the team deploys the aggressive policy because it appears safer in isolation, the queue overloads staff and slows all responses, including the urgent ones. The seemingly cautious threshold then produces the weaker service. The stricter threshold leaves more medium-risk cases automated, but it produces a queue the organization can actually process.
 
-\begin{mathlens}
 As a simple day-by-day toy model, let $q_t$ be the review backlog after day $t$, let $r$ be daily human capacity, and let $a(\tau)$ be the number of cases escalated by threshold $\tau$. Then
 \[
 q_{t+1}=\max\{0,\;q_t+a(\tau)-r\}.
 \]
 A lower escalation threshold destabilizes the queue when it makes $a(\tau)>r$: the backlog then grows instead of clearing.
-\end{mathlens}
 
-\begin{theorem}[Little's Law links average backlog, arrival rate, and waiting time]
+\begin{advancednote}
+\begin{theorem}[Little's Law links average backlog, arrival rate, and waiting time (Extension)]
 For a stable system in steady state, the average number of items in the system satisfies
 \[
 L=\lambda W,
@@ -105,6 +129,24 @@ where \(L\) is the average number of items in the system, \(\lambda\) is the ave
 \end{theorem}
 
 The toy recurrence makes overload vivid one day at a time: if escalations arrive faster than they can be cleared, the backlog grows instead of settling. Little's Law states the same lesson at steady state: once the review process is stable, larger average backlog implies longer average waiting time because the queue itself becomes part of the service.
+\end{advancednote}
+
+\begin{example}[A Backlog Forecast Under Two Thresholds]
+Take the advising team with daily capacity $r = 30$. Under the lower escalation threshold, $a(\tau_{\text{loose}}) = 36$ on average; under the stricter threshold, $a(\tau_{\text{strict}}) = 24$. Starting from $q_0 = 0$, the recurrence gives:
+\begin{center}
+\begin{tabular}{c c c}
+\toprule
+Day $t$ & $q_t$ under $\tau_{\text{loose}}$ ($a = 36$) & $q_t$ under $\tau_{\text{strict}}$ ($a = 24$) \\
+\midrule
+0 & 0  & 0 \\
+1 & 6  & 0 \\
+5 & 30 & 0 \\
+20 & 120 & 0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The looser threshold's queue grows by $6$ a day forever --- $\mathbb{E}[a_t] - r = 36 - 30 > 0$ violates the stability condition. The stricter threshold's queue clears immediately because $24 < 30$. Plugging the stable case into Little's Law with arrival rate $\lambda = 24$/day and a typical steady-state backlog $L$, the expected wait $W = L / \lambda$ scales with how full the queue actually gets --- when capacity headroom is small ($\lambda$ close to $r$), $L$ becomes large even in stable systems, which is the classic queueing pathology that an offline metric never sees.
+\end{example}
 
 This is not a trick example. Many deployments face exactly this issue. The useful prediction is not the one that looks best in isolation. It is the one that produces the best action process under real constraints.
 
@@ -132,13 +174,15 @@ Training-serving skew is a mismatch between the data representation or feature-p
 
 Modern models are sensitive to representation. A linear classifier expects features on the scale it was trained on. A tree expects the same fields and semantics it saw during fitting. A neural model expects the same tokenization, image normalization, or waveform preprocessing. If the serving pipeline silently changes one of those steps, the deployed system is effectively a different model from the one evaluated offline.
 
-\begin{mathlens}
 If training standardizes a feature as $z=(x-\mu_{\text{tr}})/\sigma_{\text{tr}}$ but serving uses $\tilde z=(x-\mu_{\text{sv}})/\sigma_{\text{sv}}$, then
 \[
 \tilde z=\frac{\sigma_{\text{tr}}}{\sigma_{\text{sv}}}z+\frac{\mu_{\text{tr}}-\mu_{\text{sv}}}{\sigma_{\text{sv}}}.
 \]
 For a linear score $s=wz+b$, the served score becomes $\tilde s=w\tilde z+b$. A changed mean or scale shifts the effective decision boundary even though the weights are unchanged.
-\end{mathlens}
+
+\begin{example}[A 10\% Scale Drift Moves the Threshold]
+Suppose the model standardizes a single feature with $\mu_{\text{tr}} = 50$ and $\sigma_{\text{tr}} = 10$. The trained logistic-regression score for raw input $x$ is $s = w \cdot \tfrac{x - 50}{10} + b$ with $w = 1$, $b = -0.5$. At training, the decision boundary $s = 0$ corresponds to $z^\star = 0.5$, i.e. the raw input $x^\star = 50 + 10 \cdot 0.5 = 55$. Now the serving pipeline silently uses fresh estimates $\mu_{\text{sv}} = 51$ and $\sigma_{\text{sv}} = 11$. The model file is unchanged: the logistic regression still trusts that ``$z = (x - 50)/10$'' was applied. But the served input is actually $\tilde z = (x - 51)/11$. Substituting and solving $\tilde s = 0$ gives a new decision boundary of $\tilde x^\star = 51 + 11 \cdot 0.5 = 56.5$. A $10\%$ drift in scale and a small mean shift moved the operational threshold by 1.5 raw-input units --- without any retraining, without any log entry, and without any change visible in the model artifact. This is why training-serving skew earns its own monitoring metric: a chain of arithmetic that nobody checked at deployment time has just changed the policy.
+\end{example}
 
 \subsection{Worked Example: A Retrieval Contract Bug}
 
@@ -158,9 +202,7 @@ Sculley et al.\ argue that many machine-learning failures come not from the mode
 
 A practical response is to define data contracts. A contract specifies what features exist, how they are computed, what units they use, which values may be missing, how categorical values are encoded, and what validation checks must pass before inference. In mature systems, deployment is blocked when these contracts fail. Requirements state what the service must achieve; contracts state what must be true before the model is allowed to act.
 
-\begin{practicalnote}
 Many deployment bugs are ordinary software bugs: wrong field order, missing normalization, stale joins, silently changed units, or inconsistent tokenization. Systems engineering matters because these bugs often dominate model quality in production.
-\end{practicalnote}
 
 Once the input contract is fixed, the next question is not what the model predicts but how the service will act on that prediction.
 
@@ -174,15 +216,7 @@ Choosing a threshold is not a mathematical cleanup step after training. It is a 
 
 \subsection{Queueing, Review Capacity, and Human Bottlenecks}
 
-Once abstention or escalation is available, the threshold also becomes a queueing decision. Suppose the course-support assistant handles about $120$ messages on a busy day and the advising team can review at most $20$ escalated cases before the backlog starts harming response time. A lower threshold might escalate $36$ messages; a stricter threshold escalates $18$.
-
-If the lower threshold improves severe-error control only slightly but creates a daily backlog of $16$ unresolved messages, then after five similar days roughly $80$ delayed cases accumulate. The system is now statistically cautious and operationally failing. Students should recognize this as a systems error, not a staffing footnote.
-
-\begin{mathlens}
-The same queue can be written as $q_{t+1}=\max\{0,\;q_t+a_t-r\}$, where $a_t$ is the day-$t$ deferral count. Stability requires average arrivals below capacity, $\mathbb{E}[a_t]<r$. If a lower escalation threshold raises deferred cases from $18$ to $36$ while $r=20$, then the expected drift becomes positive and the backlog grows.
-\end{mathlens}
-
-In the toy model, the right threshold is constrained by both mistake costs and queue capacity. Little's Law restates the same pressure as waiting time: once average deferrals rise, average review delay must rise with them unless the organization adds capacity or narrows automation. A policy that looks safer on isolated examples can produce a weaker service once review load, delay, and reviewer fatigue are counted as part of the outcome.
+Once abstention or escalation is available, the threshold also becomes a queueing decision. Section~\ref{subsec:queue-capacity-threshold} worked the case in full: the recurrence $q_{t+1}=\max\{0,\;q_t+a(\tau)-r\}$ destabilizes whenever expected escalations exceed daily review capacity, and Little's Law restates the same pressure in steady state as $W = L/\lambda$. The lesson is operational rather than statistical. A threshold that improves severe-error control on paper can still create a backlog the organization cannot clear, leaving a service that is statistically cautious and operationally failing. Recognize this as a systems error, not a staffing footnote.
 
 \begin{decisionbox}
 When human review is part of the system, do not choose the threshold from precision and recall alone. Estimate how many cases the policy will defer per hour or per day, compare that against real review capacity, and ask what backlog the organization can tolerate before service quality degrades.
@@ -206,13 +240,11 @@ The word \emph{confidence} needs discipline here. It should not mean a vague fee
 
 This score direction is deliberately different from the earlier queue examples. There the score measured escalation pressure, so a lower threshold produced more human review. Here the score measures automation safety, so a lower threshold accepts more cases for automatic answering.
 
-\begin{mathlens}
 Let $a(x)\in\{0,1\}$ indicate whether the system answers on input $x$, and let $\ell(f(x),y)$ be the loss on answered cases. Then coverage is $\phi=\mathbb{E}[a(x)]$ and selective risk is
 \[
 R_\phi(f)=\frac{\mathbb{E}[a(x)\,\ell(f(x),y)]}{\mathbb{E}[a(x)]}.
 \]
 This quantity is defined when \(\mathbb{E}[a(x)]>0\), so the system answers at least some cases. On this automation-safety score, lowering the threshold usually raises coverage but can also raise selective risk if the newly accepted cases are too uncertain. Thresholding works best when confidence is reasonably calibrated.
-\end{mathlens}
 
 \begin{definition}[Selective Prediction]
 Selective prediction is a system design in which the model predicts only on cases where it is sufficiently confident and abstains or defers on the rest.
@@ -233,9 +265,7 @@ Notice what the score means here. A low automation-safety score does not mean ``
 
 The right question is therefore not ``can the model answer every message?'' but ``which messages should the system answer on its own, and which should trigger review or fallback?'' That is a systems question. Once the action policy is written, the next question is how the team will notice when the live system drifts away from the assumptions that made the policy look acceptable.
 
-\begin{advancednote}
 Selective prediction works best when confidence scores are reasonably calibrated. If predicted probabilities do not reflect real uncertainty, thresholding by confidence may not separate easy and hard cases cleanly.
-\end{advancednote}
 
 \section{Monitoring After Deployment}
 
@@ -255,6 +285,22 @@ Useful monitoring often includes:
 
 For the course-support assistant, useful monitors include policy-retrieval hit rate, citation coverage in answered messages, escalation rate by subgroup, advisor override rate, backlog length, and complaint or re-contact rate after automated replies.
 
+\begin{advancednote}
+\textbf{Drift-detection statistics: PSI and KS.} Two quantitative tools turn ``the feature distribution has shifted'' from a hunch into a number that can fire an alert. Both compare a deployment-time distribution $Q$ against a reference (training-time) distribution $P$.
+
+\emph{Population Stability Index (PSI)} bins the feature into $K$ bins, then sums the symmetric log-ratio of bin masses:
+\[
+\mathrm{PSI}(P, Q) \;=\; \sum_{k=1}^{K} \bigl(q_k - p_k\bigr)\,\log\!\frac{q_k}{p_k},
+\]
+where $p_k, q_k$ are the fractions of training and deployment data in bin $k$. Industry rules of thumb treat $\mathrm{PSI} < 0.1$ as ``no meaningful shift,'' $0.1$--$0.25$ as ``modest, investigate,'' and $> 0.25$ as ``material drift, retrain or recalibrate.'' PSI is symmetric in $P$ and $Q$ and is closely related to the symmetrized KL divergence.
+
+\emph{Kolmogorov--Smirnov (KS) statistic} compares the empirical cumulative distribution functions:
+\[
+\mathrm{KS}(P, Q) \;=\; \sup_x \bigl|F_P(x) - F_Q(x)\bigr|.
+\]
+Larger values indicate more drift; the KS hypothesis test gives a calibrated $p$-value against the null that $P = Q$. KS works on continuous features without binning, but is sensitive to sample size and is one-dimensional --- multidimensional drift typically requires per-feature monitors and a small set of joint statistics on engineered features (e.g., prediction score, embedding norm, distance to a stored reference manifold). The point is not which statistic to choose, but that ``the distribution has shifted'' should be a tracked metric with a threshold and an alert, not a meeting comment.
+\end{advancednote}
+
 \begin{warningbox}
 Deployed models can create feedback loops. A recommender that surfaces certain content causes users to engage with it, and that engagement becomes training data that reinforces the same recommendations. A fraud detector that blocks certain transaction patterns drives fraudsters to shift tactics, changing the input distribution. The model's outputs alter the data it will be trained on next. Monitoring must watch for distribution shifts the model itself may have caused, not only shifts from external sources.
 \end{warningbox}
@@ -263,9 +309,7 @@ Deployed models can create feedback loops. A recommender that surfaces certain c
 
 Many real systems do not receive immediate ground truth. A support assistant may learn an answer was inadequate only when an advisor corrects it later, when a student asks again, when a complaint arrives, or when a periodic audit catches a policy mistake. Teams must therefore monitor proxy signals alongside eventual outcomes. A silent increase in retrieval misses, escalation backlog, or answer overrides can be an early warning before formal labels arrive.
 
-\begin{evidencebox}
 Evidence for deployment should include a monitoring plan, alert thresholds, and a rollback path. A system without post-deployment visibility is not under control, even if its offline evaluation was careful. Production rubrics such as the ML test score treat monitoring, rollback, and ownership as first-class deployment requirements rather than cleanup tasks \citep{breck2016}.
-\end{evidencebox}
 
 \subsection{Rollback and Recovery}
 
@@ -282,9 +326,7 @@ Post-deployment monitoring also carries the operational half of the security sto
 
 \emph{Response paths} reuse the deployment mechanisms already introduced. Model rollback returns the serving model to a reviewed version. Retrieval-index rollback returns the corpus to the last reviewed snapshot. Feature-store freezes prevent a suspected poisoning signal from leaking into the next retraining run. Human escalation routes queries the system now suspects are adversarial to a reviewer. Audit logs---immutable enough to be usable after an incident---let the team reconstruct which queries, which corpus state, and which model version were in play when the attack succeeded.
 
-\begin{practicalnote}
 The cheapest pre-launch check is simple: for every row of the security threat card, write down the exact production metric or log that realizes the monitoring signal, the exact rollback command that realizes the response path, and the on-call runbook entry that fires when the metric crosses threshold. Cards that name signals without wiring them to production are documentation, not defense.
-\end{practicalnote}
 
 \section{Post-Deployment Experimentation}
 
@@ -301,8 +343,17 @@ If shadow results are acceptable, the next step is often a \emph{canary release}
 For product changes where randomized exposure is acceptable, online controlled experiments give the strongest evidence about whether a deployment helps real users. Kohavi et al.\ argue that trustworthy online experiments matter precisely because intuition and offline metrics can mislead once a change reaches live traffic \citep{kohavi2012,kohavi2013}. In this chapter's language, an A/B test is not only a product-growth tool. It tests whether a systems change improves the real workflow without silently degrading something else.
 
 \begin{advancednote}
-A/B testing assumes that assigning one user to treatment does not affect another user's outcome (the stable-unit-treatment-value assumption). This breaks in networked settings: if a recommendation shown to one user affects what a second user sees---through social sharing, inventory depletion, or marketplace effects---the measured treatment effect can be biased. In those cases, cluster randomization or switchback designs are safer alternatives.
+\textbf{Sample size and the minimum detectable effect.} An A/B test promises to detect an effect of size $\Delta$ with significance level $\alpha$ and power $1 - \beta$. For a two-sided test comparing two binary-outcome proportions $p_A$ and $p_B = p_A + \Delta$, the standard sample-size formula (per arm) is
+\[
+n \;\approx\; \frac{\bigl(z_{1-\alpha/2}\sqrt{2\bar p (1-\bar p)} + z_{1-\beta}\sqrt{p_A(1-p_A) + p_B(1-p_B)}\bigr)^2}{\Delta^2},
+\qquad \bar p = \tfrac{1}{2}(p_A + p_B).
+\]
+With $\alpha = 0.05$, $1 - \beta = 0.80$, and a baseline rate $p_A = 0.10$, detecting $\Delta = 0.01$ (a one-percentage-point lift) requires roughly $n \approx 14{,}750$ users per arm; detecting $\Delta = 0.005$ requires about $4\times$ that. The $1/\Delta^2$ scaling is the operational message: halving the effect you want to detect quadruples the sample. Run the calculation \emph{before} the experiment to know whether the budget supports the question, not afterward to explain a null result.
 \end{advancednote}
+
+\textbf{The peeking penalty.} Repeatedly checking the $p$-value as data accumulates and stopping at the first ``significant'' result inflates the false-positive rate well above the nominal $\alpha$. Under a fixed-horizon test with $\alpha = 0.05$, peeking ten times during the run can push the realized type-I error past $0.20$. Either commit to a fixed horizon and analyze once, or use a sequential design (group-sequential boundaries such as Pocock or O'Brien--Fleming, mixture sequential probability ratio tests, or always-valid $p$-values) that controls the error rate across many looks. The mathematics is non-negotiable: $p$-values from a peeked test do not mean what they appear to mean.
+
+A/B testing assumes that assigning one user to treatment does not affect another user's outcome (the stable-unit-treatment-value assumption). This breaks in networked settings: if a recommendation shown to one user affects what a second user sees---through social sharing, inventory depletion, or marketplace effects---the measured treatment effect can be biased. In those cases, cluster randomization or switchback designs are safer alternatives.
 
 That requires guardrails. A \emph{guardrail metric} is any live measure severe enough to block expansion or trigger rollback even when the headline metric improves. A system should not be judged only on one headline metric---click-through rate, average response time, or overall resolution rate. A rollout scorecard should also track severe failures, subgroup disparities, complaint rate, human-review backlog, safety-rule violations, and any other metric that would justify immediate rollback. A small gain on a surface metric does not justify launch if a guardrail metric gets worse.
 
@@ -346,9 +397,7 @@ Interface design for human review is not a separate product concern. It is part 
 
 When the model produces a confidence score or probability, should the human see it? If so, in what form? Research on risk communication shows that humans interpret the same number very differently depending on format: ``70\% likely,'' ``7 out of 10,'' and a filled bar chart convey the same probability but lead to different choices \citep{lipkus2007}. For systems that escalate uncertain cases, the question is subtler. If a human cannot practically distinguish between a confidence of $0.70$ and $0.85$ under time pressure, collapsing those scores into three ordered categories---\emph{confident}, \emph{uncertain}, \emph{abstain}---may yield better decisions than the raw probability. In the course-support assistant, an advisor reviewing a flagged message needs to know whether the model abstained because the retrieved evidence was weak, because the wording was unusual, or because the topic touched a high-risk category. A bare confidence number often conveys less information than the rule or mechanism that triggered escalation.
 
-\begin{advancednote}
 Calibrated probabilities help only if the human understands what they mean. Teams sometimes display faithfully calibrated confidence scores, only to have them misinterpreted because the interface gave no scale, no reference point, and no context. User studies of whether a probability display actually improves decision-making are more informative than theoretical calibration metrics.
-\end{advancednote}
 
 \subsection{Automation Bias and Overtrust}
 
@@ -380,9 +429,7 @@ In high-volume systems with limited human capacity, there is no time for indepen
 
 \section{Bandits, Online Learning, and Adaptive Systems}
 
-\begin{advancednote}
 This section is an extension for low-risk, high-volume systems with rapid feedback. The core of the chapter remains requirements, contracts, thresholds, monitoring, fallback, rollout, ownership, and the readiness brief.
-\end{advancednote}
 
 Some deployed systems can adapt their policy directly from live feedback rather than waiting for a human team to retrain and redeploy. The classical framing is the \emph{explore-exploit tradeoff}: a system that always exploits its best current policy never discovers better alternatives, while a system that always explores wastes resources on known-suboptimal options \citep{sutton1998}. \emph{Contextual bandits} extend this to settings where the best action depends on features of the current example---the system observes a context, chooses an action, and observes reward only for the action taken, never for the actions it did not take. That partial-feedback structure makes \emph{off-policy evaluation} (estimating how a new policy would have performed from logs of decisions under the old policy) approximate by necessity: propensity weighting and doubly robust methods help, but they rest on assumptions and should be treated as a screening step before shadow or canary deployment, not as ground truth.
 
@@ -419,9 +466,7 @@ Teams often respond to a production issue by making a fast change and hoping for
 
 By the end of this chapter, you should be able to produce a one-page system readiness brief before claiming a model is deployable. The brief is the deployment counterpart to the earlier framing memo, evaluation plan, claim sheet, and reliability review card. It asks whether those earlier decisions still hold once the model becomes a service. It also condenses the same production questions emphasized by deployment checklists such as the ML test score \citep{breck2016}.
 
-\begin{practicalnote}
 The readiness brief should not appear for the first time at the end of a project. Start it when the service objective is named. Add the input contract before model selection. Add the operating policy before threshold tuning. Add monitoring, ownership, and no-launch triggers before any staged release.
-\end{practicalnote}
 
 \begin{table}[t]
 \centering
@@ -447,9 +492,7 @@ Owner and no-launch trigger & Who is responsible for the system and what finding
 \label{tab:system-readiness-brief}
 \end{table}
 
-\begin{thinkingtool}
 \textbf{System readiness brief.} Before deployment, write down the decision owner, the operational requirement, the input contract, the operating policy, the release plan, the human review path, the monitoring and rollback plan, and the exact finding that would block launch.
-\end{thinkingtool}
 
 \begin{example}[Filled System Readiness Brief]
 For the course-support assistant, a strong readiness brief identifies the primary user as the student-support organization rather than the model team; the operational requirement as bounded response time plus zero tolerance for unauthorized answers on high-risk categories; the input contract as current message text, course or program context when available, approved policy sources, and validated document freshness; the model plus fallback as a retrieval-backed assistant with a rule-based refusal or routing fallback when evidence is weak; the operating policy as ``answer only when retrieval, confidence, and risk checks all pass''; the release plan as shadow mode first, then a limited canary on routine questions only, with rollback on citation-quality or override failures; the human review path as escalation to advisors or specialist staff with the retrieved evidence attached; the monitoring plan as drift checks on message wording, citation coverage, override rate, subgroup gaps, and backlog; and the no-launch trigger as any unresolved failure on severe slices such as visa, accommodation, or crisis-related messages.
@@ -477,33 +520,45 @@ Some settings demand stronger evidence, fallback behavior, or privacy protection
 
 \section{Worked System Walkthrough: Course Support}
 
-To make the full chapter concrete, consider the grounded course-support pipeline developed across the earlier language, experiments, and reliability chapters. The walkthrough follows the same order as the readiness brief, so the chapter ends by assembling one coherent launch argument rather than introducing a separate example.
+To make the full chapter concrete, consider the grounded course-support pipeline developed across the earlier language, experiments, and reliability chapters. The walkthrough follows the same order as the readiness brief, but every step here turns a requirement into a number---and every number constrains the next decision.
 
-\subsection{Step 1: Define the Service Objective}
+\subsection{Step 1: Translate Requirements into Operational Budgets}
 
-The institution's goal is not to maximize answer accuracy. It wants to help students get fast, reliable answers on routine questions while reserving human attention for ambiguous, sensitive, or high-risk cases. The service succeeds only if response time improves, advisor workload stays manageable, and severe escalation misses stay acceptably low.
+The team writes three sentences on the readiness brief. Latency must stay under $2$\,s end-to-end at the $95$th percentile. The advising queue can absorb at most $30$ escalated messages per day. Recall on the URGENT class must be at least $0.85$ at the chosen operating threshold.
 
-\subsection{Step 2: Define the Input Contract}
+Each sentence becomes a budget rather than a wish. The $2$\,s latency budget splits across retrieval ($\le 600$\,ms), generation ($\le 1{,}000$\,ms), policy and logging ($\le 400$\,ms). The queue budget caps the average daily escalation rate at $a(\tau) \le 30$. The recall budget fixes a minimum point on the precision--recall curve. These three numbers, written before any threshold is touched, are what the remaining steps must respect.
 
-The system receives the student's message text, course or program context when available, the current term, and a validated set of approved policy documents. Each field has a missing-value rule, format requirement, and freshness check. If the current-semester policy pages are stale, a course identifier is absent, or a document source fails validation, the system must not quietly answer anyway.
+\subsection{Step 2: Lock the Input Contract Against Training-Serving Skew}
 
-\subsection{Step 3: Train and Evaluate the Components}
+During pre-launch verification, the team discovers the deployed feature scaler is using $\sigma_{\text{sv}} = 11$ while training used $\sigma_{\text{tr}} = 10$, with means $\mu_{\text{sv}} = 51$ versus $\mu_{\text{tr}} = 50$. Reusing the arithmetic from the training-serving-skew example earlier in the chapter, the operating threshold has silently moved from $x^\star = 55$ to $\tilde x^\star = 56.5$---a $1.5$ raw-input-unit shift, with no change visible in the model artifact.
 
-The team evaluates routing, retrieval, and answer quality chronologically rather than randomly, because the real task predicts future student traffic from past semesters. The team reports subgroup metrics, calibration or confidence quality, citation quality, and robustness under wording shift, document reorganization, and missing-context scenarios.
+The fix is not to retrain. The fix is to pin the scaler version to the model artifact and add a startup check that aborts launch if the served $(\mu, \sigma)$ does not match training within tolerance. The contract goes into the readiness brief as a hard precondition.
 
-\subsection{Step 4: Choose the Action Policy}
+\subsection{Step 3: Tune the Threshold Under the Queue Capacity}
 
-The system does not answer every message. It answers only when the request is in scope, the retrieved evidence comes from approved current sources, confidence is high enough, and no escalation rule fires. Messages with policy ambiguity, weak evidence, unusual phrasing, or severe-risk content go to human staff. This policy reflects the reality that advising capacity is limited and that ambiguity is exactly where human authority matters.
+With the contract fixed, the team picks an operating threshold $\tau$. Two candidates are scored against the queue budget from Step 1. The looser threshold $\tau_{\text{loose}}$ sends $a(\tau_{\text{loose}}) = 36$ messages per day to human review. The stricter $\tau_{\text{strict}}$ sends $a(\tau_{\text{strict}}) = 24$.
 
-\subsection{Step 5: Design the Review Interface}
+Applying the recurrence $q_{t+1} = \max\{0,\,q_t + a(\tau) - r\}$ with daily capacity $r = 30$: under $\tau_{\text{loose}}$ the backlog grows by $6$ messages each day without bound; under $\tau_{\text{strict}}$ it stays at zero. The recall constraint from Step 1 is checked against both: $\tau_{\text{strict}}$ achieves $0.87$ recall on URGENT, above the $0.85$ floor. The team adopts $\tau_{\text{strict}}$. The queue budget, not the precision--recall curve in isolation, made the choice.
 
-When the system escalates a case, the advisor should not receive only a bare risk score. The review interface must show the student's message, the retrieved policy passages, the draft answer if one was prepared, the uncertainty or rule trigger, and the permitted actions. Otherwise the review step becomes a bottleneck or a rubber stamp instead of a real safeguard.
+\subsection{Step 4: Set Drift Thresholds Before Launch}
 
-\subsection{Step 6: Monitor and Iterate}
+Monitoring is wired before traffic is routed. The team uses the PSI rules of thumb from the drift section: $\mathrm{PSI} > 0.1$ triggers a manual investigation, $\mathrm{PSI} > 0.25$ triggers automatic retraining. Two weeks into the pilot, the ``lecture-video minutes watched'' feature reports $\mathrm{PSI} = 0.13$. That is below the retrain trigger but above the investigation trigger.
 
-After deployment, the team monitors document freshness, retrieval hit rate, subgroup escalation rates, advisor override frequency, backlog growth, and eventual quality audits. A sharp rise in the percentage of escalated cases can indicate drift, a source-ingestion bug, or a confidence-calibration failure. The team investigates before performance collapses.
+The on-call engineer opens the runbook entry: the semester schedule changed last Monday and new lecture videos went live, so the feature shifted for a benign reason. No retraining is needed yet, but the threshold is now armed; a second feature crossing $0.25$ in the next sprint would auto-fire. The number $0.13$ kept the team alert without producing a false retraining cycle.
 
-This walkthrough shows the chapter's central point: the useful system is not the language model or retriever alone. It is the model plus contracts, routing policy, review interface, monitoring, and organizational ownership.
+\subsection{Step 5: Size an A/B Test for the Next Model Update}
+
+The team plans to test a new generator. Using the MDE arithmetic from the A/B section, with response-rate standard deviation $\sigma = 0.02$, $\alpha = 0.05$, power $0.8$, and a target detectable effect $\Delta = 0.01$,
+\[
+n \;\approx\; \frac{2 \cdot (2.80)^2 \cdot (0.02)^2}{(0.01)^2} \;\approx\; 63 \text{ messages per arm}.
+\]
+But Step 1 capped escalations at $30$ per day. With two arms and the per-arm budget of $63$, the test must run at least $\lceil 63 \cdot 2 / 30 \rceil = 5$ days before a verdict is honest. The team commits in writing to a $5$-day window before any early-stopping conversation.
+
+\subsection{Step 6: Wire Automatic Rollback to a Numerical Trigger}
+
+Rollout uses a canary slice with a numerical rollback rule. The trigger fires when any rolling $1$-hour bucket shows the new model's accuracy below the previous model's by more than $0.02$ with $p < 0.05$ from a paired hourly counter. In the first hour after the canary opens, accuracy drops by $0.04$ on the new arm; the trigger fires; rollback is automatic and complete in under five minutes. The post-incident review traces the drop to a prompt-template regression that offline evaluation had not surfaced. The trigger's numerical floor, not a human judgment call, contained the damage.
+
+The walkthrough is the chapter compressed: every section's machinery produces a number, and every number constrains the next decision.
 
 \subsection{Contrast Case: A Pedestrian-Alert Service}
 
@@ -518,13 +573,19 @@ The details differ from the support assistant, but the readiness brief asks the 
 \section{Production Infrastructure: Making Models Servable}
 \label{sec:production-infra}
 
-\begin{practicalnote}
 Read this section as the infrastructure row of the system readiness brief. Feature stores, registries, and serving optimization matter only insofar as they protect requirements, contracts, rollback, monitoring, latency, and ownership.
-\end{practicalnote}
 
 Production infrastructure fills the gap between ``the model is accurate'' and ``the system is operational.'' Four ideas appear in nearly every mature deployment, and the lesson here is conceptual rather than tool-specific. A \emph{feature store} centralizes how features are computed and served so the same definition is used at training and inference time; its job is to prevent training-serving skew and to make freshness requirements visible in the data contract. The decision is whether the team actually has skew or shared features that justify the operational complexity. A \emph{model registry} is version control for models: every trained artifact has a unique identifier, recorded training data and metrics, a promotion workflow from experimental to production, and the lineage needed to find every model affected if a data source is later discovered to be wrong. Without a registry or equivalent versioned release record, ``which model is running in production?'' has no reliable answer, and rollback becomes a guess.
 
 Three techniques compress models when latency, cost, or device constraints bind. \emph{Knowledge distillation} trains a smaller student to mimic a larger teacher's soft predictions. \emph{Quantization} reduces numerical precision of weights and activations, often with little accuracy loss when training is precision-aware. \emph{Pruning} removes weights, channels, or attention heads that contribute little; structured pruning yields direct speedups on standard hardware while unstructured pruning needs sparsity-aware kernels to realize gains. Each trades a small amount of accuracy for substantial latency or memory savings, and the trade should be documented in the readiness brief rather than left implicit. The conceptual rule is the same in any deployment: choose techniques to protect a documented latency, cost, and reliability budget rather than to chase benchmark numbers.
+
+\begin{advancednote}
+\textbf{Knowledge distillation in one objective (Extension).} The standard distillation loss combines a soft-target term against the teacher and a hard-target term against the true labels:
+\[
+\mathcal{L}_{\mathrm{distill}} \;=\; \alpha\, T^2 \cdot \mathrm{KL}\bigl(\mathrm{softmax}(z_T / T) \,\|\, \mathrm{softmax}(z_S / T)\bigr) \;+\; (1 - \alpha)\, \mathrm{CE}(y, \mathrm{softmax}(z_S)),
+\]
+where $z_T, z_S$ are the teacher and student logits, $T > 1$ is a softening temperature, and $\alpha$ balances the two terms. The $T^2$ factor keeps the gradient magnitude comparable across $T$ values, and the soft targets carry information about the teacher's relative confidence between non-top classes --- which is the actual signal distillation transfers. Quantization is typically post-training (PTQ: calibrate scales on a small representative set) or quantization-aware (QAT: insert fake-quant nodes during training so the model learns to be precision-robust). Structured pruning removes entire channels or heads on a budget while monitoring a validation metric; unstructured pruning sets individual weights below a magnitude threshold to zero but requires sparse kernels to realize the speedup. A first-pass deployment reading can use the prose summary above; the equation here is for readers who need to implement or tune the loss.
+\end{advancednote}
 
 \emph{Cost-aware serving} makes the operational tradeoffs explicit at runtime. Cascade architectures route easy cases through a cheap model and reserve a more expensive one for hard cases; batching and caching exploit hardware parallelism and repeated inputs; auto-scaling matches compute capacity to predictable demand cycles such as midterms or peak traffic windows. The pedestrian-detector case from earlier in the chapter shows the typical pattern: a backbone that is too slow for real-time edge operation is compressed through distillation, quantization, and structured pruning until it fits the latency budget, with the resulting accuracy loss reviewed and accepted before launch.
 
@@ -545,15 +606,29 @@ Infrastructure questions for the readiness brief: What is the latency and cost b
 
 \section{Closing Perspective}
 
-This book began with problem framing and ends with system framing. That arc is deliberate. Learning algorithms matter, but they are not the whole discipline. A mature understanding of AI connects representation, optimization, evaluation, reliability, and deployment into one coherent practice. The framing memo from Chapter 1, the evaluation plan, the claim sheet, the reliability review card, and the system readiness brief are not separate bureaucratic forms. They are the same discipline viewed at progressively more realistic levels, from defining the task to deciding whether the full service should exist. The final professional standard is not ``can I train a model?'' It is ``can I build a system that improves the real task under real constraints without hiding its limitations?''
+This book began with problem framing and ends with system framing. That arc is deliberate. Learning algorithms matter, but they are not the whole discipline.
 
-Return to the framing memo from Chapter~\ref{ch:framing-learning-problems}. Does the system readiness brief confirm, narrow, or reject the original vision? If the answer is ``narrow,'' that is usually a sign of honest engineering: the deployed system does less than the initial ambition, but what it does, it does reliably and with bounded claims.
+A mature understanding of AI connects representation, optimization, evaluation, reliability, and deployment into one coherent practice. The framing memo from Chapter~\ref{ch:framing-learning-problems}, the evaluation plan, the claim sheet, the reliability review card, and the system-readiness brief are not separate bureaucratic forms. They are the same discipline viewed at progressively more realistic levels: from defining the task to deciding whether the full service should exist.
 
-For example, the framing memo for the course-support assistant proposed answering all student inquiries. After evaluation, the readiness brief may \emph{narrow} this scope. The system is ready for routine policy questions (deadlines, prerequisites, grade scales) where retrieval accuracy is high and stakes are low, but high-risk or novel questions---appeals, mental-health concerns, academic misconduct---must escalate to a human advisor. The framing memo is not wrong; it is refined by evidence.
+\begin{quote}\itshape
+The final professional standard is not ``can I train a model?'' It is ``can I build a system that improves the real task under real constraints without hiding its limitations?''
+\end{quote}
 
-\section*{Chapter Summary}
+Return to the framing memo from Chapter~\ref{ch:framing-learning-problems}. Does the system-readiness brief confirm, narrow, or reject the original vision? If the answer is ``narrow,'' that is usually a sign of honest engineering: the deployed system does less than the initial ambition, but what it does, it does reliably and with bounded claims.
 
-A real AI system is more than a model: contracts, policies, interfaces, queues, monitoring, staged release, and ownership. Production infrastructure---feature stores, model registries, inference optimization, and cost-aware serving---bridges the gap between a working model and a reliable service. System quality depends on whether those pieces work together under real latency, workload, and failure constraints. The final professional standard is not model performance in isolation but whether the whole service improves the task safely and sustainably.
+For the course-support assistant, the framing memo proposed answering all student inquiries. After evidence and reliability review, the readiness brief narrows that scope. The system is ready for routine policy questions---deadlines, prerequisites, grade scales---where retrieval accuracy is high and stakes are low. High-risk or novel questions---appeals, mental-health concerns, academic misconduct---escalate to a human advisor. The framing memo is not wrong; it has been refined by evidence.
+
+\begin{chaptersummary}
+\item A real AI system is more than a model. Input contracts, operating policies, interfaces, queues, monitoring, staged release, and named ownership are not auxiliary to deployment; they are deployment.
+\item The service objective is broader than the model objective. ``Improve a workflow within operational limits'' is a different optimization problem from ``minimize a validation metric,'' and conflating them is the most common failure of model-to-service transitions.
+\item Service-level objectives make the service objective testable. Latency caps, review-capacity ceilings, severe-error rates, and grounded-citation coverage are written numbers, not aspirations.
+\item Training-serving skew is a systems problem, not a modeling problem. The most common production failure is a preprocessing or feature-store mismatch that no offline metric ever saw.
+\item Operating thresholds are policies. They allocate scarce review capacity, decide which mistakes the team is willing to make at scale, and have to be defended in writing alongside the model.
+\item Selective automation, abstention, and escalation are the system's way of refusing to make confident claims about cases it should not handle. They are evaluated alongside accuracy, not after it.
+\item Shadow mode, canary release, and staged expansion exist because launch is not a single decision. Each stage gathers evidence the previous stage could not have provided, and each stage has its own no-launch trigger.
+\item The system-readiness brief is the chapter's artifact---and the book's last one. A service whose brief cannot be written in one page is not ready, regardless of its offline metrics.
+\item The book's recurring claim returns at the end. Building AI systems is already about modeling: the choices about contracts, policies, fallback paths, and rollback authority are the modeling work that decides whether anything the earlier chapters taught actually reaches a user.
+\end{chaptersummary}
 
 \begin{studyquestions}
 \item Why can a high-performing offline model still produce a poor deployed system?

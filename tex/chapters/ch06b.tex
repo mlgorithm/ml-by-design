@@ -5,7 +5,9 @@
 \chapter{Learning from Interaction: Reinforcement Learning}
 \label{ch:reinforcementlearning}
 
-This chapter opens Part~III, the book's shortest part and its only categorical departure from the prediction-from-data thread that ran through Parts~I and~II. Until now, every chapter has trained models that fit a function to a static dataset. Many real problems demand more: the system must \emph{act}, observe the consequences, and then decide what to do next. A course-support assistant does not merely predict what a good reply looks like; it sends a reply, and the student's subsequent behavior reveals whether the reply actually helped. A campus shuttle does not merely classify a pedestrian as present or absent; it must decide when to brake, and the outcome depends on what happens over the following seconds.
+At dusk, on the elm-lined approach to the south-campus stop, a shuttle's perception system flags a pedestrian. The detector is correct. The shuttle has $0.8$\,seconds before contact at current speed. Should it brake hard, ease off, or hold? The detector cannot answer that question. The output ``pedestrian, $0.94$ confidence'' does not commit the vehicle to anything. Some other module has to choose---and then live with what happens next.
+
+Until now, every chapter in this book has trained models that fit a function to a static dataset. Many real problems demand more: the system must \emph{act}, observe the consequences, and then decide what to do next. A course-support assistant does not merely predict what a good reply looks like; it sends a reply, and the student's subsequent behavior reveals whether the reply actually helped. A campus shuttle does not merely classify a pedestrian as present or absent; it must decide when to brake, and the outcome depends on what happens over the following seconds.
 
 Reinforcement learning (RL) formalizes this kind of problem. An agent interacts with an environment, receives feedback as rewards, and improves its behavior over time. This chapter introduces the core framework---Markov Decision Processes, value functions, and policy optimization---then turns to the problem that makes RL hardest in practice: specifying a reward signal that captures what we actually care about. It closes with RLHF, a modern technique that links RL back to the foundation-model workflows from Part~II, and with an artifact---the Interaction Design Card---that forces practitioners to document the assumptions baked into any RL system before deployment.
 
@@ -36,6 +38,10 @@ This is reinforcement learning (RL): \emph{learning to act by interacting with a
 Unlike supervised learning, there is no large labeled dataset of ``correct actions.'' The agent learns through trial and error, guided by rewards or penalties that arrive after decisions are made. This creates new challenges: \emph{credit assignment} (which actions caused which outcomes?), \emph{exploration} (trying new actions to discover better strategies), and \emph{alignment} (ensuring the reward signal captures what we truly care about).
 
 This chapter formalizes the RL problem, introduces key concepts and algorithms, and confronts the hardest part of RL: getting the reward signal right.
+
+\begin{decisionbox}
+\textbf{Core path through the chapter.} On a first serious pass, keep the spine narrow: the MDP formulation, the value/policy distinction, one worked Q-learning update, the REINFORCE idea, epsilon-greedy exploration, reward design and misalignment, and the Interaction Design Card. The policy-gradient theorem derivation, UCB and Thompson sampling, exploration in continuous action spaces, and the full RLHF pipeline matter because they explain when interaction stops being safe or sample-efficient---they should not crowd out the first goal of seeing one agent--environment loop train end to end.
+\end{decisionbox}
 
 \begin{figure}[t]
 \centering
@@ -148,7 +154,6 @@ Intuitively, $V(s)$ measures how good it is to be in state $s$, and $Q(s, a)$ me
 
 A recursive structure underlies value functions: the value of a state equals the immediate reward plus the discounted value of the next state.
 
-\begin{mathlens}
 \textbf{The Bellman Equation.} The state-value and action-value functions satisfy:
 
 Let \(P(s', r \mid s, a)\) denote the environment's joint probability distribution over next state \(s'\) and immediate reward \(r\) after taking action \(a\) in state \(s\).
@@ -164,7 +169,6 @@ Q^\pi(s, a) = \sum_{s', r} P(s', r | s, a) \left[r + \gamma \sum_{a'} \pi(a' | s
 \]
 
 This recursive structure is the foundation of all value-based RL algorithms. The lesson: \emph{do not evaluate an action in isolation; look ahead and account for the states it leads to}.
-\end{mathlens}
 
 \subsection{Credit Assignment}
 \label{sec:rl-credit-assignment}
@@ -213,7 +217,6 @@ Given estimates $\hat{Q}(s, a)$, the \emph{greedy policy} is:
 that is, always choose the action with the highest estimated value.
 \end{definition}
 
-\begin{advancednote}
 \textbf{Q-Learning.} The best-known value-based algorithm is \emph{Q-learning} \citep{watkins1992}. Q-learning is off-policy: the agent may explore by taking random actions, but it learns the value of the \emph{greedy policy}---the policy that always picks the best action. The update rule is:
 \begin{enumerate}
 \item Take an action $a$ (possibly exploring), observe reward $r$ and next state $s'$.
@@ -234,13 +237,11 @@ Q(s,a)\leftarrow 0.20+0.1(1.45-0.20)=0.325.
 The companion gridworld repeats this table-entry update many times.
 
 For large state spaces, such as raw images, $Q$ cannot be stored in a table. Instead, we approximate it with a neural network: $\hat{Q}(s, a) = f_\theta(s, a)$. \citet{mnih2015} showed that this approach---\emph{Deep Q-Networks} (DQN)---could learn to play Atari games directly from pixels, a landmark result that revived interest in deep RL. The key stabilization tricks were experience replay (store past transitions and sample from them uniformly) and a target network (a slowly updated copy of $Q$ used to compute targets, which prevents the moving-target problem).
-\end{advancednote}
 
 \subsection{Policy-Based Methods}
 
 Instead of learning $Q$, we can learn a policy $\pi_\theta(a | s)$ directly by optimizing it to maximize expected return.
 
-\begin{mathlens}
 \textbf{Policy Gradient.} The expected cumulative return under policy $\pi_\theta$ is defined over the trajectory distribution \(p_{\pi_\theta}\) induced by that policy and the environment dynamics:
 \[
 J(\theta) = \mathbb{E}_{\tau \sim p_{\pi_\theta}}\left[\sum_{t=0}^{\infty} \gamma^t r_t\right].
@@ -253,7 +254,53 @@ Let $\rho_{\pi_\theta}$ denote the (normalized) discounted state-visitation dist
 The factor $1/(1-\gamma)$ comes from collapsing the trajectory sum into a state distribution. Many practical implementations absorb it into the learning rate and write the expectation alone.
 
 In words, increase the log-probability of actions that led to high returns and decrease the log-probability of actions that led to low ones. Note that this gradient does not inherently encourage exploration---it reinforces what worked and penalizes what did not. Exploration must be added separately, for example through entropy regularization or by maintaining a stochastic policy. Without explicit encouragement, policy gradient methods can converge prematurely to a narrow set of actions.
-\end{mathlens}
+
+\begin{advancednote}
+\textbf{Where the policy gradient theorem comes from (Extension; skip on a first pass).} The derivation uses one identity, the \emph{log-likelihood trick}: for any parameterized distribution $p_\theta(z)$ with positive density on the relevant support,
+\[
+\nabla_\theta\, \mathbb{E}_{z \sim p_\theta}[f(z)]
+\;=\; \nabla_\theta \int p_\theta(z)\, f(z)\, dz
+\;=\; \int p_\theta(z)\, \nabla_\theta \log p_\theta(z)\, f(z)\, dz
+\;=\; \mathbb{E}_{z \sim p_\theta}\bigl[\nabla_\theta \log p_\theta(z)\, f(z)\bigr].
+\]
+The trick lets us move the gradient inside the expectation by replacing $\nabla_\theta p_\theta$ with $p_\theta\, \nabla_\theta \log p_\theta$. Apply it to the trajectory objective $J(\theta) = \mathbb{E}_{\tau \sim p_{\pi_\theta}}\bigl[R(\tau)\bigr]$, where $R(\tau) = \sum_t \gamma^t r_t$. Only the policy factors $\pi_\theta(a_t \mid s_t)$ in $p_{\pi_\theta}(\tau)$ depend on $\theta$ (the environment dynamics do not), so $\nabla_\theta \log p_{\pi_\theta}(\tau) = \sum_t \nabla_\theta \log \pi_\theta(a_t \mid s_t)$, and
+\[
+\nabla_\theta J(\theta)
+\;=\; \mathbb{E}_{\tau \sim p_{\pi_\theta}}\Bigl[ R(\tau)\, \sum_t \nabla_\theta \log \pi_\theta(a_t \mid s_t)\Bigr].
+\]
+A causality argument removes the cross-terms where future $\log \pi$ factors are paired with past rewards (they have zero expectation under the trajectory distribution), leaving each $\nabla_\theta \log \pi_\theta(a_t \mid s_t)$ paired only with the rewards-to-go from step $t$ onwards. Replacing rewards-to-go by the $Q$-function under $\pi_\theta$ and collapsing the trajectory sum into the discounted state-visitation distribution $\rho_{\pi_\theta}$ recovers the state-action form quoted above. A first-pass reader can take the policy-gradient formula on faith; the derivation here is for readers who want to see why ``increase the log-probability of actions that worked'' is the right rule rather than a heuristic.
+\end{advancednote}
+
+The same derivation gives REINFORCE, the simplest stochastic-policy-gradient algorithm. Rather than substitute $Q^{\pi_\theta}(s, a)$, REINFORCE uses the empirical return $G_t = \sum_{k \ge t}\gamma^{k-t} r_k$ from one sampled rollout as an unbiased estimator of $Q^{\pi_\theta}(s_t, a_t)$. Subtracting a state-dependent baseline $b(s_t)$ does not change the expectation (the cross-term is zero by the log-trick identity) but reduces variance. The full algorithm is one of the most compact in RL.
+
+\begin{codeexample}
+import numpy as np
+
+def reinforce_update(theta, trajectories, gamma, alpha, baseline=None):
+    """One REINFORCE update over a batch of trajectories.
+    trajectories: list of [(s_t, a_t, r_t, grad_log_pi_t)] sequences,
+                  where grad_log_pi_t is nabla_theta log pi(a_t | s_t).
+    baseline: optional callable b(s) used as a state-dependent control variate.
+    """
+    grad = np.zeros_like(theta)
+    for tau in trajectories:
+        T = len(tau)
+        # Compute discounted returns-to-go: G_t = sum_{k>=t} gamma^(k-t) r_k
+        G = np.zeros(T)
+        running = 0.0
+        for t in reversed(range(T)):
+            running = tau[t][2] + gamma * running
+            G[t] = running
+        # Accumulate the policy gradient over the trajectory
+        for t in range(T):
+            s_t, a_t, r_t, grad_log_pi_t = tau[t]
+            advantage = G[t] - (baseline(s_t) if baseline else 0.0)
+            grad += advantage * grad_log_pi_t
+    grad /= len(trajectories)
+    return theta + alpha * grad
+\end{codeexample}
+
+The loop is the algorithm. Roll out the current policy, compute discounted returns-to-go (backwards from the end of each episode, which is the cheap way), and update $\theta$ in the direction of the score-function gradient weighted by the return (or by an advantage if a baseline is available). Actor-critic, A2C, A3C, PPO, and SAC are all elaborations of this skeleton: each one substitutes a different estimator for $G_t - b(s_t)$ and adds a different form of variance control or trust-region constraint, but the score-function move at the heart of the update is the same.
 
 \begin{example}[Course-support assistant, policy gradient]
 Parameterize the policy as a neural network mapping queries to response probabilities: $\pi_\theta(\text{response} | \text{query}) = \text{softmax}(\text{nn}_\theta(\text{query}))$.
@@ -311,9 +358,7 @@ Suppose the shuttle has braked in the past and the pedestrian safely cleared the
 The simplest exploration strategy. With probability $\epsilon$, take a random action; with probability $1 - \epsilon$, take the greedy action $\arg\max_a \hat{Q}(s, a)$. As learning progresses, decay $\epsilon$ toward 0 to shift from exploration to exploitation.
 \end{definition}
 
-\begin{practicalnote}
 Epsilon-greedy is easy to implement and often effective for problems with small action spaces. When random actions are dangerous (autonomous driving, for example), use exploration strategies that stay closer to the current policy.
-\end{practicalnote}
 
 Epsilon-greedy has a clear limitation. When the agent explores, it picks a random action without regard for how informative that action might be. A more principled approach explores \emph{uncertain} actions---those tried fewer times and therefore less well understood.
 
@@ -327,15 +372,27 @@ where $\text{count}(s, a)$ is the number of times action $a$ has been taken in s
 UCB is principled. It balances known good actions against actions that could plausibly be better if we learned more about them.
 \end{definition}
 
+\begin{advancednote}
+\textbf{Where UCB's $\sqrt{\log N}$ comes from: regret bounds on stochastic bandits.} In the $K$-armed stochastic bandit setting --- no state, just $K$ actions each with an unknown reward distribution --- the \emph{cumulative regret} after $N$ rounds is
+\[
+R_N \;=\; \sum_{t=1}^{N} \bigl(\mu^\star - \mu_{a_t}\bigr),
+\]
+where $\mu^\star$ is the best arm's mean reward. A uniformly-random policy has $R_N = \Theta(N)$ (linear regret), which is the worst possible asymptotic rate. The breakthrough result of \citet{auer2002ucb} is that UCB1 achieves $R_N = O(\sqrt{N K \log N})$ --- \emph{sublinear} regret, so per-round regret $R_N / N \to 0$. The $\sqrt{\log N}$ bonus is not arbitrary: it is calibrated to match the Hoeffding tail bound on each arm's confidence interval, so that with high probability the bonus dominates the estimation error on every arm at every round. Choosing a smaller bonus risks overcommitting to a suboptimal arm before its confidence interval has tightened; choosing a larger one explores too much and wastes rounds on already-distinguished arms.
+
+The operational consequence: UCB is not just ``principled by intuition'' --- it provably has the optimal asymptotic regret rate up to constants for the multi-armed bandit problem. In an RL setting where states factor cleanly, UCB-style exploration carries the same logarithmic-regret intuition per state-action pair. The bound is the formal reason a $\sqrt{\log N}$ bonus beats $\epsilon$-greedy in the bandit limit: $\epsilon$-greedy has linear regret unless $\epsilon$ is annealed carefully, because a constant fraction of rounds are spent on uniformly random actions including known-bad ones.
+
+In full RL with state transitions, regret analyses become much harder --- the agent's actions change which states it visits, breaking the clean per-arm tail-bound argument --- but the UCB-style upper-confidence-bound philosophy carries through to algorithms like UCRL and posterior-sampling RL, which retain logarithmic-regret-style guarantees under suitable assumptions.
+\end{advancednote}
+
 \begin{definition}[Thompson Sampling]
 Maintain a posterior distribution over $Q(s, a)$, for example a Bayesian model. At each step, sample from the posterior and act greedily according to the sample. This naturally explores actions that could plausibly be optimal given current uncertainty, and exploration shrinks automatically as uncertainty drops.
 \end{definition}
 
 Both UCB and Thompson sampling embody the same intuition: \emph{optimism in the face of uncertainty}. Actions we know little about get the benefit of the doubt, because they might turn out to be better than anything we have tried. As evidence accumulates, the exploration bonus fades and the agent converges on exploitation. This is more sample-efficient than epsilon-greedy, but it requires maintaining uncertainty estimates, which adds computational cost.
 
-\begin{practicalnote}[Exploration in continuous action spaces]
+\subsubsection*{Exploration in continuous action spaces}
+
 The exploration strategies above (epsilon-greedy, UCB, Thompson sampling) all assume a discrete action space: the agent chooses one of a small set of options. Continuous action spaces---steering angles in a self-driving car, joint angles in a robot arm, dosing levels in medical treatment---rule out discrete exploration. Common alternatives add Gaussian noise to the policy's output (as in DDPG: deterministic policy gradient plus action noise) or learn a stochastic policy that explores by sampling from a learned distribution (as in SAC: Soft Actor-Critic). The principle is the same: the agent must sometimes deviate from its current best estimate to discover whether better strategies exist.
-\end{practicalnote}
 
 \begin{decisionbox}
 \textbf{When is exploration safe vs.\ dangerous?}
@@ -388,7 +445,6 @@ Root cause: the reward function is \emph{detached from the true objective}. The 
 
 The solution is a feedback loop. Deploy RL systems carefully, monitor what they actually optimize, and iterate on the reward signal.
 
-\begin{evidencebox}
 \textbf{Reward audit checklist:}
 \begin{enumerate}
 \item \emph{Agree on the true objective.} Before specifying a reward, ask what we actually want and write it down.
@@ -397,7 +453,6 @@ The solution is a feedback loop. Deploy RL systems carefully, monitor what they 
 \item \emph{Monitor outcomes.} In live operation, track both the reward signal and proxies for the true objective. Did we game the metric or solve the problem?
 \item \emph{Iterate.} If the reward is misaligned, update it and retrain. Reward design is not a one-time task.
 \end{enumerate}
-\end{evidencebox}
 
 \begin{warningbox}
 \textbf{Do not ignore partial observability.} The agent often observes only part of the state. A student query may not reveal the student's underlying problem; a pedestrian's position may not reveal their intent. If the reward depends on the hidden part of the state, the agent may fail to learn a reliable policy from current observations alone. Invest in better sensors, a better state representation, or a simpler problem.
@@ -447,13 +502,13 @@ The model learns to generate responses that annotators preferred. The course-sup
 
 \subsection{Challenges in RLHF}
 
-\begin{failurebox}[KL drift]
+\begin{failurepattern}[KL drift]
 When optimizing the reward model, the language model can drift far from the pretrained model and lose general-purpose capabilities. The fix is to add a KL divergence penalty to the RL objective:
 \[
 J = \mathbb{E}[r_\theta(s, a)] - \beta \cdot \text{KL}(\pi_\phi(\cdot | s) \| \pi_{\text{base}}(\cdot | s)),
 \]
-where $\pi_{\text{base}}$ is the original model. The penalty pulls the fine-tuned model back toward the base.
-\end{failurebox}
+where $\pi_{\text{base}}$ is the original model. The penalty pulls the fine-tuned model back toward the base. (KL divergence is the asymmetric ``distance'' between two distributions; here it measures how far the fine-tuned policy has moved from the pretrained one and is small when the two assign similar probabilities to the same responses.)
+\end{failurepattern}
 
 \begin{failurepattern}[Reward model hacking]
 The language model can find edge cases where the reward model gives high scores but the responses are poor---verbose but evasive answers, for example. This is specification gaming: the model honestly optimizes the learned reward, but the reward model itself is imperfect.
@@ -467,9 +522,7 @@ Consider a language model fine-tuned with RLHF to produce helpful responses. Dur
 Detecting such gaming requires evaluating on out-of-distribution prompts where verbose responses are clearly suboptimal, checking whether reward-model scores still correlate with actual human satisfaction on a fresh evaluation sample, and monitoring the model's output statistics, such as average response length, during deployment.
 \end{example}
 
-\begin{practicalnote}
 RLHF is computationally expensive: many rollouts, each with multiple forward and backward passes through both the language model and the reward model. Practitioners often cap RL fine-tuning at a few thousand optimization steps to keep compute manageable.
-\end{practicalnote}
 
 \begin{sanitycheck}
 \textbf{Is RLHF necessary?} No. Supervised fine-tuning on high-quality human demonstrations often performs nearly as well and costs less. Use RLHF when preferences are easier to annotate than demonstrations---``which response is better?'' is usually easier than ``generate the ideal response''---or when scaling human feedback is the goal.
@@ -573,29 +626,17 @@ r = -100\cdot \mathbb{1}[\text{contact}] - 5\cdot \mathbb{1}[\text{hard\_brake}]
 
 \section{Common Mistakes}
 
-\begin{failurepattern}[Skipping the baseline policy]
-Jumping straight to RL without first testing a simple heuristic or rule-based policy. A hard-coded ``always brake when distance $< 10$ meters'' might already solve 90\% of shuttle scenarios. Without that baseline, you cannot tell whether the RL agent's complexity is justified or whether it is just rediscovering simple rules at great computational cost. Mitigation: always deploy and measure a non-learned baseline before investing in RL training.
-\end{failurepattern}
+\textbf{Skipping the baseline policy.} Jumping straight to RL without first testing a simple heuristic or rule-based policy hides whether the learned agent is doing anything beyond rediscovering rules at great computational cost. A hard-coded ``always brake when distance $< 10$ meters'' might already solve ninety percent of shuttle scenarios; without that baseline, the RL result has no scale. Always deploy and measure a non-learned baseline before investing in RL training.
 
-\begin{failurepattern}[Ignoring partial observability]
-The agent observes state $s$, but the reward depends on a hidden part of the state. The agent then fails to learn a reliable policy because it cannot infer the full state from $s$ alone. Cause: insufficient sensor data or poor state representation. Mitigation: invest in better observations, add memory or state estimation, or simplify the problem so it is closer to fully observable.
-\end{failurepattern}
+\textbf{Ignoring partial observability.} When the agent observes state $s$ but the reward depends on a hidden part of the state, no amount of training fully recovers a reliable policy. The fix is upstream of the algorithm: invest in better observations, add memory or state estimation, or simplify the problem so it is closer to fully observable.
 
-\begin{failurepattern}[Confusing on-policy and off-policy learning]
-On-policy methods such as policy gradient require data sampled from the current policy. Off-policy methods such as Q-learning can reuse data from a different behavior policy, but only when the logged data covers the actions and states the target policy needs; arbitrary data is not automatically valid. Mixing these assumptions causes instability. Cause: misunderstanding when a method is valid. Mitigation: check the algorithm's assumptions, and when in doubt prefer on-policy methods, since they are more forgiving.
-\end{failurepattern}
+\textbf{Confusing on-policy and off-policy learning.} On-policy methods such as policy gradient require data sampled from the current policy, while off-policy methods such as Q-learning can reuse logged data only when it covers the actions and states the target policy needs. Arbitrary data is not automatically valid for off-policy updates, and mixing these assumptions causes silent instability. Check the algorithm's assumptions, and when in doubt prefer on-policy methods, since they are more forgiving.
 
-\begin{failurepattern}[Inadequate exploration]
-The agent converges to a local optimum and stops exploring, so it never discovers better strategies. Cause: exploration decay too aggressive, or exploration too costly. Mitigation: keep exploration longer than you think necessary, and design it to be safe.
-\end{failurepattern}
+\textbf{Inadequate exploration.} The agent converges to a local optimum and stops exploring, so it never discovers better strategies. Aggressive exploration decay or costly exploration are the usual culprits; keep exploration active longer than seems necessary, and design it to be safe.
 
-\begin{failurepattern}[Evaluating RL with supervised metrics]
-You train an RL agent and then evaluate it using accuracy, precision, or other supervised metrics. But RL optimizes cumulative reward, and a policy that maximizes reward need not maximize accuracy. Cause: misalignment between training and evaluation. Mitigation: evaluate cumulative return alongside independent task, safety, and user-outcome metrics aligned with the true objective. Do not rely on supervised accuracy alone.
-\end{failurepattern}
+\textbf{Evaluating RL with supervised metrics.} Reporting accuracy or precision for a policy trained to maximize cumulative reward mismatches training and evaluation: a high-return policy need not maximize accuracy on any per-step label. Evaluate cumulative return alongside independent task, safety, and user-outcome metrics aligned with the true objective, and do not rely on supervised accuracy alone.
 
-\begin{failurepattern}[Non-stationary environments]
-The environment changes over time---student preferences shift, pedestrian behavior evolves---but the learned policy does not adapt. Cause: static offline training. Mitigation: use online learning with continuous data collection and retraining.
-\end{failurepattern}
+\textbf{Assuming stationarity.} Student preferences shift, pedestrian behavior evolves, and a policy trained once on offline logs slowly drifts out of contact with its environment. Plan for continuous data collection and retraining, and treat ``the world is fixed'' as an assumption to monitor rather than a free property of the deployment.
 
 \section{Offline Evaluation and the Bandit Bridge}
 
@@ -605,9 +646,7 @@ The first thread is \emph{offline evaluation from logged data}. Most of this cha
 
 The second thread is \emph{bandits}. A multi-armed bandit is the simplest reinforcement-learning problem: one state, many actions, stochastic rewards, and the only task is balancing exploration against exploitation. Bandits matter operationally because they fit the regime where real systems most often ``learn from interaction'': low-stakes routing and ranking decisions that happen thousands of times per hour, each producing a fast feedback signal. Chapter~\ref{ch:models-systems} treats this in the ``Bandits, Online Learning, and Adaptive Systems'' section, connecting this chapter's explore-exploit tradeoff to the deployment question of when a production system should be allowed to adapt its own policy rather than wait for a human-driven retraining cycle.
 
-\begin{practicalnote}
 The practical rule of thumb is simple. Offline evaluation asks: would a new policy have been better than the old one, judging only by what we already logged? Bandits ask: can the system \emph{cheaply try} the new policy on a small fraction of traffic and decide? The two are complements. Offline evaluation screens candidates; a bandit or A/B deployment confirms them under the real feedback loop.
-\end{practicalnote}
 
 \section{Looking Ahead: From RL to Modalities}
 

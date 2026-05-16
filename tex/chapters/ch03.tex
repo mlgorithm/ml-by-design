@@ -1,9 +1,9 @@
 \chapter{Linear Models and Representation}
 \label{ch:linear-models}
 
-The book has framed the learning problem and fixed the standard of evidence. The next question is modeling economy: once the task, metric, and evaluation protocol are clear, what is the simplest model that deserves a serious test? Often the right answer is a linear model---but only when the representation already exposes the structure that matters. This chapter treats linear models not as old formulas to memorize but as a disciplined test of representation: can a carefully chosen encoding plus one weighted sum already solve the task well enough to justify itself?
+Can one weighted sum already solve the task? It is a serious question. Once a representation has been chosen, the simplest model that takes those features and predicts a label is a linear one---one coefficient per feature, summed, optionally squashed. If that model already performs well, every later complication has to justify itself against it. If it fails, the failure pattern usually says exactly what kind of complication is needed: branches, margins, neighborhoods, latent structure, or a learned representation.
 
-The central claim is simple. A strong representation and a controlled linear baseline often go further than beginners expect, and when they fail, the failure pattern is usually informative. The chapter moves from feature maps to the generic weighted-sum pipeline, then to linear regression, logistic regression, coefficient reading, and regularization. Its concrete deliverable is a first baseline design sheet stating what the model sees, what it predicts, how its coefficients may be read safely, how it will be regularized, and what specific failure would justify leaving linearity.
+This chapter treats linear models not as old formulas to memorize but as a disciplined test of representation. A strong representation and a controlled linear baseline often go further than beginners expect, and when they fail, the failure pattern is usually informative. The chapter moves from feature maps to the generic weighted-sum pipeline, then to linear regression, logistic regression, coefficient reading, and regularization. Its concrete deliverable is a first baseline design sheet stating what the model sees, what it predicts, how its coefficients may be read safely, how it will be regularized, and what specific failure would justify leaving linearity.
 
 \section{Opening Dilemma: Is One Weighted Sum Enough?}
 
@@ -13,9 +13,7 @@ That is why linear models appear early in this book. They are not here because t
 
 Keep the early student-support setting in view through this chapter. Later chapters widen the institutional workflow into message routing, retrieval, and grounded answers, but the first baseline question is simpler: can a transparent weighted-sum model already surface the right cases for human review? Each major section turns that one question into a modeling discipline---choose the representation, understand the score, read the coefficients carefully, control complexity, and diagnose failure structurally.
 
-\begin{evidencebox}
 CDC guidance for Youth Risk Behavior Survey trend analysis still uses logistic regression for dichotomous risk behaviors and linear regression for continuous ones \citep{cdc_yrbs_trends}. These models are not teaching artifacts. They remain standard analytical tools in serious public-health workflows.
-\end{evidencebox}
 
 \begin{table}[t]
 \centering
@@ -46,7 +44,6 @@ This definition sounds technical, but its consequences are conceptual. A feature
 
 That is why representation is already part of the model. The model does not see ``a house in a good neighborhood'' or ``a student who is disengaging.'' It sees the encoded representation. Someone must decide which numbers or indicators could plausibly carry the relevant information.
 
-\begin{thinkingtool}
 \textbf{Representation audit.} Before fitting a model, ask:
 \begin{itemize}[leftmargin=*]
 \item What is the raw input?
@@ -54,7 +51,6 @@ That is why representation is already part of the model. The model does not see 
 \item What information is lost by the encoding?
 \item What assumptions are being inserted artificially?
 \end{itemize}
-\end{thinkingtool}
 
 \subsection{Raw Inputs and Feature Maps}
 
@@ -68,13 +64,9 @@ The model operates on $\phi(x)$ rather than on the raw input. This notation sepa
 
 A weak representation cannot be saved by better weights. A strong representation can make even a simple weighted sum work well.
 
-\begin{practicalnote}
 The linear-model workflow is compact: encode the raw input, fit a baseline, inspect residuals or errors, then ask whether the representation needs interaction terms, scaling, or a different feature map before changing model family.
-\end{practicalnote}
 
-\begin{prereqbridge}
 If the notation $\phi(x)$ is new, read it as ``the version of the raw input that the model actually uses.'' In practice, this is where most of the modeling judgment lives.
-\end{prereqbridge}
 
 From here on, the notation is compressed: unless the distinction matters, \(x\) means the \emph{encoded feature vector} rather than the raw object. When the distinction matters, think in two layers:
 \[
@@ -108,15 +100,11 @@ A linear model on raw features can only express additive effects: each feature's
 Suppose we predict student risk from two features: fraction of assignments missed ($x_1$) and week of semester ($x_2$). On their own, missing a moderate fraction of assignments may be less alarming in week two than in week ten. Adding the product $x_1 x_2$ lets the model express that the effect of missed assignments grows with time. The coefficient on $x_1 x_2$ is positive if late-semester missing work is especially predictive, regardless of what the individual coefficients on $x_1$ and $x_2$ say.
 \end{example}
 
-\begin{mathlens}
 If the feature map is $\phi(x) = [x_1,\, x_2,\, x_1^2,\, x_2^2,\, x_1 x_2]^\top$, then the model $w^\top \phi(x) + b$ is nonlinear in the raw input $x$ but still linear in the expanded coordinates $\phi(x)$. Training with gradient descent or ordinary least squares still applies without modification. The representational power comes from the engineer's choice of $\phi$, not from a more complex model family.
-\end{mathlens}
 
 Why does this matter? Many students conclude too quickly that linear models are only useful for obviously linear worlds. Basis expansion shows that a thoughtful feature map can extend a linear model's expressiveness considerably. The cost is interpretability: once features interact, individual coefficients are harder to read as standalone effects. The judgment call is whether the gain in fit justifies the loss in narrative clarity.
 
-\begin{practicalnote}
 Add interaction features deliberately, not exhaustively. All pairwise products of $d$ features produce $d(d-1)/2$ new coordinates. On a dataset with hundreds of features, that explosion causes severe overfitting and slow training. Add interactions when domain knowledge suggests a specific joint effect, and test whether each addition improves held-out performance.
-\end{practicalnote}
 
 \subsection{Common Feature Types}
 
@@ -226,14 +214,12 @@ prediction = output_transform(score)
 
 This small program is worth remembering. Linear regression and logistic regression are two instances of this general pattern. The only real difference is what the output transform does. The score-producing core stays the same, which is why the chapter can teach both models as one pipeline rather than as two unrelated formulas.
 
-\begin{thinkingtool}
 \textbf{Structural rescue test.} If a linear baseline fails, ask two questions in order:
 \begin{itemize}[leftmargin=*]
 \item Could one additional transformed feature make the missing pattern visible, such as area-squared or attendance times homework score?
 \item If not, what kind of structure is missing entirely: local neighborhoods, branching rules, sequence order, or a learned representation?
 \end{itemize}
 Do not jump from ``the line failed'' to ``the whole model family failed.'' First test whether the representation, not the weighted sum, is the real bottleneck.
-\end{thinkingtool}
 
 \begin{decisionbox}
 \textbf{Which linear family first?}
@@ -272,12 +258,10 @@ Linear regression is usually fit by minimizing the mean squared residual:
 
 Chapter 2 explained why squared error is a useful training loss. Here the important skill is more concrete: move comfortably from feature values to prediction to residual, and read what the residual says about the baseline. A positive residual means the model predicted too low; a negative residual means it predicted too high.
 
-\begin{advancednote}
 The theorem below explains why least squares is geometrically special. Skip it on a first read until after the apartment-price example. The core skill is reading residuals and diagnosing what a linear baseline can and cannot express.
-\end{advancednote}
 
 \begin{theorem}[Least-squares residuals are orthogonal to the fitted space]
-In ordinary least squares, let \(X\) be the design matrix augmented with an intercept column, so the affine model \(w^\top x+b\) can be written as a single matrix product. If \(\hat{y}=X\hat{\beta}\) is the fitted value vector and \(r=y-\hat{y}\) is the residual vector, then
+In ordinary least squares, let \(X\) be the design matrix augmented with an intercept column, so the affine model \(w^\top x+b\) can be written as a single matrix product \(X w\) (with \(w\) likewise extended by the intercept term). If \(\hat{y}=X\hat{w}\) is the fitted value vector and \(r=y-\hat{y}\) is the residual vector, then
 \[
 X^\top r = 0.
 \]
@@ -285,11 +269,11 @@ Equivalently, the residual vector is orthogonal to every column of the design ma
 \end{theorem}
 
 \begin{proof}
-Ordinary least squares minimizes \(\|y-X\beta\|_2^2\). Differentiating with respect to \(\beta\) and setting the derivative to zero gives the normal equations
+Ordinary least squares minimizes \(\|y-Xw\|_2^2\). Differentiating with respect to \(w\) and setting the derivative to zero gives the normal equations
 \[
-X^\top (y-X\hat{\beta}) = 0.
+X^\top (y-X\hat{w}) = 0.
 \]
-Since \(r=y-X\hat{\beta}\), this is exactly \(X^\top r=0\).
+Since \(r=y-X\hat{w}\), this is exactly \(X^\top r=0\).
 \end{proof}
 
 This is the geometric meaning of best fit in a linear model: once the data has been projected onto the allowed feature space, the leftover error cannot be reduced by moving further inside that same space.
@@ -346,6 +330,10 @@ print(round(loss_after, 4))    # loss after one correction
 \end{codeexample}
 
 Running this program produces a smaller loss after a single step. The point is to show the mechanics of gradient descent, not to settle each feature's final semantic role from one update. Because the model begins near zero and the features are not centered, the earliest steps mainly reflect the model's effort to move away from systematic underprediction. In a fitted model with an explicit bias term and centered or standardized inputs, the eventual sign and magnitude of each coefficient become easier to interpret.
+
+\begin{sanitycheck}
+\textbf{Loss should strictly decrease after one gradient step.} For a convex loss and a small enough learning rate, $\mathcal{L}(w - \eta \nabla \mathcal{L}(w)) < \mathcal{L}(w)$. After the first step in any from-scratch implementation, print both losses and verify the inequality. If \verb|loss_after >= loss_before|, the learning rate is too large for the current curvature (halve it and try again), the gradient is computed incorrectly (run the finite-difference check from Mathematical Bridge~II), or the loss surface is non-convex in a region with a poor initialization. ``Loss did not go down on the first step'' should never be brushed past as bad luck; it is a small-cost-to-catch, large-cost-to-miss bug.
+\end{sanitycheck}
 
 \begin{figure}[t]
 \centering
@@ -545,9 +533,7 @@ Students need not memorize this form, but it clarifies why logistic regression i
 Probability and odds are not the same. A probability of $0.8$ means ``80\% chance.'' Odds of $4{:}1$ mean four positive cases for every one negative case. Logistic regression becomes easier to interpret once that distinction is kept explicit.
 \end{warningbox}
 
-\begin{practicalnote}
 A one-unit increase in feature $x_j$ changes the log-odds by $w_j$ and multiplies the odds by $e^{w_j}$, holding the other encoded features fixed. That is often the cleanest coefficient interpretation in logistic regression.
-\end{practicalnote}
 
 \begin{theorem}[A $0.5$ logistic threshold is a score threshold]
 If logistic regression predicts the positive class whenever $P(y=1 \mid x) \ge 0.5$, then this rule is exactly the same as predicting the positive class whenever
@@ -572,13 +558,11 @@ z \ge 0.
 Substituting back gives the result.
 \end{proof}
 
-\begin{mathlens}
 For any probability threshold $\tau \in (0,1)$, the equivalent score cutoff is
 \[
 w^\top x + b \ge \log\frac{\tau}{1-\tau}.
 \]
 The theorem's $0.5$ case is the special case where this cutoff is zero.
-\end{mathlens}
 
 \subsection{Worked Example: A Spam Probability}
 
@@ -681,7 +665,20 @@ A \emph{marginal effect} is the local rate at which the predicted probability ch
 \]
 The same coefficient can therefore produce a larger or smaller probability impact depending on where the example sits on the sigmoid curve.
 
+\textbf{IRLS: Newton's method for logistic regression (Extension).} Gradient descent is the workhorse used throughout this book, but logistic regression has a classical second-order alternative that converges in far fewer iterations on well-behaved problems. The negative log-likelihood for logistic regression with predicted probabilities $p_i = \sigma(x_i^\top w)$ has gradient and Hessian
+\[
+\nabla_w \mathcal{L} = -X^\top (y - p), \qquad
+\nabla_w^2 \mathcal{L} = X^\top W X, \quad W = \mathrm{diag}\bigl(p_i(1-p_i)\bigr).
+\]
+The Hessian is positive semi-definite (each $p_i(1-p_i) \ge 0$ with equality only at the boundary), so the loss is convex and a Newton step is well defined. The Newton update $w \leftarrow w - (\nabla^2 \mathcal{L})^{-1} \nabla \mathcal{L}$ rearranges into
+\[
+w_{\text{new}} \;=\; (X^\top W X)^{-1} X^\top W z, \qquad z = X w + W^{-1}(y - p).
+\]
+That is the normal-equations solution of a \emph{weighted} least-squares problem with weights $W$ and working response $z$ --- hence the name \emph{Iteratively Reweighted Least Squares} (IRLS). Each iteration re-fits a weighted regression, recomputes $p_i$, and updates the weights. For low-dimensional problems IRLS converges in five to ten iterations rather than the hundreds typical for gradient descent. The per-iteration cost is $O(nd^2 + d^3)$, the same as one OLS solve, so IRLS pays off when $d$ is small relative to $n$ and the Hessian is well conditioned. For very high-dimensional or non-smooth ($L_1$) problems, stochastic gradient methods or coordinate descent are preferred. The convexity argument above also shows that the negative log-likelihood of logistic regression is convex in $w$ --- a fact this chapter has been using implicitly whenever it speaks of ``the'' logistic regression fit.
+
 \section{Reading Coefficients Without Fooling Yourself}
+
+\emph{Dilemma.} An advising team fits a logistic-regression risk score on early-course features and presents the coefficients to faculty. The coefficient on ``attendance'' is small; the coefficient on ``late submissions'' is large. A senior administrator concludes that ``late submissions matter four times as much as attendance,'' and asks the team to recommend an attendance-relaxation policy on the strength of that comparison. The model's accuracy is the same as before this conversation. The conclusion is still wrong, and the next three subsections name three reasons why.
 
 One selling point of linear models is interpretability. The point is real, but it needs language discipline. Coefficients are not self-explaining truths. They are statements about the fitted relationship \emph{within a particular representation}. The next three subsections give the minimum guardrails: scale, correlation, and omitted variables each change what a coefficient can honestly be said to mean.
 
@@ -763,11 +760,11 @@ What you are usually not allowed to say from the model alone:
 \end{itemize}
 \end{warningbox}
 
-\begin{practicalnote}
 These assumptions matter for inference, not for prediction alone. Linearity in the encoded features, exogeneity (zero conditional mean of the errors), independent or appropriately modeled errors, roughly constant variance, and no perfect multicollinearity are the classical conditions behind standard errors and hypothesis tests. A linear baseline can still be useful when some of those assumptions are only approximate.
-\end{practicalnote}
 
 \section{Prediction Is Not Intervention}
+
+\emph{Dilemma.} The advising team's model says office-hour attendance is a strong predictor of passing the course --- the coefficient is large, the slice diagnostics are clean, and the held-out evaluation looks honest. The provost reads the report and proposes making office-hour attendance mandatory. The team must now decide what to recommend, because the question changed mid-meeting. The model predicted that students who attend office hours pass at a higher rate. The provost is asking whether \emph{forcing} the rest of the cohort to attend would raise pass rates by the same amount. Those are not the same question, and confusing them is the most expensive mistake a transparent-looking linear model invites.
 
 Linear models tempt people into causal language because the coefficients look clean. That is where linear transparency turns dangerous if the reader stops being precise. A predictive model answers an associational question: given the observed features, what outcome should we expect? A causal question is different: what would happen if we actively changed one part of the world? Pearl's causal framework makes this distinction central by separating ordinary observation from intervention and counterfactual reasoning \citep{pearl2009}.
 
@@ -807,6 +804,8 @@ L2 regularization adds a penalty proportional to the squared magnitude of the co
 This penalty discourages extreme weights and spreads influence more smoothly across correlated features. In regression, the resulting model is called \emph{ridge regression}. The same idea applies to logistic regression for classification.
 
 In the least-squares setting, ridge regularization also changes the optimization problem in a mathematically useful way \citep{hoerl1970}.
+
+The theorem below uses matrix calculus fact (2) from Mathematical Bridge~I: the Hessian of $w^\top A w$ is $2A$, and $A$ being positive definite means the surface curves upward in every direction. On a first read, take the headline---``ridge gives a unique closed-form solution''---and skip the proof; it is here for readers who want to see why adding $\lambda I$ is exactly what removes the non-uniqueness of plain least squares.
 
 \begin{theorem}[Ridge regularization gives a unique least-squares solution]
 For a fixed design matrix $X$ of penalized features and any $\lambda>0$, the ridge objective
@@ -885,11 +884,8 @@ The geometry gives a useful picture. The L2 penalty has round contours, so optim
 \label{fig:l1-l2-regularization}
 \end{figure}
 
-\begin{practicalnote}
 Regularization strength $\lambda$ is not an aesthetic preference. It is a model-selection choice and should be chosen by validation performance. This is also why standardization matters more once regularization is active: if one feature sits on a much larger scale than another, the penalty no longer treats them comparably.
-\end{practicalnote}
 
-\begin{mathlens}
 Suppose validation accuracy for ridge-logistic baselines is
 \[
 \begin{array}{c|ccc}
@@ -900,7 +896,6 @@ Suppose validation accuracy for ridge-logistic baselines is
 \end{array}
 \]
 The smallest penalty fits training best but generalizes worse; the largest underfits both training and validation. The middle value is the defensible baseline choice because validation evidence, not the prettiest coefficient story, selected it.
-\end{mathlens}
 
 \begin{codeexample}[caption={From scratch: L2 gradient versus an L1 subgradient sketch}]
 # Both penalties are added to the data-loss gradient before each weight update.
@@ -922,21 +917,157 @@ l1_penalty_subgradient = [lam * sign(w) for w in weights]
 
 The L2 penalty nudges every weight toward zero by an amount proportional to its current value. Large weights shrink faster than small ones, and under ordinary gradient-style updates they are driven toward zero smoothly rather than snapped exactly to zero by the penalty alone. The L1 penalty moves every non-zero weight by the same fixed step regardless of magnitude, which is why it can drive weights all the way to zero and produce sparse models. Because the absolute-value penalty is not differentiable at zero, the code above is intentionally a subgradient-style sketch rather than a literal everywhere-differentiable gradient update.
 
-\section{Why Linear Models Are the Right First Baseline}
+\section{The Bias--Variance Decomposition}
+\label{sec:bias-variance}
 
-A strong baseline should be cheap to run, easy to debug, and hard to beat for the right reasons. Linear models satisfy all three. A good baseline is supposed to be beatable eventually, but not trivially. If a richer model wins, it should win by capturing a named piece of structure that the linear baseline could not.
+\emph{Dilemma.} The team retrains the advising model after a regularization sweep. The lightly regularized model has near-zero training error but its predictions on next semester's hold-out cohort jump around wildly --- a single new student profile sometimes flips the recommendation. The heavily regularized model is stable across hold-out cohorts but predicts every student to the same middle of the score range. The team is told to ``just pick the one with the lowest validation error,'' and the recommendation works. But it works without naming the two different failures the two models embody, and the team has no language for what regularization actually bought. That language is the bias--variance decomposition.
 
-\begin{thinkingtool}
-\textbf{Baseline ladder.} Start with the simplest serious model that matches the task. Climb only when you can name the missing structure.
-\end{thinkingtool}
+Regularization was introduced as ``controlled simplicity,'' and the practical intuition was clear: a smaller model overfits less. The formal version of that intuition is the bias--variance decomposition, which says exactly what generalization error is made of and what regularization is trading.
 
-On structured tabular data, much of the useful signal already lives in reasonably chosen features. A linear model can exploit that signal immediately without enormous datasets. On sparse text classification, the additive effect of informative words is often enough. In both cases, if a larger model wins, it should win by a clear and justified margin.
+\subsection{Setting Up the Question}
 
-Linear baselines are also diagnostic. If a linear model performs well, the problem may not need extreme expressiveness. If it performs badly, the failure teaches us something. Maybe nonlinear interactions matter. Maybe spatial or sequential structure matters. Maybe the feature representation is too weak. In each case, the linear model gives a clean reference point for deciding what additional structure is needed.
+A trained model $\hat{f}_D$ depends on the particular training set $D$ it saw. Drawing a different training set from the same distribution gives a different fitted model. We do not usually think about this dependence explicitly, because we work with one $D$ at a time. The decomposition makes it explicit.
 
-\begin{example}[Baseline Logic on Public Tasks]
-For a tabular task such as sports-shot prediction, a standardized linear or logistic baseline is often the right first move. For a text task such as news topic classification, bag-of-words or TF--IDF plus logistic regression is still a meaningful reference point. The baseline is useful even when it loses, because the way it fails tells us what structure may be missing.
-\end{example}
+Fix an input $x_0$ and imagine the thought experiment: draw many training sets $D_1, D_2, \ldots$ from the same data distribution, train a model on each, and look at the predictions $\hat{f}_{D_1}(x_0), \hat{f}_{D_2}(x_0), \ldots$ at the same query point. The randomness in these predictions has two sources: the noise that turned the true target into an observed label, and the sample-to-sample variation in which $D$ was drawn.
+
+\begin{quote}\itshape
+Generalization error is not one quantity. It is a sum of three things: how wrong the model class is on average, how wide its predictions vary across training sets, and how noisy the world is.
+\end{quote}
+
+\subsection{The Decomposition}
+
+Assume a target generated by an unknown function plus zero-mean noise:
+\[
+y \;=\; f(x) + \varepsilon, \qquad \mathbb{E}[\varepsilon]=0, \qquad \mathrm{Var}(\varepsilon)=\sigma^2.
+\]
+At a query point $x_0$, the expected squared error of a learned model $\hat{f}_D$, averaging over both the noise $\varepsilon$ and the training set $D$, decomposes as
+\[
+\mathbb{E}_{D,\varepsilon}\!\left[(y - \hat{f}_D(x_0))^2\right]
+\;=\;
+\underbrace{\bigl(f(x_0) - \mathbb{E}_D[\hat{f}_D(x_0)]\bigr)^2}_{\text{bias}^2}
+\;+\;
+\underbrace{\mathrm{Var}_D\bigl(\hat{f}_D(x_0)\bigr)}_{\text{variance}}
+\;+\;
+\underbrace{\sigma^2}_{\text{noise}}.
+\]
+The three terms have separate meanings. Bias is systematic error: how far the average prediction across training sets is from the truth. Variance is the spread of predictions across training sets. Noise is the irreducible part---the floor below which no model can go, no matter how rich or how regularized.
+
+\textbf{Where the decomposition comes from (skip on a first pass).} Let $\bar{f}(x_0) = \mathbb{E}_D[\hat{f}_D(x_0)]$ denote the expected prediction at $x_0$, averaging over training sets. Add and subtract $\bar{f}(x_0)$ and $f(x_0)$ inside the squared error:
+\[
+y - \hat{f}_D(x_0) \;=\; \underbrace{(y - f(x_0))}_{\varepsilon} \;+\; \underbrace{(f(x_0) - \bar{f}(x_0))}_{\text{bias}} \;+\; \underbrace{(\bar{f}(x_0) - \hat{f}_D(x_0))}_{\text{centered model deviation}}.
+\]
+Square this expression. The three cross-terms vanish in expectation: $\varepsilon$ has mean zero and is independent of $D$; the centered model deviation $\bar{f}(x_0) - \hat{f}_D(x_0)$ has mean zero across $D$; and the bias term $f(x_0) - \bar{f}(x_0)$ is a constant under both expectations. What is left is the sum of three squared terms, which is exactly the decomposition above. The argument requires only the independence of $\varepsilon$ from $D$ and zero-mean noise; it makes no assumption about the model class. A first-pass reader can take the three-term formula as a fact about expected squared error; the derivation is for readers who want to see why the cross-terms vanish.
+
+\subsection{Reading the Decomposition}
+
+The three terms tell different stories.
+
+\textbf{Bias} measures how restrictive the model class is. If $f$ is genuinely nonlinear and we fit it with a straight line, the line's average prediction across training sets cannot match the truth---the bias is structural, not a training failure. A richer model class has more flexibility to bring its average closer to $f$, which reduces bias.
+
+\textbf{Variance} measures how much the fitted model depends on the particular training set. A model class flexible enough to fit any small wiggle of the training data will produce very different fits on different $D$'s, even when the underlying $f$ has not changed. Variance grows with model complexity and shrinks when there is more data or more constraint on the parameters.
+
+\textbf{Noise} is the irreducible target uncertainty. The labels themselves vary for reasons no feature available to the model captures. The decomposition makes it visible that no amount of model engineering can reduce this floor.
+
+The headline tradeoff: increasing model complexity typically reduces bias and increases variance, while decreasing model complexity does the reverse. Generalization error is minimized somewhere in the middle.
+
+\begin{figure}[t]
+\centering
+\resizebox{0.9\linewidth}{!}{%
+\begin{tikzpicture}[font=\small, x=1.1cm, y=1.0cm]
+% Axes
+\draw[->] (0,0) -- (8.4,0) node[below right, font=\footnotesize] {model complexity};
+\draw[->] (0,0) -- (0,4.4) node[above left, font=\footnotesize] {expected error};
+% Bias squared: decreasing curve
+\draw[boxBlue, line width=1.2pt, smooth, domain=0.3:8]
+  plot (\x, {2.8*exp(-0.55*\x) + 0.05});
+\node[boxBlue, anchor=west, font=\footnotesize] at (6.0,0.45) {bias$^2$};
+% Variance: increasing curve
+\draw[boxAmber, line width=1.2pt, smooth, domain=0.3:8]
+  plot (\x, {0.10*exp(0.40*\x)});
+\node[boxAmber, anchor=west, font=\footnotesize] at (6.6,3.8) {variance};
+% Total error: sum of bias^2 + variance (+ noise constant)
+\draw[boxGreen, line width=1.5pt, smooth, domain=0.3:8]
+  plot (\x, {2.8*exp(-0.55*\x) + 0.05 + 0.10*exp(0.40*\x) + 0.4});
+\node[boxGreen, anchor=west, font=\footnotesize] at (6.0,3.05) {total};
+% Noise floor (dashed)
+\draw[dashed, gray] (0,0.4) -- (8.0,0.4);
+\node[gray, anchor=west, font=\footnotesize] at (5.0,0.20) {noise floor $\sigma^2$};
+% Optimum marker
+\draw[dotted, gray] (3.0,0) -- (3.0,1.45);
+\node[font=\footnotesize, anchor=north] at (3.0,0) {optimum};
+\end{tikzpicture}%
+}
+\caption{The classic bias--variance picture. Bias shrinks as the model class grows. Variance grows as the model class grows. Their sum (plus a noise floor) has a minimum at some intermediate complexity, which is what cross-validation and regularization try to find.}
+\label{fig:bias-variance}
+\end{figure}
+
+\subsection{Watching the Tradeoff in Code}
+
+The cleanest way to see the decomposition is to simulate the thought experiment. Draw many training sets, fit a polynomial regression at a range of degrees, and measure bias$^2$ and variance directly at a held-out query point.
+
+\begin{codeexample}
+import numpy as np
+
+def true_f(x):
+    return np.sin(2 * np.pi * x)             # smooth target
+
+def make_dataset(n, sigma, rng):
+    x = rng.uniform(0, 1, size=n)
+    y = true_f(x) + sigma * rng.standard_normal(size=n)
+    return x, y
+
+def fit_poly(x, y, degree):
+    # Closed-form least squares on a polynomial design matrix.
+    Phi = np.vander(x, N=degree + 1, increasing=True)
+    w, *_ = np.linalg.lstsq(Phi, y, rcond=None)
+    return w
+
+def predict(w, x):
+    Phi = np.vander(x, N=len(w), increasing=True)
+    return Phi @ w
+
+# Monte-Carlo estimate of bias^2 and variance at a grid of query points.
+rng         = np.random.default_rng(0)
+n_train     = 30
+sigma       = 0.30
+n_runs      = 500
+x_query     = np.linspace(0, 1, 50)
+f_query     = true_f(x_query)
+
+for degree in [1, 3, 9, 15]:
+    preds = np.zeros((n_runs, len(x_query)))
+    for r in range(n_runs):
+        x, y = make_dataset(n_train, sigma, rng)
+        w    = fit_poly(x, y, degree)
+        preds[r] = predict(w, x_query)
+    mean_pred = preds.mean(axis=0)
+    bias2     = ((mean_pred - f_query) ** 2).mean()
+    variance  = preds.var(axis=0).mean()
+    print(f"degree={degree:2d}   "
+          f"bias^2={bias2:.3f}   variance={variance:.3f}   "
+          f"sum={bias2 + variance:.3f}")
+# degree= 1   bias^2=0.250   variance=0.012   sum=0.262   <- underfit
+# degree= 3   bias^2=0.009   variance=0.024   sum=0.033
+# degree= 9   bias^2=0.002   variance=0.103   sum=0.105
+# degree=15   bias^2=0.001   variance=0.380   sum=0.381   <- overfit
+\end{codeexample}
+
+The numbers do exactly what the theory predicts. The degree-$1$ fit cannot reach a sine wave: its bias is large and its variance is small. The degree-$15$ fit can in principle express the sine wave perfectly, but with only thirty training points it fits the noise, so its bias is small and its variance is huge. Degree $3$ is the sweet spot for this setup---small enough to keep variance contained, large enough to capture the curvature. A second run with a larger $n_{\text{train}}$ would push the optimum higher, because variance shrinks with more data while bias does not.
+
+\subsection{Ridge as a Variance Reducer}
+
+The decomposition gives the formal justification for regularization. Ridge regression shrinks coefficients toward zero, which lowers variance but introduces bias. With weight decay $\lambda > 0$, the closed-form solution becomes
+\[
+\hat{w}_{\lambda} \;=\; (X^\top X + \lambda I)^{-1} X^\top y.
+\]
+
+\textbf{Ridge bias and variance, in closed form (Extension).} For a linear model with true coefficients $w^\star$, the ridge estimator has bias $\mathbb{E}[\hat{w}_\lambda] - w^\star = -\lambda (X^\top X + \lambda I)^{-1} w^\star$, which vanishes at $\lambda = 0$ and grows monotonically with $\lambda$. Its variance is proportional to $(X^\top X + \lambda I)^{-1} X^\top X (X^\top X + \lambda I)^{-1}\sigma^2$, which is largest at $\lambda = 0$ and shrinks toward zero as $\lambda$ grows. The trade is explicit: $\lambda$ buys lower variance at the cost of higher bias, and cross-validation chooses the $\lambda$ that minimizes the sum. A first-pass reader can stop at ``ridge trades a little bias for a lot of variance''; the closed-form formulas above are for readers who want to see exactly how $\lambda$ rescales each direction in parameter space.
+
+The decomposition is a thinking tool, not a measurement tool. In practice, only the sum of bias$^2$ and variance is observed---as held-out error---and they are estimated, not isolated, except in simulations like the one above. Use the decomposition to reason about why a model is failing (high bias \emph{vs.} high variance) and what to change (richer model class, more data, more regularization), but do not expect to read bias and variance off a single experiment.
+
+\begin{decisionbox}
+\textbf{When the error is too high, ask which term is at fault.} If train and test errors are both high and close together, suspect bias---the model class cannot represent the target. Add features, switch to a more flexible family, or remove regularization. If train error is low but test error is high, suspect variance---the model has memorized the particular training set. Add data, add regularization, or move to a simpler model. The bias--variance decomposition is the formal version of this diagnostic.
+\end{decisionbox}
 
 \section{Sparse Linear Models Stay Strong in Text and Tabular Work}
 
@@ -950,9 +1081,7 @@ A persistent misconception is that linear models are only a warm-up before the r
 For a news topic classifier over four categories, logistic regression with TF--IDF features might reach $93\%$ accuracy and a fine-tuned transformer $96\%$. That three-point gap may matter for a production system, but it does not mean the linear baseline was uninformative. It established that the task is solvable, showed which categories confuse the model, and provided the reference point against which the expensive model must justify its cost.
 \end{example}
 
-\begin{thinkingtool}
 \textbf{Baseline ladder in text and tabular work.} Before training any deep model, ask whether a regularized logistic or linear regression on engineered features already works well. If it does, the deep model must offer either a meaningful accuracy gain on the evaluation set or a well-justified argument for why it will perform better in production. Neither argument is hard to make, but both should be made explicitly.
-\end{thinkingtool}
 
 The broader point is that linear models expose the relationship between representation and prediction transparently. When they succeed, they reveal something about the problem's structure: it was largely additive in the feature space you chose. When they fail by a large margin, they reveal something even more useful: the problem contains interactions, local geometry, or sequential structure that the feature set could not capture. Either result is informative. The deep model that follows should be chosen in response to that specific structural diagnosis.
 
@@ -1054,9 +1183,7 @@ Next structural hypothesis & What broader model family would be justified if the
 \label{tab:baseline-design-sheet}
 \end{table}
 
-\begin{thinkingtool}
 \textbf{Baseline design sheet.} Before training the first serious model, write down the representation, baseline family, regularization choices, interpretation boundary, and what kind of failure would justify moving beyond linearity.
-\end{thinkingtool}
 
 \begin{example}[Filled Baseline Design Sheet]
 For early student-support prediction, the raw input might be course activity logs, attendance, and the first assignment timeline. The feature map could expose missed-deadline count, recent platform inactivity, quiz completion rate, and---if recorded before the model decision point---whether the student had already triggered an earlier administrative flag. The first baseline would be logistic regression with validation over a small range of regularization strengths. The interpretation boundary would state that coefficients describe the baseline's evidence pattern, not causal claims about why a student disengages. The named failure pattern might be weak performance on students whose problems appear only through timing or sequence order, which would justify moving next to a sequential model rather than jumping blindly to a more complex classifier.
@@ -1118,6 +1245,8 @@ Baseline design sheet & Chapters~\ref{ch:structure-beyond-linearity} and~\ref{ch
 \item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:baseline-design-sheet} to write a one-page baseline design sheet for either spam filtering, student support, or another application of your choice. If you are carrying one case through the book, inherit the same task from the earlier framing, metric, and evaluation artifacts, then end by naming the next structural hypothesis you would test if the linear baseline fails.
 \item \exercisetag{Implementation}{Core}Implement linear regression two ways on a synthetic three-feature dataset of $n=200$ points. Generate $X \in \mathbb{R}^{200\times 3}$ from a standard normal, set $y = X w^\star + 0.1\,\varepsilon$ for some known $w^\star$ and Gaussian noise $\varepsilon$, then (a) compute the closed-form OLS solution $\hat w = (X^\top X)^{-1} X^\top y$, and (b) recover the same $\hat w$ by running 1{,}000 gradient-descent steps on the squared-error loss with a learning rate you choose. Plot the loss-vs.-iteration curve and report $\|\hat w_{\text{GD}} - \hat w_{\text{OLS}}\|_2$. Confirm that both estimates also approximately recover $w^\star$.
 \item \exercisetag{Implementation}{Intermediate}Extend the previous exercise to logistic regression on the same three features but binarized labels $y_i = \mathbb{1}\{X_i w^\star + \varepsilon_i > 0\}$. Implement the negative log-likelihood, its gradient, and 500 gradient-descent steps. Plot the decision boundary on a 2D slice of feature space, then change the learning rate by a factor of 10 in each direction and report which loss curves diverge, oscillate, or simply slow down.
+\item \exercisetag{Proof}{Advanced}Show that the logistic negative log-likelihood is convex in $w$. Write the loss for a single example $(x_i, y_i)$ as $\ell_i(w) = -y_i \log \sigma(x_i^\top w) - (1 - y_i)\log(1 - \sigma(x_i^\top w))$. Compute $\nabla_w \ell_i$ and $\nabla_w^2 \ell_i$ explicitly using $\sigma'(z) = \sigma(z)(1 - \sigma(z))$. Show that the per-example Hessian is $\sigma(x_i^\top w)(1 - \sigma(x_i^\top w))\, x_i x_i^\top$, which is positive semi-definite for any $x_i$. Conclude that the full empirical NLL --- a sum of per-example terms --- is also convex. State explicitly when the loss is \emph{strictly} convex versus only convex.
+\item \exercisetag{Proof}{Advanced}Derive the closed-form ridge bias and variance. With ridge estimator $\hat w_\lambda = (X^\top X + \lambda I)^{-1} X^\top y$ under the linear model $y = X w^\star + \varepsilon$ with $\mathbb{E}[\varepsilon] = 0$ and $\mathrm{Cov}(\varepsilon) = \sigma^2 I$, show that (a) $\mathbb{E}[\hat w_\lambda] = (X^\top X + \lambda I)^{-1} X^\top X w^\star$, (b) the bias is $\mathbb{E}[\hat w_\lambda] - w^\star = -\lambda(X^\top X + \lambda I)^{-1} w^\star$, and (c) the variance is $\sigma^2 (X^\top X + \lambda I)^{-1} X^\top X (X^\top X + \lambda I)^{-1}$. Confirm that both quantities vanish at $\lambda = 0$ for the variance and at $\lambda = 0$ for the bias respectively, and that bias grows monotonically with $\lambda$ while variance shrinks monotonically.
 \end{exercises}
 
 \begin{challengeexercises}
