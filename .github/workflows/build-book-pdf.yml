@@ -1,0 +1,54 @@
+name: Build Book PDF
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Compile ml-by-design.pdf
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compile LaTeX book
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: book.tex
+          working_directory: tex
+          args: -pdf -interaction=nonstopmode -halt-on-error -file-line-error
+
+      - name: Publish root PDF
+        run: cp -f tex/book.pdf ml-by-design.pdf
+
+      - name: Verify root PDF
+        run: test -s ml-by-design.pdf
+
+      - name: Upload compiled PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-by-design
+          path: ml-by-design.pdf
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Commit refreshed root PDF
+        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f ml-by-design.pdf
+          if git diff --cached --quiet; then
+            echo "ml-by-design.pdf is already up to date."
+          else
+            git commit -m "chore: refresh compiled book PDF [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
