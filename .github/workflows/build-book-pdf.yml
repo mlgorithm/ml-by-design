@@ -41,7 +41,10 @@ jobs:
           retention-days: 30
 
       - name: Commit refreshed root PDF
+        id: commit-pdf
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -50,5 +53,22 @@ jobs:
             echo "ml-by-design.pdf is already up to date."
           else
             git commit -m "chore: refresh compiled book PDF [skip ci]"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Pushed refreshed PDF to ${GITHUB_REF_NAME}."
+            else
+              branch="automation/refresh-book-pdf-${GITHUB_RUN_ID}"
+              git push origin "HEAD:${branch}"
+              echo "pr_branch=${branch}" >> "$GITHUB_OUTPUT"
+            fi
           fi
+
+      - name: Open PDF refresh pull request
+        if: steps.commit-pdf.outputs.pr_branch != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --base "${GITHUB_REF_NAME}" \
+            --head "${{ steps.commit-pdf.outputs.pr_branch }}" \
+            --title "chore: refresh compiled book PDF" \
+            --body "Automated PDF refresh from workflow run ${GITHUB_RUN_ID}."
