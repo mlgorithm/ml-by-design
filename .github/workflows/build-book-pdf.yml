@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    name: Compile ml-by-design.pdf
+    name: Compile revised book PDF
     runs-on: ubuntu-latest
 
     steps:
@@ -27,21 +27,23 @@ jobs:
           working_directory: tex
           args: -pdf -interaction=nonstopmode -halt-on-error -file-line-error
 
-      - name: Publish root PDF
-        run: cp -f tex/book.pdf ml-by-design.pdf
+      - name: Publish revised PDF
+        run: |
+          mkdir -p output/pdf
+          cp -f tex/book.pdf output/pdf/ml-by-design-concepts.pdf
 
-      - name: Verify root PDF
-        run: test -s ml-by-design.pdf
+      - name: Verify revised PDF
+        run: test -s output/pdf/ml-by-design-concepts.pdf
 
       - name: Upload compiled PDF
         uses: actions/upload-artifact@v4
         with:
           name: ml-by-design
-          path: ml-by-design.pdf
+          path: output/pdf/ml-by-design-concepts.pdf
           if-no-files-found: error
           retention-days: 30
 
-      - name: Commit refreshed root PDF
+      - name: Commit refreshed PDF
         id: commit-pdf
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
         env:
@@ -49,9 +51,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f ml-by-design.pdf
+          git add -f output/pdf/ml-by-design-concepts.pdf
           if git diff --cached --quiet; then
-            echo "ml-by-design.pdf is already up to date."
+            echo "output/pdf/ml-by-design-concepts.pdf is already up to date."
           else
             git commit -m "chore: refresh compiled book PDF [skip ci]"
             if git push origin "HEAD:${GITHUB_REF_NAME}"; then

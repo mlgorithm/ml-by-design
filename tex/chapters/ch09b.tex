@@ -1,552 +1,323 @@
-\chapter{Tabular Data: The Modality You Will Actually Meet}
+\begingroup
+\raggedbottom
+\clubpenalty=10000
+\widowpenalty=10000
+\chapter[Tabular Data: Representation and Prediction]{Tabular Data:\\Representation and Prediction}
 \label{ch:tabular}
 
-Most of the machine learning a working practitioner does is tabular. Risk scoring at a bank, churn prediction at a telecom, fraud detection at a payment processor, demand forecasting at a retailer, early-warning systems at a university---each of these starts from a table of rows and columns. The deployment target is rarely an image or a sentence. It is a row: one customer, one transaction, one student, one sensor reading. The model's job is to turn that row into a score, a class, or a number.
+A table places measurements beside one another without making their meanings alike. A count, a category code, a date, and a missing value require different interpretations. The same table can also contain repeated observations of one person, measurements recorded at different times, and information that would become available only after a prediction was needed.
 
-The previous chapters in Part~IV each defined a modality through what made it difficult: vision struggled with invariance, language with context, audio and forecasting with the prediction-time boundary, ranking with exposure. Tabular data has its own difficulties, and they are usually \emph{not} the ones a fresh deep-learning enthusiast expects. The columns are heterogeneous. Many entries are missing, and the missingness is itself signal. Categorical features need encoding choices that can leak the label through the back door. The dominant baseline---a gradient-boosted tree ensemble---outperforms most neural alternatives on most benchmarks, often without much tuning. Calibration is poor by default. The data drifts in deployment because the world the table describes is changing while the schema stays the same.
+These distinctions shape both representation and evaluation. Trees, linear models, and neural models offer different ways to express relationships among columns. None can repair an evaluation that supplies future outcomes as inputs or treats dependent rows as independent evidence.
 
-This chapter treats tabular data as a modality in its own right rather than the implicit default for all the machinery introduced earlier. Trees and ensembles already appeared in Chapter~\ref{ch:structure-beyond-linearity}; calibration appeared in Chapter~\ref{ch:prediction-loss-decision} and Chapter~\ref{ch:probabilistic-models}; data design appeared in Chapter~\ref{ch:dataset-design}. Here those threads are pulled together for the modality where they pay off most directly. By the end of the chapter, you should be able to defend a tabular pipeline---feature encoding, model family, validation split, calibration, monitoring---against the specific failure modes that haunt tabular ML in practice.
+\section{What Does a Row Represent?}
 
-\begin{practicalnote}
-\textbf{Core path.} The required spine is: why tabular is its own modality, gradient-boosted trees as the default baseline, target encoding done correctly, the leakage and shift checklists, and the tabular design card. Neural tabular methods, advanced encoding schemes, and SHAP-based diagnostics are useful extensions for projects but are not the chapter's load-bearing material.
-\end{practicalnote}
+Return to the student-support task: at the end of week 2, predict whether a student--course case will miss at least one of two specified deadlines in weeks 3--4. Each row represents that case at that cutoff. Inputs might include prior submissions, recorded resource access, and information already available about the course. The label becomes known only after the two deadlines have passed. A prior event is usable only if its recorded value was available when the prediction would have been made.
 
-\section{Opening Dilemma: Why ``Just Use a Deep Network'' Usually Loses}
+The row's entity, prediction time, and label-resolution time serve different purposes. Entity identity reveals dependence between rows. Prediction time limits available inputs. Label-resolution time limits which historical outcomes may be used for training or outcome-based transformations. At most five adviser reviews can be selected, but the probability of a missed deadline remains a proxy rather than a measure of intervention benefit.
 
-Suppose a university wants to predict, on Monday morning, which students are at risk of failing to submit Friday's assignment. The data is a table. Each row is a student-week pair. The columns include lecture-video minutes watched, number of forum posts, time spent on the previous problem set, late-submission count this term, prior-term GPA, registration timing, and a handful of categorical fields like major, instructor, and section. Maybe twenty columns. Maybe forty. The label is binary: did the student submit by the deadline?
+A linear model supplies an additive baseline. A tree partitions feature space into regions. A boosted ensemble refines those regions, while a neural model can learn shared transformations of encoded fields. A pretrained model can supply information from an earlier training distribution. A useful comparison holds the prediction task and legal information fixed, then asks which model's assumptions receive support from independent evaluation.
 
-A reasonable first instinct, especially after a course that emphasized neural networks, is to throw a multilayer perceptron at the problem. The MLP will train, achieve something, and produce predictions. It will also, on most tabular problems of this size and shape, be beaten by a gradient-boosted tree ensemble that took a few minutes to fit with default hyperparameters. Repeated benchmarks across academic and industrial datasets have shown the same pattern \citep{grinsztajn2022tabularnn}: on tabular problems, careful tree ensembles win the median benchmark, and neural alternatives catch up only with heavy tuning, large data, or both.
-
-The dilemma the chapter opens with is therefore not architectural but methodological. Treating tabular ML as ``just supervised learning'' or as ``a problem deep networks should solve'' misses what is actually hard about it. The hard parts are the parts the algorithm never sees: which columns to encode and how, where the time boundary is, which rows belong to the same entity, what the label leak looks like, how the schema will change six months from now, and whether the deployed model's confidence numbers can be trusted by a downstream automated decision.
-
-On tabular data, the bottleneck is rarely the model family. It is the data preparation and the evaluation protocol. A gradient-boosted tree ensemble with sloppy validation will lose to a worse model with disciplined validation, because the sloppy pipeline silently optimizes for a problem that is not the deployment problem.
-
-\section{Tabular as a Modality}
+\section{Column Meaning and Representation}
 \label{sec:tabular-modality}
 
-Treat tabular data as a modality the same way Chapter~\ref{ch:vision} treats vision and Chapter~\ref{ch:language-grounding} treats language. The modality is defined by the structure of its inputs, the failure modes it invites, and the deployment realities its systems face.
+A continuous amount has a numeric scale. An ordinal category has an order but need not have meaningful equal spacing. A nominal category distinguishes identities without prescribing order. Dates can encode elapsed time, calendar cycles, or changing conditions. Identifiers can expose repeated entities without being legitimate predictors of a new entity. Missingness can have several causes, each with a different relationship to the target.
 
-\subsection{Heterogeneous Columns}
+These meanings do not disappear when the columns become numbers. Coding categories $A,B,C$ as $1,2,3$ creates an order. Suppose $A$ and $C$ have positive labels and $B$ has negative labels. A single numeric threshold cannot separate $\{A,C\}$ from $\{B\}$. Recoding them as $A=1,C=2,B=3$ makes that partition possible with one threshold. A categorical subset split could express it directly. Arbitrary integer codes can therefore change the simple functions a model can represent; they are not interchangeable with genuine categorical handling.
 
-An image is a grid of pixels, each with the same physical meaning. A text is a sequence of tokens drawn from one vocabulary. A row of tabular data, by contrast, contains columns of different types: continuous, ordinal, nominal categorical, datetime, count, free text, and identifiers. Some columns are bounded (age, GPA), some unbounded (transaction amount), some heavy-tailed, some near-constant. A useful representation must respect the type of each column rather than crushing them into one numeric vector.
+\begin{center}
+\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram]
+\node[ml box, text width=1.75cm, minimum height=0.65cm] (counts) at (0,0.9) {Count};
+\node[ml box, text width=1.75cm, minimum height=0.65cm] (categories) at (0,0) {Category};
+\node[ml box, text width=1.75cm, minimum height=0.65cm] (missing) at (0,-0.9) {Missingness};
+\node[ml key box, text width=2.5cm, minimum height=1.2cm] (encoding) at (3.4,0) {Representation};
+\node[ml box, text width=1.75cm, minimum height=0.85cm] (model) at (6.8,0) {Predictor};
+\draw[ml arrow] (counts.east)--(encoding.north west);
+\draw[ml arrow] (categories.east)--(encoding.west);
+\draw[ml arrow] (missing.east)--(encoding.south west);
+\draw[ml arrow] (encoding)--(model);
+\end{tikzpicture}
+\captionof{figure}{Column meanings determine permissible representations. A category identifier has no intrinsic numeric distance, and a missing value may need its own indicator.}
+\label{fig:tabular-representation}
+\end{minipage}
+\end{center}
 
-This heterogeneity is why tree-based models do well on tabular data. A tree can split on age at one threshold, split on transaction amount at another, and split on a categorical feature by branching to subsets of categories. It does not need a shared numeric scale. By contrast, a feedforward neural network treats every input as one coordinate of a real vector and must implicitly learn the per-column scale and meaning from data. Tree splits are scale-invariant; gradient-descent on raw features is not.
+\subsection{Thresholds and Scale}
 
-\subsection{Missingness as Information}
+An exact order-based tree split can compare a count and an amount without making their scales comparable. A strictly increasing transformation of one numeric feature preserves its order and the attainable training partitions. To preserve predictions at new points, the fitted thresholds must also be transported through the transformation. A strictly decreasing transformation reverses the order and exchanges the sides. Histogram approximations, ties, and numerical conventions can alter the actual split selected. This qualified invariance differs from saying that any implementation is unaffected by every rescaling.
 
-In tabular ML, a missing value is not always noise. It is often signal. ``Income field blank'' may mean the customer declined to disclose, which correlates with risk. ``Last login date null'' may mean the user has never logged in, which is a strong feature for churn. ``Lab grade missing'' may mean the student did not take the lab, which is precisely the behavior an early-warning model should pick up.
+Linear models and neural models also depend on representation. Regularization and gradient optimization can be sensitive to feature scale, so training-fitted standardization or other justified transformations can matter. Trees can exploit irrelevant features and high-cardinality fields too: a large collection of possible splits offers more opportunities to fit noise. Heterogeneous columns do not make any model immune to overfitting.
 
-This contrasts with fixed benchmark tensors for images and audio, where a missing pixel block or absent audio sample often indicates acquisition failure rather than an ordinary feature value. Streaming and sensor systems are different: dropped frames, clipped audio, and missing readings can themselves be informative and should be represented explicitly. Tabular data starts closer to that second regime. Imputing missing values to the column mean and discarding the missingness flag throws away information that a tree-based model would have happily split on. The right baseline treatment is usually to impute \emph{and} retain a binary indicator that records whether the value was originally missing.
+\subsection{Missing Values}
 
-\subsection{Dominant Baselines}
+Let $M_j=1$ indicate that feature $j$ is missing. A predictor using observed values and missingness estimates a relation such as $P(Y\mid X_{\mathrm{obs}},M)$. Replacing a missing value by a training-fitted mean and retaining $M_j$ is one representation of that information. A missing-aware tree can instead learn a default branch for missing values, as in XGBoost \citep{chen2016xgboost}. These mechanisms make different modeling choices.
 
-A vision project might start by fine-tuning a pretrained backbone. A language project might start with a pretrained encoder. A tabular project starts with a gradient-boosted tree ensemble. This is the empirical default. It is fast to train, robust to scale and distributional weirdness, handles missing values natively in modern implementations, and outperforms most alternatives on most problems. The next section makes the case in detail.
+A missing lab grade could mean that work was not submitted, grading has not occurred, or the lab was not assigned to that student. An empty login field could indicate no login or a failure of the logging system. The field's availability and cause must be understood before missingness is treated as behavioral evidence. An indicator can preserve useful information, but it does not guarantee better predictions or stability when the collection process changes.
 
-\subsection{Interpretability Expectations}
+\subsection{Explaining a Prediction}
 
-Tabular ML deployments often live inside regulated processes: credit decisions, medical risk scores, hiring funnels, school dashboards. The downstream consumer is a credit officer, a clinician, an admissions reader, or a teacher. They expect to be able to ask \emph{why this row was scored this way}---and a useful answer in tabular data tends to look like \emph{``the score is high because the past-due balance and credit utilization are both high; the model assigns smaller weight to the recent inquiry count.''} That answer is feasible because the features are human-meaningful by construction. SHAP values \citep{lundberg2017shap} and tree feature-importance scores have become the standard tools, although they each carry their own caveats about correlated features.
+Readable column names can make model explanations easier to discuss, but they do not establish causal meaning. A feature importance measures some aspect of a fitted model or its performance. SHAP values decompose a prediction relative to a specified background and feature-coalition definition \citep{lundberg2017shap}. With correlated fields, different conditional or intervention-style definitions can allocate contributions differently. Neither a large importance nor a positive contribution shows that changing the feature would improve the outcome. A deadline-risk explanation also does not establish the benefit of an adviser action.
 
-\subsection{Deployment Realities}
-
-Tabular models often run nightly. Each morning the model scores the day's transactions, students, or accounts. Daily retraining is common. Monitoring is usually slice-based: how does precision at the operating threshold look this week for the West Coast region, for new accounts, for the third-party data source that started feeding rows last month? Schema drift, where a column's meaning changes upstream, is a routine cause of silent failure. The discipline of dataset design from Chapter~\ref{ch:dataset-design} is not optional in tabular work; it is the daily job.
-
-\textbf{Modality audit for tabular data.} Before training, write down the column types, the columns whose missingness is informative, the entity each row represents (a customer? a transaction? a customer-week?), the time field that separates train from test, and the categorical columns whose cardinality is high enough to need a coded representation rather than one-hot vectors.
-
-\section{The Dominant Baseline: Gradient-Boosted Trees}
+\section{Gradient-Boosted Trees}
 \label{sec:gbt}
 
-Chapter~\ref{ch:structure-beyond-linearity} introduced trees, random forests, and boosting at the conceptual level. This section closes the loop: on tabular problems, the empirically strongest off-the-shelf method is almost always a gradient-boosted tree ensemble. The three production-grade implementations are XGBoost \citep{chen2016xgboost},
-LightGBM \citep{ke2017lightgbm},
-and CatBoost \citep{prokhorenkova2018catboost}.
-They differ in implementation details---LightGBM is fastest on large datasets, CatBoost handles categorical features natively, XGBoost has the most mature ecosystem---but for the purposes of this chapter they are interchangeable representatives of the same family.
-
-\subsection{The Boosting Update in One Page}
-
-Boosting builds an ensemble incrementally. After $m-1$ rounds, the current model is $F_{m-1}(x)$. The next tree $h_m$ is fit not to the original labels but to the negative gradient of the loss with respect to $F_{m-1}$. The update is then
+Boosting adds functions to a predictor rather than fitting one large tree at once. Chapter~\ref{ch:structure-beyond-linearity} introduced this idea; here its loss derivatives make the update precise. Write the empirical objective as $\sum_i\ell(y_i,F(x_i))$. After $m-1$ rounds, the negative gradient at observation $i$ is
 \[
-F_m(x) = F_{m-1}(x) + \nu \, h_m(x),
+r_i^{(m)}=-\left.\frac{\partial\ell(y_i,F)}{\partial F}\right|_{F=F_{m-1}(x_i)}.
 \]
-where $\nu$ is the learning rate (often $0.05$ or $0.1$). For squared error, the negative gradient is the residual $y - F_{m-1}(x)$, and boosting recovers the classical least-squares fitting story. For logistic loss, the negative gradient is the per-example margin gap, and each round nudges the ensemble toward classifying the still-misclassified examples better.
-
-For a differentiable loss $\ell(y, F(x))$ and an ensemble $F_{m-1}$, the gradient-boosting update fits a weak learner $h_m$ to the per-example pseudo-residuals
+A new tree $b_m$ approximates these values, with leaf values chosen according to the fitting method. The ensemble update is
 \[
-r_i^{(m)} = -\left.\frac{\partial \ell(y_i, F(x_i))}{\partial F(x_i)}\right|_{F = F_{m-1}}.
+F_m(x)=F_{m-1}(x)+\nu b_m(x),\qquad \nu>0.
 \]
-The new ensemble is $F_m = F_{m-1} + \nu \, h_m$. Two ingredients earn boosting its tabular reputation: the weak learners are short trees, which compose region-specific rules naturally, and the gradient view turns ``focus on what the current ensemble gets wrong'' into a precise mathematical instruction rather than a heuristic.
+The initial constant $F_0$ can minimize the constant-predictor loss. The step size, tree complexity, number of rounds, and leaf-fitting rule control the sequence. A tree's approximation to the negative gradient and a small step size can be useful, but do not by themselves guarantee improvement on held-out data.
 
-\textbf{Second-order split-finding (Advanced; first-order ``fit a tree to residuals'' is enough for the Core path).} Modern boosting libraries use a second-order Taylor expansion of the loss around the current ensemble, not just the first-order gradient. Writing $g_i = \partial \ell / \partial F(x_i)$ and $h_i = \partial^2 \ell / \partial F(x_i)^2$ at $F = F_{m-1}$,
+\subsection{Two Losses, Two Residuals}
+
+For half squared error $\ell(y,F)=\tfrac12(y-F)^2$, the negative gradient is $y-F$. Consider four ordered observations with targets $(1,3,5,7)$. The best constant is $F_0=4$, giving residuals $(-3,-1,1,3)$. A stump separating the first two from the last two has residual means $-2$ and $2$. With $\nu=1/2$, the predictions become $(3,3,5,5)$. Mean squared error falls from $(9+1+1+9)/4=5$ to $(4+0+0+4)/4=2$. The next tree addresses the remaining residual pattern.
+
+For binary log loss, let $F$ be a logit and $p=\sigma(F)$. With $y\in\{0,1\}$,
 \[
-\ell(y_i, F_{m-1}(x_i) + w) \;\approx\; \ell(y_i, F_{m-1}(x_i)) \;+\; g_i\, w \;+\; \tfrac{1}{2} h_i\, w^2.
+\ell(y,F)=\log(1+e^F)-yF,
+\qquad g=\frac{\partial\ell}{\partial F}=p-y,
+\qquad h=\frac{\partial^2\ell}{\partial F^2}=p(1-p).
 \]
-For a single leaf containing examples $I$ with constant output $w$ and an $\ell_2$ leaf penalty $\lambda$, the total loss is $\sum_{i \in I}(g_i w + \tfrac{1}{2} h_i w^2) + \tfrac{1}{2}\lambda w^2$. Setting the derivative in $w$ to zero gives the optimal leaf weight $w^*_I = -\frac{\sum_{i \in I} g_i}{\sum_{i \in I} h_i + \lambda}$ and the leaf's contribution to the loss reduction $-\tfrac{1}{2}\,\frac{(\sum_{i \in I} g_i)^2}{\sum_{i \in I} h_i + \lambda}$. A split of leaf $I$ into $L \cup R$ therefore reduces the loss by the XGBoost \emph{gain}:
+The negative gradient is $y-p$, not the binary misclassification indicator. Even a correctly classified example can contribute a nonzero gradient. A positive example predicted at $p=0.6$ contributes $0.4$, while a negative example predicted at $p=0.1$ contributes $-0.1$. The numerical magnitude expresses a loss derivative, not a count of errors.
+
+\subsection{Second-Order Leaf Fitting}
+
+A second-order expansion approximates the loss change from adding a leaf value $w$ to observations in a region $I$. Let $G_I=\sum_{i\in I}g_i$ and $H_I=\sum_{i\in I}h_i$. With a squared leaf penalty $\lambda w^2/2$, the part depending on $w$ is
 \[
-\mathrm{Gain} \;=\; \tfrac{1}{2}\Bigl[\tfrac{G_L^2}{H_L + \lambda} + \tfrac{G_R^2}{H_R + \lambda} - \tfrac{(G_L + G_R)^2}{H_L + H_R + \lambda}\Bigr] - \gamma,
+Q_I(w)=G_Iw+\tfrac12(H_I+\lambda)w^2.
 \]
-where $G_\bullet = \sum_{i \in \bullet} g_i$, $H_\bullet = \sum_{i \in \bullet} h_i$, and $\gamma$ is a complexity penalty per added leaf. The tree-builder enumerates candidate splits and keeps the one with the largest positive gain. This formula---not the heuristic "fit a tree to residuals" story---is what makes XGBoost and its cousins fast and competitive: every split decision becomes a closed-form score over already-tabulated $g_i, h_i$ statistics, and parallelism over features becomes straightforward.
+If $H_I+\lambda>0$, its minimizer and minimum are
+\[
+w_I^*=-\frac{G_I}{H_I+\lambda},
+\qquad Q_I(w_I^*)=-\frac12\frac{G_I^2}{H_I+\lambda}.
+\]
+The positive reduction from zero is therefore $G_I^2/[2(H_I+\lambda)]$. Confusing the minimum, which is negative, with this positive reduction reverses the split criterion.
 
-\textbf{Histogram-based split finding.} For each feature, bucket its values into $B$ bins (typically $B \approx 255$) and accumulate $G_\bullet, H_\bullet$ per bin once. Candidate split thresholds are now bin boundaries, not all $N$ distinct values, so the per-feature split search drops from $O(N)$ to $O(B)$ at the cost of one $O(N)$ binning pass. LightGBM is fastest at scale because of this trade.
+For a parent split into left and right children, and a penalty $\kappa$ for the additional leaf, the approximate gain is \citep{chen2016xgboost}
+\[
+\begin{aligned}
+\operatorname{Gain}=\frac12\Bigl[&\frac{G_L^2}{H_L+\lambda}
++\frac{G_R^2}{H_R+\lambda}\\
+&-\frac{(G_L+G_R)^2}{H_L+H_R+\lambda}\Bigr]-\kappa.
+\end{aligned}
+\]
+This is a criterion for the quadratic approximation under the displayed penalty. It is not the exact change in the original loss after shrinkage or subsequent updates. For losses with negative curvature, a positive denominator requires further conditions or regularization; the logistic loss has nonnegative curvature.
 
-The whole boosting outer loop fits in twenty lines of numpy when stumps (depth-1 trees) are used as weak learners. The next snippet runs one full iteration on a small dataset and shows the residual structure changing as the ensemble grows.
+For a complete binary example, take labels $(0,0,1,1)$ and initial logits zero. Every predicted probability is $1/2$, giving gradients $(1/2,1/2,-1/2,-1/2)$ and Hessians $1/4$. Split the first two observations from the last two. With $\lambda=1$, each child has $H=1/2$ and $G=1$ or $-1$, so its leaf value is $-2/3$ or $2/3$. The parent has $G=0$. With $\kappa=0.1$, the approximate gain is $2/3-0.1=17/30$. Taking $\nu=1/2$ gives new logits $-1/3$ and $1/3$, hence probabilities about $0.4174$ and $0.5826$. Their training log loss is lower, but that does not decide how many further rounds to fit.
 
-\begin{codeexample}
-import numpy as np
+\subsection{Search and Model Families}
 
-def best_stump(x_col, residuals):
-    """Find threshold and left/right means that minimize squared error."""
-    order   = np.argsort(x_col)
-    x_sort  = x_col[order]
-    r_sort  = residuals[order]
-    n       = len(x_sort)
-    cum_sum = np.concatenate([[0.0], np.cumsum(r_sort)])
-    cum_sq  = np.concatenate([[0.0], np.cumsum(r_sort ** 2)])
-    best_loss, best_t, best_L, best_R = np.inf, None, 0.0, 0.0
-    for k in range(1, n):
-        if x_sort[k] == x_sort[k - 1]:
-            continue
-        nL, nR = k, n - k
-        sL, sR = cum_sum[k], cum_sum[n] - cum_sum[k]
-        # Squared-error loss under per-side mean prediction
-        loss = (cum_sq[n] - sL ** 2 / nL - sR ** 2 / nR)
-        if loss < best_loss:
-            best_loss = loss
-            best_t    = 0.5 * (x_sort[k - 1] + x_sort[k])
-            best_L    = sL / nL
-            best_R    = sR / nR
-    return best_t, best_L, best_R
+Histogram split search groups numeric values into bins. After accumulating sufficient statistics over the observations at a node, candidate thresholds can be compared using bin totals. Constructing those totals still requires reading the assigned observations; a statement that split search costs only the number of bins omits that work. Binning also restricts the available thresholds. Prediction through $M$ trees of depth at most $D$ requires at most $MD$ split comparisons, while storage depends on the actual numbers of nodes.
 
-def gradient_boost(X, y, n_trees=50, learning_rate=0.1):
-    F     = np.full_like(y, y.mean(), dtype=float)        # initial F_0 = y_bar
-    trees = []
-    for m in range(n_trees):
-        residuals = y - F                                  # pseudo-residuals for L2 loss
-        t, L, R   = best_stump(X[:, 0], residuals)         # fit stump to residuals
-        h         = np.where(X[:, 0] <= t, L, R)
-        F        += learning_rate * h                      # F_m = F_{m-1} + nu * h_m
-        trees.append((t, L, R))
-    return F, trees
+XGBoost, LightGBM, and CatBoost are studied realizations of boosted trees with different split-search, regularization, and categorical-handling choices \citep{chen2016xgboost,ke2017lightgbm,prokhorenkova2018catboost}. Their names do not identify interchangeable preprocessing rules. A numeric threshold tree does not automatically support nominal categories; the particular method must specify how categories and unseen values are handled.
 
-# Toy 1D regression: y = sin(2*pi*x) + small noise
-rng = np.random.default_rng(0)
-x   = rng.uniform(0, 1, size=80).reshape(-1, 1)
-y   = np.sin(2 * np.pi * x[:, 0]) + 0.1 * rng.standard_normal(80)
-F, trees = gradient_boost(x, y, n_trees=50, learning_rate=0.1)
-print(f"train MSE after 50 stumps = {np.mean((F - y) ** 2):.4f}")
-\end{codeexample}
+Neural methods make other representation choices. Table~\ref{tab:neural-tabular-methods} names three examples without treating their reported comparisons as a universal ordering.
 
-The function makes the algorithm visible end to end: $F_0$ is the mean of the targets; each round computes pseudo-residuals (for squared loss these are the ordinary residuals), fits a depth-1 stump to them by enumerating thresholds, and adds the stump's prediction to the running ensemble with the shrinkage factor $\nu$. Real implementations replace the stump with depth-$D$ trees, replace squared-error split selection with the second-order gain formula above, and replace the full-scan split search with the histogram trick---but the outer loop is the same eight lines.
-
-For an ensemble of $M$ trees of depth $D$ trained on $N$ rows with $F$ features:
-\begin{itemize}[leftmargin=*,nosep]
-\item \textbf{Pre-sort training.} $O(M \cdot N F \log N)$ time and $O(NF)$ memory. Each tree builds $2^D - 1$ internal nodes; each split scan touches every (row, feature) pair, dominated by the sort.
-\item \textbf{Histogram training.} $O(M \cdot N F + M \cdot B F \cdot 2^D)$ time and $O(NF + BF)$ memory, where $B$ is the bin count per feature. Replacing $\log N$ with $B$ is the LightGBM speedup.
-\item \textbf{Prediction.} $O(M \cdot D)$ per row to walk each tree to a leaf. The cost is independent of $N$ and $F$, which is why a 1{,}000-tree GBM still serves predictions in microseconds.
-\item \textbf{Memory at inference.} $O(M \cdot 2^D)$ to store the trees themselves---roughly a few megabytes for typical $M = 1000, D = 6$ ensembles.
-\end{itemize}
-The $O(NF)$ memory floor is what really separates gradient boosting from deep tabular models: a 10-million-row, 200-feature problem fits in main memory for boosting and routinely does not for a neural alternative with the same effective capacity.
-
-\subsection{Why Trees Win on Tabular Data}
-
-Several structural reasons explain the consistent empirical pattern.
-
-\paragraph{Scale invariance.} Splits compare a feature to a threshold. Multiplying age by ten or taking a log of income does not change which side of any split a row lands on. Neural networks are not scale-invariant and need careful normalization; getting that wrong silently degrades performance.
-
-\paragraph{Native handling of mixed types.} A tree split on a categorical feature partitions the categories; a tree split on a continuous feature picks a threshold. A neural network must encode each type as part of an upstream pipeline, and the encoding choices interact with optimization.
-
-\paragraph{Robustness to uninformative features.} Trees ignore irrelevant features cheaply: if a column never produces a useful split, it is never used. A neural network must learn to assign small weights to noise columns, which costs gradient steps and regularization budget.
-
-\paragraph{Missing-value handling.} Modern boosting libraries learn a default direction at each split for missing values, often producing better calibration than imputation followed by a flag.
-
-\paragraph{Sample-efficient on small to mid-sized data.} Most production tabular datasets have between $10^4$ and $10^7$ rows. Below the upper end of that range, the inductive bias of axis-aligned splits beats the inductive bias of dense MLPs.
-
-\subsection{Neural Tabular Methods: A Calibrated Pointer}
-
-Neural networks for tabular data have improved substantially. Notable recent methods include TabNet \citep{arik2021tabnet},
-FT-Transformer \citep{gorishniy2021fttransformer},
-and TabPFN \citep{hollmann2023tabpfn},
-the last using in-context learning over a transformer pretrained on synthetic tabular data. These methods sometimes match or beat gradient-boosted trees, especially on very large datasets, on multi-task pretraining setups, or when there is meaningful structure (text fields, embedded ID columns) that benefits from learned representations.
-
-The honest claim is narrow. Neural tabular methods are catching up; on most public tabular benchmarks, gradient-boosted tree ensembles still win the median comparison \citep{grinsztajn2022tabularnn,shwartz2022tabular}.
-The right defensive posture for a new tabular project in 2026 is to fit a gradient-boosted baseline first, document its performance carefully, and only escalate to a neural alternative if you have a specific reason---scale, multi-task structure, or text-rich columns---to expect the neural method to add real value.
-
-\begin{table}[t]
+\begin{center}
+\begin{minipage}{\linewidth}
 \centering
 \small
-\begin{tabular}{p{2.3cm}p{3.6cm}p{4.0cm}p{2.5cm}}
+\begin{tabular}{L{1.85cm}L{3.25cm}L{4.25cm}}
 \toprule
-Method & Best on & Avoids & Cost \\
+Method & Representation idea & What is fitted or supplied \\
 \midrule
-TabNet & Small-to-mid tabular with categorical structure & Explicit feature engineering via sequential attention over features & Mid training cost \\
-FT-Transformer & Small-to-large tabular with sufficient training data & Manual interaction terms via attention over numerical and categorical tokens & High training cost \\
-TabPFN & Very small tabular ($\le 1000$ rows) & Training entirely; uses a pretrained meta-learner & Very low inference cost; limited to small data \\
+TabNet & Sequential feature attention & Task-fitted parameters and attention masks. \\
+FT-\allowbreak Transformer & Attention over feature tokens & Task-fitted field representations and predictor. \\
+TabPFN & Pretrained conditional predictor & Labeled training examples as prediction context; pretrained weights need not be refitted. \\
 \bottomrule
 \end{tabular}
-\caption{Neural tabular methods worth knowing, with the data regime each is best suited to.}
+\captionof{table}{Different ways to represent a table. The cited methods have distinct training regimes and data assumptions \citep{arik2021tabnet,gorishniy2021fttransformer,hollmann2023tabpfn}.}
 \label{tab:neural-tabular-methods}
-\end{table}
+\end{minipage}
+\end{center}
 
-On most tabular problems, a gradient-boosted tree ensemble is still the right default; reach for these neural methods when the data regime or feature structure makes them concretely better, not because neural is the modern path.
+Evidence about model families has a scope. A 2022 benchmark compared trees and tested neural methods on 45 datasets, focusing on medium-sized tabular tasks \citep{grinsztajn2022tabularnn}. Another empirical study compared deep models with boosted trees under its own datasets and tuning setup \citep{shwartz2022tabular}. The 2025 TabPFN study reported strong results for its pretrained method on datasets with up to 10,000 samples and 500 features \citep{hollmann2025tabpfn}. Dataset selection, model version, access to pretraining, and tuning resources matter in each comparison. These results motivate candidates for evaluation, rather than a permanent winner for every table.
 
-\begin{decisionbox}
-\textbf{Default model choice for a new tabular project.} Start with LightGBM or XGBoost using sensible defaults (learning rate 0.05, max depth 6, early stopping on a held-out set). Treat this as the baseline a neural alternative must convincingly beat on the deployment-relevant slices, not the leaderboard average.
-\end{decisionbox}
+A meaningful comparison uses the same available information and split, an appropriate constant and simple baseline, and a declared tuning budget. It considers the chosen loss, calibration when probabilities are needed, relevant slices, and operational constraints. A gain in aggregate discrimination is not evidence that representation choices or prediction-time availability were valid.
 
-\section{Tabular-Specific Feature Engineering}
+\section{Features That Respect the Task}
 \label{sec:tabular-feateng}
 
-Tree ensembles do well with raw features. They do better with carefully constructed features. The following list covers the engineering moves that a tabular practitioner needs to be fluent with on day one.
+One-hot indicators distinguish nominal categories without adding numeric order. They can be large for high-cardinality fields, but sparsity is not itself a reason to reject them. Frequency encoding supplies a category's frequency in the training reference population; it expresses prevalence rather than identity or target propensity. Hashing bounds the representation size at the cost of collisions. Learned embeddings can share information among categories, but embeddings fitted using task labels belong inside the training and tuning protocol.
 
-\subsection{Categorical Encoding Beyond One-Hot}
+Each representation needs a rule for unseen categories. A frequency may be zero; an indicator model may use an explicit unknown level; an embedding may use a fitted fallback. That rule must be evaluated under the intended novelty pattern. A category absent from training cannot acquire a trustworthy task-specific effect merely because it receives a numeric code.
 
-A categorical column with three values---``regular,'' ``honors,'' ``audit''---is straightforward: one-hot encode it and move on. A categorical column with three thousand values---merchant ID, ZIP code, course section ID---is not. One-hot encoding produces a sparse high-dimensional input that hurts both tree-based and neural methods. The standard alternatives:
+Dates require a choice of meaning. A timestamp can support elapsed time from a known event. For hour of day $h\in[0,24)$, a cyclic representation is
+\[
+\phi(h)=\left(\sin\frac{2\pi h}{24},\cos\frac{2\pi h}{24}\right).
+\]
+Hours 23 and 0 are close: their Euclidean distance is $2\sin(\pi/24)\approx0.2611$. Hours 0 and 12 have distance two. This avoids making the midnight boundary a large gap, but does not imply the response truly follows a smooth daily cycle. Time zones and changes in clock conventions must be handled consistently.
 
-\begin{itemize}[leftmargin=*]
-\item \emph{Ordinal encoding.} Map each category to an integer. Trees can split on integer values, so this works fine for tree models. It is meaningless for linear or neural models because the integers imply a false ordering.
-\item \emph{Target encoding.} Replace each category with the mean of the target for rows with that category. Works for both tree and neural models. Notorious for leaking the label if not done carefully---see Section~\ref{sec:target-encoding}.
-\item \emph{Frequency encoding.} Replace each category with the count of rows in the training set that share it. Useful when the prevalence of a category is itself informative.
-\item \emph{Embedding.} Learn a low-dimensional dense vector per category, jointly with a downstream model. Useful for categorical IDs that recur across rows and have learnable structure.
-\item \emph{Hashing.} For very high-cardinality categoricals where category identity is less informative than the act of having a value, hash the category into a bounded number of buckets. Avoids storing a separate parameter per category.
-\end{itemize}
+Aggregates can summarize prior behavior: submissions before the cutoff, resource accesses during a prior window, or a mean over completed earlier tasks. Both the event time and the data's availability time must satisfy the information boundary. A later warehouse snapshot can contain corrections or backfilled events that were unavailable at prediction time. Empty histories, zero denominators in ratios, and not-applicable measurements need explicit treatment. Trees can learn some interactions directly, but a justified feature can still express structure more economically; feature engineering is a modeling choice, not an automatic requirement or an obsolete practice.
 
-\subsection{Datetime Decomposition}
-
-A datetime column is not a real number. Subtracting timestamps loses cyclic structure. Standard practice is to decompose:
-\begin{itemize}[leftmargin=*]
-\item Day-of-week (categorical, $\{0,\ldots,6\}$).
-\item Hour-of-day (categorical or, for cyclic models, encoded as $\sin$ and $\cos$ of the hour angle).
-\item Day-of-month, month, quarter, year, holiday flag, business-day flag.
-\item Time since a reference event (account opening, last login, semester start), as a continuous numeric feature.
-\end{itemize}
-
-In the running case, ``hours before the assignment deadline'' and ``days since semester start'' are far more informative than the raw timestamp.
-
-\subsection{Count and Aggregation Features}
-
-For entities that produce many rows---a student over a term, a customer over a month, a sensor over a day---the most useful features are usually aggregations: total clicks, mean session length, number of distinct days active, count of late submissions in the prior two weeks. These features compress the entity's history into a single row that the model can use.
-
-\subsection{Interaction Features}
-
-Linear models gain a lot from explicit interaction features (Chapter~\ref{ch:linear-models}). Tree ensembles discover interactions natively, so explicit interaction features are usually unnecessary for them. Neural tabular models lie in between. Even for tree ensembles, a domain-driven interaction (``ratio of late submissions to total submissions in the prior term'') often outperforms the raw inputs because it embeds a regularity the tree would otherwise have to discover from a small leaf.
-
-\section{Target Encoding and the Leakage Trap}
+\section{Target Encoding Without Label Leakage}
 \label{sec:target-encoding}
 
-Target encoding is the textbook example of a feature-engineering technique that is powerful when done correctly and silently catastrophic when done naively. The naive version:
+For a category $S$, target encoding represents it using an estimate of $\mathbb E[Y\mid S]$. The representation can pool evidence efficiently, but the outcomes used to construct it must be legal for the observation being predicted.
 
-\begin{verbatim}
-df['section_te'] = (
-    df.groupby('section_id')['y'].transform('mean')
-)
-\end{verbatim}
+The naive category mean contains its recipient's label. In a category with $n$ observations, that label contributes $Y_i/n$; for a singleton, the encoded value is exactly $Y_i$. A model can then use information that will not exist for a new case. Leave-one-out means exclude the recipient label, but do not by themselves protect an outer validation set, an excluded group, or a future time interval.
 
-\noindent
-This computes, for each section, the mean of the label across all rows in that section, and writes the section's mean back to every row. The encoded column is then used as a feature.
+\subsection{The Outer Split Comes First}
 
-The problem is straightforward. Each row's encoded value depends on its own label. If row $i$ in section $s$ has label $y_i$, the encoding for row $i$ is
+Let $T$ be the outer training set and $H$ the protected outer holdout. All fitting and tuning of the encoder must respect this boundary. To construct training inputs within $T$, divide it into inner folds. For an observation $i$ in fold $k$, let $L_k\subseteq T$ be the legal reference set: it excludes that fold and any additional groups or times forbidden by the evaluation claim. A smoothed encoding is
 \[
-\hat{y}_s = \frac{1}{|s|} \sum_{j \in s} y_j,
+\widetilde s_i=
+\frac{\sum_{j\in L_k:S_j=S_i}Y_j+m\overline Y_{L_k}}
+{n_{S_i,L_k}+m},\qquad m>0,
 \]
-which includes $y_i$ in its average. The model has been handed, as a feature, a smoothed version of the label it is supposed to predict. Cross-validation scores will look spectacular. Deployment performance will collapse, because at prediction time the row's true label is not in the average---and the encoding is no longer the same quantity the model trained on.
+where $n_{S_i,L_k}$ counts matching reference observations and $\overline Y_{L_k}$ is their reference-set-wide target mean. Both the category numerator and the smoothing mean come from $L_k$. An unseen category receives $\overline Y_{L_k}$. An empty reference set requires a separately specified legal prior rather than an undefined mean.
 
-\subsection{The Leakage Condition, Stated Carefully}
+The predictor can be fitted to these inner out-of-fold inputs. To encode $H$, fit the category statistics using the legal outer training labels, with no holdout outcomes. Hyperparameter evaluation repeats this construction within each outer split. Computing one out-of-fold encoding over the full dataset before outer cross-validation can still leak: an outer validation label may have helped encode an outer training row, even if no row's encoding contains its own label.
 
-Let $\hat{y}_s(i)$ denote the target-encoded value used as a feature for row $i$ in category $s$. The encoding is leakage-free for row $i$ if
+Training out-of-fold encodings and later full-training encodings need not have the same distribution. Their sample sizes and smoothing strengths differ. This is a reason to evaluate the entire procedure, including its intended inference transformation. After selection, refitting may use additional resolved labels only when the resulting predictor will be assessed on a new protected set or deployed after those labels became available.
+
+\subsection{A Complete Encoding Example}
+
+Suppose the outer training set contains seven independent student cases: category $A$ has labels $(1,1,0,1)$ and category $B$ has $(0,0,0)$. The outer holdout is kept separate. Split $T$ into two inner folds. Fold 1 contains the first positive $A$ case and the first zero $B$ case; fold 2 contains the other five cases. Set the smoothing strength to $m=2$.
+
+For fold 1, the reference is fold 2, whose overall target mean is $2/5$. It contains three $A$ cases with two positives and two $B$ cases with no positives. Thus
 \[
-\hat{y}_s(i) = \mathbb{E}\!\left[Y \mid S = s\right]
+\widetilde s_A=\frac{2+2(2/5)}{3+2}=0.56,
+\qquad
+\widetilde s_B=\frac{0+2(2/5)}{2+2}=0.20.
 \]
-is estimated from rows that exclude row $i$ entirely. Naive encoding violates this because $\hat{y}_s(i) = \tfrac{1}{|s|} \sum_{j \in s} y_j$ includes $y_i$ in the sum. The bias is largest for small categories: if $|s|=1$, naive encoding sets the feature exactly equal to the label.
+For fold 2, fold 1 is the reference, with overall mean $1/2$ and one observation of each category. Its encoded values are $2/3$ for $A$ and $1/3$ for $B$. No recipient outcome is used to construct its own training input.
 
-\subsection{Out-of-Fold Target Encoding}
+For the outer holdout, the reference can be all seven legal training cases, with mean $3/7$. The resulting $A$ encoding is $(3+6/7)/6=9/14$, the $B$ encoding is $(6/7)/5=6/35$, and an unseen category receives $3/7$. Holdout labels play no role in these values. These numbers illustrate the procedure; they do not claim that two small inner folds estimate stable category effects.
 
-The standard fix is out-of-fold encoding. Split the training data into folds that match the evaluation protocol. For independent and identically distributed rows, ordinary cross-validation folds are enough. For repeated students, customers, patients, or time-ordered rows, the folds must be group-aware, temporal, or rolling-origin folds. For each fold, compute the per-category target mean using \emph{only the legal training rows for that fold}, then write that mean to the held-out fold. The result is an encoded column where each row's value was estimated without using its own label or illegal future/group information.
+\subsection{Groups and Time}
 
-\begin{codeexample}[caption={Out-of-fold target encoding (binary classification)}]
-import numpy as np
-from sklearn.model_selection import KFold
+If evaluation concerns unseen students, reference sets must respect the student boundary, including when a student appears in several courses. A future prediction for a known student can legitimately use some resolved past outcomes, but only when the task permits them and their availability precedes the new cutoff. An earlier row's event time does not ensure that its future-deadline label has already resolved.
 
-def oof_target_encode(category, y, splitter=None, groups=None,
-                      n_splits=5, smoothing=10.0, seed=0):
-    """Return a target-encoded column with no within-row leakage.
+CatBoost's ordered target statistics use preceding observations in a permutation to avoid using a recipient's own target, alongside methods addressing prediction shift \citep{prokhorenkova2018catboost}. A random permutation is not a calendar boundary, and the method does not authorize using protected outer labels or forbidden entity histories. Chronological or group-sensitive evaluation must supply legal reference information to the chosen algorithm.
 
-    The default KFold splitter is appropriate only for iid rows. For grouped
-    or time-ordered data, pass a GroupKFold, TimeSeriesSplit, or rolling
-    splitter that matches the deployment evaluation.
+The same split principle applies to learned imputation, scaling, vocabulary selection, and supervised embeddings. Under an inductive evaluation, these are fitted on training information. A deliberate method using unlabeled future inputs is a different, transductive information setting and should be evaluated and described as such; it is not a reason to silently mix the settings.
 
-    smoothing pulls small-group estimates toward the global mean, an
-    empirical-Bayes shrinkage that controls variance for rare categories.
-    """
-    encoded = np.zeros_like(y, dtype=float)
-    global_mean = y.mean()
-    if splitter is None:
-        splitter = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
-    for train_idx, val_idx in splitter.split(category, y, groups):
-        cat_train = category[train_idx]
-        y_train = y[train_idx]
-        # group sums and counts on the training portion only
-        sums = {}
-        counts = {}
-        for c, yi in zip(cat_train, y_train):
-            sums[c] = sums.get(c, 0.0) + yi
-            counts[c] = counts.get(c, 0) + 1
-        # smoothed mean for each category
-        means = {
-            c: (sums[c] + smoothing * global_mean) / (counts[c] + smoothing)
-            for c in sums
-        }
-        for i in val_idx:
-            encoded[i] = means.get(category[i], global_mean)
-    return encoded
-\end{codeexample}
-
-For inference at deployment time, the encoder is refit on the full training set (since there is no held-out concern at prediction time) and used to map each new row's category to the trained mean. The training-time and inference-time encoders therefore produce \emph{different} numerical values for the same row in training versus testing, but they are both valid: at training time we excluded the row's own label; at inference time the row's label is unknown anyway.
-
-\subsection{Worked Example: Naive vs.\ Out-of-Fold}
-
-Suppose four students from section A had labels $\{1, 1, 0, 1\}$ (1 = failed to submit) and three from section B had labels $\{0, 0, 0\}$. The naive target encoding for any section-A row is $0.75$; for any section-B row, $0.00$. A model trained on these features can perfectly recover the label distribution by section without learning anything else.
-
-Out-of-fold encoding is different. Suppose row 1 (section A, label 1) is in fold 1; the other three section-A rows are in fold 2. When fold 1 is the validation fold, the section-A mean is computed from $\{1, 0, 1\} = 0.667$. When fold 2 is validation, fold 1 contributes $\{1\}$ and the section-A mean from fold 1 alone is $1.0$, so each row in fold 2 gets the encoding $1.0$. With smoothing of $10$ and a global mean of $0.571$, the smoothed encodings shrink toward the global mean for the small-group case. The model now sees an encoded feature that is informative but does not directly reveal the row's own label.
-
-\begin{warningbox}
-The leakage in naive target encoding is invisible from the cross-validation score alone. The CV score on a leaked encoder will be high because the leak is the same in train and validation folds. Only deployment performance, or a held-out fold whose target is hidden during encoding, exposes the gap. Always implement out-of-fold encoding with a splitter that matches the deployment claim, and compare the CV score to a holdout split that was excluded before any feature engineering happened.
-\end{warningbox}
-
-\section{Tabular-Specific Leakage Patterns}
+\section{Leakage in a Table}
 \label{sec:tabular-leakage}
 
-Target encoding is the most famous leakage trap in tabular ML, but it is one of several. Each of these patterns has produced production failures that survived rigorous-looking offline validation.
+Leakage often enters through the definition of a field rather than an obviously copied label. A final course grade contains future information for an end-of-week-2 prediction. A prior-term grade can be legal. An appeal flag may describe an earlier resolved event or an appeal filed after the future deadline; the field name alone does not settle its status.
 
-\subsection{Target Leakage from the Future}
+An aggregate described as ``prior activity'' can still leak if computed from a complete-term extract or a corrected snapshot unavailable at the cutoff. Repeated students can cross a random row split and reveal identity-specific patterns when the claim is performance on unseen students. A global target encoder can expose protected outcomes indirectly. These problems require reconstructing what each prediction could actually know, rather than removing only the most obviously predictive columns.
 
-A column that is computed \emph{after} the label is known (or that depends on the label being known) cannot legally be a feature. In the running case, ``did the student appeal the late penalty?'' is a column that exists in the data warehouse but is computed after the assignment was missed. Including it in a model that predicts whether the student will miss the assignment is target leakage: the feature is only populated when the event has already occurred.
+Temporal evaluation must also allow training labels to mature. If the prediction is made at the end of week 2 and the target involves weeks 3--4, a neighboring training case may still have an unresolved outcome at a later prediction date. A gap or rolling construction may be needed to prevent that future outcome entering training. The size and purpose of the gap follow the actual information delays and evaluation claim, as in Chapter~\ref{ch:evaluation-discipline}.
 
-The diagnostic question is: \emph{at the moment the model would actually be used to score this row, is this column populated and is its value the same as the value used at training time?} If either answer is no, the column leaks.
+A suspiciously large performance gain calls for checking availability, groups, transformations, and selection on validation results. It does not identify leakage by itself: a legitimate feature can be highly informative, and a real distribution change can produce a large validation-to-deployment drop. Explanations and performance diagnostics are evidence to investigate, not a substitute for tracing the information path.
 
-\subsection{Train/Test Contamination Through Time}
-
-The default of a random train/test split is wrong for any tabular problem with a temporal structure---which is most of them. If the same student appears in both folds (one row from week 3 in train, one from week 7 in test), the model has seen that student's historical pattern during training. The proper split for time-structured tabular data is a temporal split: train on rows up to a cutoff date, test on rows after.
-
-Even better, when the deployment will retrain weekly, evaluate with a rolling-origin protocol that mirrors the deployment: train on data through week $t$, test on week $t+1$, advance, repeat. Chapter~\ref{ch:audio-time} introduced the prediction-time audit for sequential and time-series data; the same audit applies here.
-
-\subsection{Group Leakage}
-
-If multiple rows in the dataset come from the same entity (multiple transactions per customer, multiple weeks per student, multiple visits per patient), a random row split will put rows from the same entity in both train and test. The model can memorize entity-specific quirks rather than learning a generalizable pattern. The fix is a group-aware split: hold out entire entities, not individual rows. Scikit-learn's \verb|GroupKFold| and \verb|GroupShuffleSplit| implement this directly.
-
-\subsection{Label-Derived Features}
-
-A subtler leak: a feature is computed from the same source of truth as the label, even though it is not the label itself. ``Number of forum posts in the prior week'' looks fine until you notice that the forum post counter is updated nightly from the same database that records assignment submission, and the snapshot used to construct the feature is taken \emph{after} the assignment deadline. The feature is not the label, but it is a function of post-label state.
-
-\subsection{Encoding-Based Leakage}
-
-Beyond target encoding, any feature that aggregates statistics across the entire training set without respecting fold boundaries leaks. ``Z-scored income'' computed using the global mean and standard deviation of the full dataset uses test-fold information at training time. The leak is small in practice but compounds when many such features are stacked.
-
-\begin{sanitycheck}
-\textbf{Tabular leakage checklist.} Before reporting any cross-validated score, verify that:
-\begin{itemize}
-\item No feature is computed from any value of the label, except via out-of-fold encoders.
-\item No feature is populated only after the event being predicted.
-\item Splits respect the entity grouping when rows are not independent.
-\item Splits respect the temporal ordering when rows have timestamps.
-\item All feature-engineering aggregations (means, scalers, target encodings) are fit on the training fold only and applied to the validation fold without refitting.
-\item A feature whose importance score is suspiciously high deserves a leakage audit before celebration.
-\end{itemize}
-\end{sanitycheck}
-
-\section{Calibration in Tabular Models}
+\section{Calibration and Decisions}
 \label{sec:tabular-calibration}
 
-Tree ensembles are excellent rankers and indifferent calibrators. The default scores returned by an XGBoost or LightGBM classifier under logistic loss are not, in general, faithful probabilities. A score of $0.8$ does not mean ``80\% of such cases will be positive.'' This is empirically established and unsurprising in retrospect: gradient boosting optimizes a loss that rewards ranking the positives above the negatives, and the regularization (shrinkage, leaf-count limits) systematically distorts the magnitude of the predicted probabilities.
+A model fitted with binary log loss is encouraged to estimate a probability. At the population optimum over unrestricted predictors, ordinary unweighted log loss recovers $P(Y=1\mid X)$. Finite data, restricted model classes, regularization, selection, and deployment shift can prevent that result. Ranking performance and probability calibration therefore need separate evidence.
 
-Chapter~\ref{ch:prediction-loss-decision}'s calibration section introduced the Expected Calibration Error (ECE) and the reliability diagram. Chapter~\ref{ch:probabilistic-models} introduced post-hoc calibration via Platt scaling and isotonic regression. For tabular tree ensembles, the standard discipline is:
+For bins $B_1,\ldots,B_K$ of predicted probabilities, an empirical expected calibration error is
+\[
+\widehat{\operatorname{ECE}}=
+\sum_{k:n_k>0}\frac{n_k}{N}
+\left|\overline p_k-\overline y_k\right|.
+\]
+This quantity depends on the binning, sample size, and aggregation. Small ECE can conceal within-bin differences and subgroup errors; it does not establish that predictions equal the full conditional probability. Uncertainty in observed bin frequencies also matters.
 
-\begin{enumerate}[leftmargin=*]
-\item Reserve a calibration fold separate from the main training and validation folds.
-\item Train the ensemble on the training fold.
-\item Fit a post-hoc calibrator (Platt for parametric, isotonic for non-parametric) on the calibration fold.
-\item Report ECE and a reliability diagram on a final held-out test fold.
-\end{enumerate}
+For ten predictions
+\[
+\begin{aligned}
+p&=(0.05,0.10,0.15,0.20,0.40,0.60,0.70,0.80,0.90,0.95),\\
+y&=(0,0,0,1,0,1,0,1,1,1),
+\end{aligned}
+\]
+split at $0.5$. The low bin has mean forecast $0.18$ and observed frequency $0.20$; the high bin has mean forecast $0.79$ and frequency $0.80$. The empirical ECE is $\tfrac12(0.02)+\tfrac12(0.01)=0.015$. Both bins slightly underforecast their observed frequencies. Ten observations and two bins supply limited calibration evidence despite this small value.
 
-Random forests are often closer to calibrated than gradient-boosted trees by accident: the averaging across diverse trees pulls extreme probabilities toward the middle. Gradient boosting does not have this implicit averaging, and uncalibrated boosted scores are frequently overconfident at both extremes. If the downstream user is going to interpret the score as a probability, plan for calibration before training, not after.
+\subsection{Fitting a Calibrator}
 
-\subsection{When Calibration Matters Operationally}
+A calibrator must be fitted without using the outcomes reserved for its final evaluation. Training, tuning, calibration, and test roles can be separate sets or an appropriately nested procedure. Entity and temporal boundaries still apply.
 
-Not every tabular problem needs calibration. If the only use of the model output is to rank rows---``send the top 200 fraud alerts to the review team''---a well-calibrated probability adds nothing over a well-discriminating rank. Calibration matters when the score is interpreted on its own scale: an automated threshold rule (``approve loans with score below 0.05''), a cost-sensitive abstention policy, or a downstream ensemble that expects probabilities as inputs. The decision to calibrate is therefore tied to how the score will be used, not to the model family.
+Platt scaling uses a transformation such as $\sigma(aF+b)$. With $a>0$, it preserves strict logit ordering. An unconstrained negative $a$ reverses the order, so order preservation requires a condition on the fitted map. Isotonic regression fits a nondecreasing map, typically by minimizing squared error on calibration observations. It introduces no inversions, but can create ties. Measures such as AUROC or AP can change under their tie conventions. A list can retain the original score as a secondary key when preserving an existing ordering is intended.
 
-\begin{advancednote}
-\textbf{Calibrated prediction intervals: quantile regression forests and NGBoost.}
+Calibration is useful even when a strictly increasing map leaves a list unchanged. Probabilities can inform expected event counts, abstention, and decisions with costs. Under constant false-positive and false-negative costs and the declared probability information, a binary action threshold is $c_{\mathrm{FP}}/(c_{\mathrm{FP}}+c_{\mathrm{FN}})$, as in Chapter~\ref{ch:prediction-loss-decision}. A five-review budget adds a capacity constraint. Neither a calibrated deadline proxy nor this cost calculation estimates outreach benefit without additional evidence.
 
-A calibrated GBDT predicts a \emph{point} probability or a point regression value. For risk scoring, financial forecasting, and many operational tabular tasks, the reader often needs a calibrated \emph{prediction interval}---a $[\text{low},\,\text{high}]$ range that contains the true value with stated probability (e.g.\ $90\%$). Two practical extensions handle this directly without bolting a calibration step onto the back of a point predictor.
+Class-weighted training changes the population target. If positive and negative log losses receive weights $\alpha,\beta>0$, and the true conditional event probability is $p$, the unrestricted optimum is
+\[
+q=\frac{\alpha p}{\alpha p+\beta(1-p)}.
+\]
+It is generally not $p$. Under these assumptions, inversion gives
+\[
+p=\frac{\beta q}{\alpha(1-q)+\beta q}.
+\]
+This relationship explains why cost weighting and probability estimation should be distinguished. Finite fitted models and shifted populations still require independent probability assessment.
 
-Quantile regression forests (Meinshausen, 2006) generalize random forests by storing the full per-leaf sample of training targets rather than just leaf means, then reading out empirical quantiles at prediction time. The result is a calibrated prediction interval that comes for free from the same trained model---no separate calibration fold, no isotonic step. NGBoost (Duan et al., 2019) extends gradient boosting to predict full probability distributions (parametric families such as Normal or Laplace) rather than point estimates. Its natural-gradient training rule updates the distributional parameters in a geometry that keeps the predicted distribution calibrated, so the variance prediction is itself trustworthy and not just a regularized point estimate.
+\subsection{Regression Distributions}
 
-When to use each. Reach for quantile regression forests when the target is continuous and the downstream decision needs an interval (inventory bounds, capacity planning, prediction-with-uncertainty for a human reviewer). Reach for NGBoost when the downstream system needs a full distributional output---a probability density, not just an interval---for example to combine with other distributions or to compute expected losses under custom cost functions. For binary classification, a calibrated point probability from a Platt or isotonic-tuned GBDT is usually sufficient; quantile and distributional methods earn their keep on regression problems where intervals or full distributions are operationally meaningful.
-\end{advancednote}
+A regression system may need quantiles or a predictive distribution rather than a mean alone. Quantile regression forests use weighted training outcomes associated with forest neighborhoods \citep{meinshausen2006quantile}. NGBoost fits parameters of a predictive distribution using a proper scoring rule and natural-gradient updates \citep{duan2020ngboost}. Neither name guarantees that a particular predictive interval has the intended coverage.
 
-\section{Distribution Shift in Tabular Deployment}
+Conformal methods can supply a marginal coverage statement under their specified exchangeability and fitting conditions. Marginal coverage is not automatic conditional coverage for every group, and a new collection process or time shift can break the premise. The evaluation should match the uncertainty claim needed by the decision.
+
+\section{When the Table Changes}
 \label{sec:tabular-shift}
 
-Tabular models are deployed in changing environments. The deployment realities of Section~\ref{sec:tabular-modality}---daily retraining, slice-based monitoring---exist precisely because distribution shift is the rule rather than the exception. Three shift types deserve specific attention.
+A stable schema does not ensure a stable distribution, while a changed schema can alter the meaning of apparently unchanged numbers. A unit conversion, a new category convention, a different missing-value default, or a replaced source can change the input relation seen by the predictor. A missingness increase from $5\%$ to $60\%$ is evidence of a changed observation process, not by itself a quantified accuracy loss.
 
-\subsection{Covariate Shift Across Time}
+\subsection{Covariate Shift and Calibration}
 
-The distribution of the input features changes between training and deployment, even if the relationship between features and label is stable. New marketing campaigns change the distribution of incoming customers. A new course platform release changes the distribution of click-stream features. The model's ranks may stay reasonable while its calibration drifts because the features it relied on now look different.
+Under covariate shift, $P(X)$ changes while $P(Y\mid X)$ stays fixed. An exact predictor of that full conditional probability remains calibrated under the new distribution. A score calibrated only after aggregating different types of $X$ can fail when their mixture changes.
 
-The standard monitoring response is per-feature drift detection: compare the distribution of each feature in the latest week to the training distribution using a statistical test (Kolmogorov-Smirnov for continuous, chi-squared for categorical) or a divergence (population stability index, Jensen-Shannon). Alert when the test exceeds a threshold; trigger investigation rather than automatic retraining, because the alert may flag a measurement issue rather than a real shift.
+For example, two types have true event probabilities $0.2$ and $0.8$, but both receive forecast $0.5$. In a training population with equal type proportions, the observed event probability at that score is $0.5$. In a deployment population with $80\%$ of the low-risk type and $20\%$ of the high-risk type, it is $0.8(0.2)+0.2(0.8)=0.32$. The constant forecast now overestimates by $0.18$, even though each type's conditional probability is unchanged. Forecasts of $0.2$ and $0.8$ for the respective types would remain correct under this shift.
 
-\subsection{Schema Drift}
+Monitoring one column at a time can miss joint changes. Two binary features can each have probability $1/2$ in both populations, while they are always equal during training and always opposite during deployment. Their marginals agree, but their dependence differs. Drift statistics need uncertainty, seasonal context, and an account of repeated testing. A changed statistic does not uniquely diagnose the cause or determine a retraining action.
 
-The schema of a tabular system is rarely stable for long. An upstream service renames a column, changes a unit (dollars to cents), changes a categorical encoding (``Gold'' becomes ``Tier-1''), or starts populating a column with a default value where it used to be null. The model is unaware. Predictions degrade silently. Schema drift is one of the most common causes of production tabular ML failures and is invisible to standard accuracy monitoring until the failures are large.
+\subsection{Label Shift and Conditional Change}
 
-The defenses are operational: schema validation before each scoring run, alerts when a new categorical value appears, type checks, and a contract between the data producer and the ML team that names the columns the model relies on as a fixed interface.
+Under label shift, $P(Y)$ changes while $P(X\mid Y)$ stays fixed. For binary classification, assume $0<\rho_{\mathrm{old}},\rho_{\mathrm{new}}<1$. Where $0<p_{\mathrm{old}}(x)<1$, posterior odds obey
+\[
+\frac{p_{\mathrm{new}}(x)}{1-p_{\mathrm{new}}(x)}
+=
+\frac{p_{\mathrm{old}}(x)}{1-p_{\mathrm{old}}(x)}
+\frac{\rho_{\mathrm{new}}/(1-\rho_{\mathrm{new}})}
+{\rho_{\mathrm{old}}/(1-\rho_{\mathrm{old}})},
+\]
+where $\rho$ is the class prior. If the prior rises from $0.1$ to $0.2$, the odds multiplier is $2.25$. An old posterior of $0.2$ becomes $0.36$. Applying this correction requires the label-shift premise and a justified estimate of the new prior; a changed score histogram alone does not establish either.
 
-\subsection{Missingness Pattern Shift}
-
-A column that was 5\% missing in training becomes 60\% missing in deployment because an upstream sensor failed or a form field was made optional. The model's learned default direction at the missing-value split is now applied to a population that is structurally different from the rare missing-value cases it trained on. This is one of the subtlest tabular shifts because the column still exists, the type still matches, and the schema validator passes. Only a missingness-rate monitor catches it.
-
-\begin{decisionbox}
-\textbf{Tabular monitoring stack.} A minimal monitoring setup for a deployed tabular model includes (1) per-feature distribution drift, (2) per-feature missingness rates, (3) schema validation, (4) prediction distribution drift (the histogram of model scores), (5) precision and recall on the operating threshold for the prior week's labeled outcomes, broken down by the slices that matter for the decision. Alerts should trigger investigation, not automatic retraining.
-\end{decisionbox}
-
-\section{Chapter Artifact: The Tabular Design Card}
-\label{sec:tabular-design-card}
-
-The chapter artifact is the \emph{tabular design card}: a one-page document that records the modeling choices and validation discipline of a tabular ML system. It is the tabular analogue of the recommendation audit card (Chapter~\ref{ch:ranking-recommendation}) and the vision design card (Chapter~\ref{ch:vision}). Like those, it is meant to be filled in before training and revised as evidence accumulates.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}L{3.0cm}L{7.0cm}@{}}
-\toprule
-Card field & What must be documented \\
-\midrule
-Prediction task & What is predicted, for which entity, at what moment \\
-Row identity & What one row represents (transaction, customer-day, student-week) \\
-Time boundary & The cutoff that separates training from evaluation; the deployment scoring frequency \\
-Feature inventory & List of features, types, sources, and refresh cadences \\
-Missingness policy & How each column treats missing values; which missingness flags are kept \\
-Categorical encoding & The encoder used for each categorical column and why \\
-Target encoding policy & Whether target encoding is used and the leakage-free protocol \\
-Validation protocol & Train/validation/test split strategy: temporal, group-aware, or random, with justification \\
-Model family & Tree ensemble of choice, depth, learning rate, regularization \\
-Calibration plan & Whether the model is calibrated, the calibrator, and the held-out fold used \\
-Operating point & The threshold or rule that turns scores into decisions, and the rationale \\
-Shift monitoring & Which features and which slices are tracked in deployment \\
-Retraining cadence & How often the model is retrained and what triggers an off-cycle retrain \\
-Interpretability story & The artifact (SHAP, importances) shown to the downstream consumer \\
-Known leakage risks & The leakage patterns audited, with the audit results \\
-\bottomrule
-\end{tabular}
-\caption{The tabular design card records the modeling choices and validation discipline that distinguish a careful tabular pipeline from a leaderboard-tuned one.}
-\label{tab:tabular-design-card}
-\end{table}
-
-\subsection{Filled Example: Predicting Missed Submissions}
-
-\begin{example}[Tabular Design Card for Submission-Risk Predictor]
-
-\textbf{Prediction task.} Each Monday morning, predict for every actively enrolled student the probability that they will fail to submit Friday's assignment by the deadline. Output: probability in $[0,1]$. Decision: students above threshold are flagged to the course-support workflow.
-
-\textbf{Row identity.} One row per student-week. A student appears in $W$ rows over a $W$-week term.
-
-\textbf{Time boundary.} Train on weeks 1--8, validate on weeks 9--10, test on weeks 11--12. Production retraining: every Monday at 6 AM, using all weeks in the term up through the previous Friday.
-
-\textbf{Feature inventory.} Twenty-three features across four groups: engagement (lecture-video minutes, forum posts, problem-set time), historical (prior-term GPA, term-to-date late count, prior-term submission rate), administrative (registration timing, instructor section, major), and contextual (week-of-term, days until deadline, holiday-week flag). Sources: LMS event log (engagement), registrar (administrative), term database (historical, contextual). Refresh cadence: daily by 5 AM.
-
-\textbf{Missingness policy.} For numeric features, missing values are imputed with $-1$ (an out-of-range sentinel) and a binary \texttt{is\_missing} indicator is added. For categorical features, ``missing'' is its own category. LightGBM's native missing-value handling is used at training time.
-
-\textbf{Categorical encoding.} \emph{Major} (low cardinality, $\sim$40 values): one-hot. \emph{Instructor section} (medium cardinality, $\sim$200 values across the term): out-of-fold target encoding with smoothing $m=20$. \emph{Course code}: one-hot. No ordinal encoding is used.
-
-\textbf{Target encoding policy.} Out-of-fold over five folds, group-aware on student ID so a student's own historical labels never appear in their encoded row. Smoothing of $m=20$ pulls rare-section estimates toward the global mean. Inference-time encoder refit on the full training data.
-
-\textbf{Validation protocol.} \emph{Temporal} train/validation/test split, with \emph{group-aware} cross-validation inside the training window so a single student's rows never straddle a within-training fold boundary. The combination is necessary because rows are not independent within either time or student.
-
-\textbf{Model family.} LightGBM, depth 6, 500 trees with early stopping on validation logloss (patience 50), learning rate $0.05$, $L_2$ regularization $\lambda=1.0$, feature subsample ratio $0.8$, bagging fraction $0.8$.
-
-\textbf{Calibration plan.} Isotonic regression fit on weeks 9--10 (validation fold). ECE on weeks 11--12 (test fold) reported alongside AUROC and per-week recall at the operating threshold.
-
-\textbf{Operating point.} Probability threshold of $0.35$, chosen to produce roughly 12\% flag rate on the validation fold. Operating point reviewed monthly against support-team capacity.
-
-\textbf{Shift monitoring.} Weekly KS test on the four highest-importance numeric features (lecture minutes, forum posts, problem-set time, days until deadline). Weekly missingness rate per feature. Weekly histogram of predicted scores. Weekly precision-and-recall on the prior week's labels, sliced by section and major.
-
-\textbf{Retraining cadence.} Weekly on Monday morning. Off-cycle retrain triggered if (a) any feature's KS statistic exceeds $0.15$ for two consecutive weeks, (b) any feature's missingness rate changes by more than 20 percentage points week-over-week, or (c) precision at the operating threshold drops below $0.5$ for one week.
-
-\textbf{Interpretability story.} Course-support staff see, for each flagged student, the top-3 SHAP contributions. Caveat: SHAP values are read together with the corresponding feature values, not as standalone explanations; correlated features can split credit in ways that mislead a non-technical reader.
-
-\textbf{Known leakage risks audited.} (1) Forum-post counts use the snapshot taken at 23:59 the prior Sunday, before the prediction is made; verified by querying the warehouse log. (2) Late-submission count for the current term excludes the assignment being predicted. (3) The instructor-section target encoding is out-of-fold and group-aware on student ID, verified by an integration test that injects synthetic perfect leakage and confirms the encoder rejects it.
-
-\end{example}
-
-\section{Common Mistakes in Tabular Work}
-
-The recurring tabular mistakes are not exotic. They are familiar enough that each has a name, a story, and a long list of postmortems behind it.
-
-\begin{mistakebox}
-\item \emph{Naive target encoding.} The encoder uses each row's own label in its category mean. Cross-validation looks great; deployment collapses. Always use out-of-fold encoding; verify with a leakage test.
-\item \emph{Random splits on grouped or temporal data.} Rows from the same entity or the same time period appear in both train and test. Validation is optimistic. Use \verb|GroupKFold| or temporal cutoffs.
-\item \emph{Imputing missing values without a missingness flag.} The fact that a value was missing is destroyed. Useful signal is thrown away. Keep the flag.
-\item \emph{Reporting ranking metrics when the operating point matters.} AUROC is reported, but the deployment uses a threshold. The threshold's precision, recall, and calibration are what actually matter. Report them.
-\item \emph{Treating ensemble probabilities as calibrated.} The predicted score is fed into a downstream cost-sensitive rule without calibration. Decisions are systematically biased. Calibrate post-hoc on a held-out fold.
-\item \emph{No schema validation in deployment.} An upstream column changes meaning; the model continues to score; predictions silently degrade. Validate schema and value ranges before each scoring run.
-\item \emph{Throwing a deep network at it before the tree baseline is solid.} The deep network's marginal gain over a tuned LightGBM is reported on a single fold. The reported gain is within the noise of the cross-validation procedure. Always benchmark against a strong tree baseline with confidence intervals.
-\end{mistakebox}
-
-\section{Looking Ahead}
-
-This chapter treated tabular data as a modality with its own concerns: heterogeneous columns, informative missingness, target-encoding leakage, calibration discipline, schema drift in deployment. Most of the discipline that Part~V will systematize is born in the tabular setting, because tabular ML lives closest to operational decisions and gets the largest blast radius from sloppy validation. Chapter~\ref{ch:experiments-claims} will turn the cross-validation discipline of this chapter into a more general theory of evidence and confidence intervals for ML claims. Chapter~\ref{ch:reliability} will turn the shift-monitoring stack into a reliability framework that applies to all modalities. Chapter~\ref{ch:models-systems} will turn the tabular design card into the broader artifact of an ML system specification, with versioned data contracts and rollout protocols. The themes of Part~V are general; tabular is the modality where the cost of getting them wrong is most directly visible in the deployed product.
-
-\section*{Chapter Summary}
-
-\begin{itemize}[leftmargin=*]
-\item Tabular is the dominant industrial modality. It is defined by heterogeneous columns, informative missingness, and deployment realities like daily retraining and slice-based monitoring---not by being the implicit default for everything else.
-\item Gradient-boosted tree ensembles (XGBoost, LightGBM, CatBoost) are the empirical baseline. Neural tabular methods are catching up but rarely dominate; start with a tree ensemble and only escalate with reason.
-\item Target encoding is powerful and, when done naively, leaks the label. Out-of-fold encoding with smoothing is the disciplined version.
-\item The leakage zoo on tabular data includes target leakage from post-event columns, train/test contamination through random splits on time-structured or grouped data, label-derived features, and global feature scaling that uses test information at train time.
-\item Tree ensembles rank well and calibrate poorly. Post-hoc calibration on a held-out fold is mandatory whenever the score is interpreted on its own scale.
-\item Distribution shift in tabular deployment includes covariate shift, schema drift, and missingness-pattern shift. Each requires its own monitor.
-\item The tabular design card records the modeling and validation choices that distinguish a robust tabular pipeline from a leaderboard-tuned one.
-\item Tabular is already a modeling problem: column semantics, missingness, leakage, calibration, and shift are not preprocessing chores---they are where the model's commitments to its data get written down or quietly hidden.
-\end{itemize}
+If $P(Y\mid X)$ changes through a new course policy or behavior, that conditional change needs outcome evidence. Outcome delays can postpone detection. Monitoring input validity, distributions, calibrated outcomes when they resolve, and performance at the operating rule addresses different parts of the problem. Updating a model, updating a calibrator, and changing an action threshold solve different problems. Their usefulness depends on what changed and on the intended cost and capacity constraints.
 
 \begin{studyquestions}
-\item Why is heterogeneous-column structure a reason that tree ensembles tend to outperform feedforward neural networks on small to mid-sized tabular problems?
-\item Explain why missingness is often signal rather than noise on tabular data, and what feature treatment preserves that signal.
-\item Why does naive target encoding leak the label, and what changes in the out-of-fold version that prevents the leak?
-\item Why is a random train/test split usually wrong for tabular data with timestamps or repeated entities? What are the right alternatives?
-\item Tree ensembles are good rankers but poor calibrators. Why does ranking quality not imply calibration quality, and when does the difference matter operationally?
-\item Distinguish covariate shift, schema drift, and missingness-pattern shift in a deployed tabular model. Give one monitor for each.
-\item Why is reporting AUROC alone insufficient when a tabular model will be used at a fixed operating threshold?
-\item What does the tabular design card record that a typical academic-paper-style results section omits?
+\item Why do a row's entity, prediction time, and label-resolution time matter separately?
+\item How can arbitrary category codes change the partitions available to a threshold tree?
+\item What assumptions justify using missingness as an input?
+\item Why is the negative gradient for logistic boosting not a misclassification indicator?
+\item How can a globally out-of-fold target encoding still leak outer validation outcomes?
+\item What information must be excluded from a smoothing prior as well as a category mean?
+\item Why can isotonic calibration alter a ranking measure without reversing any score pair?
+\item How can covariate shift break score calibration while preserving full conditional probabilities?
 \end{studyquestions}
 
-\begin{exercises}
-\item \exercisetag{Concept}{Core}List five reasons gradient-boosted tree ensembles tend to outperform multilayer perceptrons on small to mid-sized tabular datasets. For each reason, name a column or row property that drives it.
-\item \exercisetag{Calculation}{Core}A categorical feature has three categories with the following label means in the training set: $A$: $\bar{y}_A = 0.80$ over $n_A = 50$ rows; $B$: $\bar{y}_B = 0.20$ over $n_B = 200$ rows; $C$: $\bar{y}_C = 0.50$ over $n_C = 5$ rows. The global mean is $\bar{y} = 0.40$. Compute the smoothed target encoding for each category using smoothing $m = 10$:
-\[
-\tilde{y}_c = \frac{n_c \, \bar{y}_c + m \, \bar{y}}{n_c + m}.
-\]
-Explain why the encoding for $C$ is far closer to the global mean than the encoding for $A$ or $B$.
-\item \exercisetag{Calculation}{Core}A boosting model with logistic loss has, on a held-out fold, the following predicted probabilities and outcomes for ten cases:
-\[
-\hat{p} = (0.05, 0.10, 0.15, 0.20, 0.40, 0.60, 0.70, 0.80, 0.90, 0.95),
-\]
-\[
-y = (0, 0, 0, 1, 0, 1, 0, 1, 1, 1).
-\]
-Compute the ECE using two equal-width bins of probability, $[0,0.5)$ and $[0.5,1.0]$. State whether the model is overconfident, underconfident, or roughly calibrated, and which bin is the worse offender.
-\item \exercisetag{Calculation}{Intermediate}Suppose a binary classifier's predictions are well-ranked but uncalibrated. The score-sorted positives are concentrated in the top-quartile of scores, but the score histogram has 90\% of mass below $0.3$ and almost no mass above $0.5$. Sketch what isotonic calibration would do to the score-to-probability mapping, and explain why the rank ordering is preserved.
-\item \exercisetag{Concept}{Core}For each of the following columns, decide whether it is a legitimate feature or a leak when predicting a student's missed-submission risk on Monday morning. Justify briefly. (a) Number of forum posts in the prior 7 days. (b) Final grade in the course. (c) Whether the student appealed a late penalty this term. (d) Days since the last LMS login. (e) The student's grade on the assignment being predicted.
-\item \exercisetag{Concept}{Intermediate}A new feature engineered by a teammate is reported to give a 4-point AUC boost over the prior baseline. Its importance under SHAP is by far the largest. Name three diagnostic checks you would run before believing the result.
-\item \exercisetag{Implementation}{Core}Implement a function \texttt{group\_temporal\_split(df, time\_col, group\_col, train\_end, val\_end)} that returns row indices for train, validation, and test splits where (a) all training rows have \verb|time_col| $\le$ \verb|train_end|, (b) validation rows are in $(\verb|train_end|, \verb|val_end|]$, (c) test rows are after \verb|val_end|, and (d) within each split, all rows for a given \verb|group_col| value stay together. Verify on a synthetic table that no group-id appears across two splits and no train timestamp exceeds any test timestamp.
-\item \exercisetag{Implementation}{Core}Implement an out-of-fold target encoder for a single categorical column with smoothing $m$, using $K$-fold cross-validation. Test it by feeding in a synthetic dataset where the label is a deterministic function of the category. Compare the cross-validated AUC of a downstream model trained on (i) the naive in-fold target encoding and (ii) your out-of-fold encoder. Report the gap and explain it.
-\item \exercisetag{Implementation}{Intermediate}On any public tabular classification dataset (e.g., the UCI Adult or the Kaggle Telco churn dataset), train a LightGBM classifier with default hyperparameters. Then fit isotonic calibration on a held-out fold, and report ECE before and after. Plot reliability diagrams for both. Comment on which probability bins moved most.
-\item \exercisetag{Diagnosis}{Intermediate}You are given a tabular pipeline with a 5-fold cross-validated AUC of $0.94$, but the model achieves only $0.71$ on a fresh week of held-out data. Hypothesize three different causes consistent with this gap and describe a specific diagnostic test for each.
-\item \exercisetag{Design}{Intermediate}Fill in a tabular design card (Table~\ref{tab:tabular-design-card}) for a fraud detection model that scores credit-card transactions in real time. Be concrete about row identity, time boundary, missingness policy, and the operating point. Identify at least two leakage risks specific to this setting.
-\item \exercisetag{Design}{Intermediate}A bank is deciding between (a) a LightGBM model with isotonic calibration and (b) an FT-Transformer trained from scratch on the same data. Sketch the evidence you would require before recommending (b). Be specific about what the comparison would look like, what slices would be reported, and what the calibration discipline would be.
+\begin{exercises}[State the prediction-time information and split used by each proposed calculation or model.]
+\item \textbf{Model assumptions.} Give three reasons a threshold-tree ensemble can be useful on heterogeneous columns. For each, state a qualification that prevents it becoming a claim of universal superiority over neural or linear models.
+\item \textbf{Smoothed categories.} A legal reference set contains category $A$ with 50 binary labels and mean $0.8$, $B$ with 200 and mean $0.2$, and $C$ with 10 and mean $0.5$. Verify the overall mean, then calculate each encoding with $m=10$. Compare the fractions of weight placed on the overall mean.
+\item \textbf{Calibration bins.} Recalculate ECE for the ten forecasts and outcomes in the chapter. Which bin has the larger absolute gap, and why does this result not establish population calibration?
+\item \textbf{Isotonic ties.} Four independent calibration observations have ordered scores $(0.1,0.2,0.3,0.4)$ and labels $(0,1,0,1)$. Fit a nondecreasing map by unit-weight least squares at these scores. Identify the pooled values and explain the implication for strict ordering.
+\item \textbf{Availability.} At the end of week 2, assess: forum posts from the previous seven days, final course grade, an appeal flag, last recorded login, and the grade on a future target assignment. State which additional timing facts are needed before declaring a field legal or leaked.
+\item \textbf{An informative feature.} A new category field improves held-out AUROC by four percentage points. Describe checks of target encoding, timestamps, entity overlap, and protected evaluation that would distinguish a legitimate improvement from an information leak. Why does a SHAP explanation not settle this question?
+\item \textbf{Two deployment claims.} Design splits for future predictions about known students and for predictions about unseen future students. Explain when a time split alone fails the second claim.
+\item \textbf{Leave-one-out encoding.} One category has labels $(1,0,1,0)$. Calculate the naive category mean and each leave-one-out mean. For two singleton categories with labels $1$ and $0$, explain why leave-one-out means are undefined. Replace them by a legal independent prior of $0.5$ and compare the inputs.
+\item \textbf{Two equal bins.} Each of two bins contains half the evaluation observations. Their mean forecasts are $0.2$ and $0.8$, and observed frequencies are $0.1$ and $0.6$. Calculate ECE. What apparent result follows if each bin forecast is replaced by its observed frequency on the same data, and why is that not an independent evaluation?
+\item \textbf{A performance drop.} Cross-validation AUROC is $0.94$ but a later independent population gives $0.71$. Give three plausible explanations and the evidence that could distinguish them. Do not infer a unique cause from the two numbers.
+\item \textbf{Transaction prediction.} Specify a table, outcome window, entity boundary, and information cutoff for a fraud-detection study. Explain how missingness and delayed outcomes enter its evaluation without assuming that a model score identifies the benefit of an intervention.
+\item \textbf{A fair model comparison.} Compare a boosted-tree ensemble and an FT-Transformer on a declared tabular task. Specify legal inputs, splits, tuning resources, probability assessment, and operational criteria before choosing a method.
+\item \textbf{A Newton leaf.} Three binary observations have labels $(0,1,1)$ and current probabilities $(0.2,0.5,0.8)$. Calculate their logistic gradients and Hessians. With $\lambda=0.43$, find the best constant leaf value and the quadratic reduction. For $\nu=0.4$, calculate the updated probabilities, and distinguish the quadratic criterion from exact loss change.
+\item \textbf{A mixture changes.} Reproduce the chapter's two-type covariate-shift example. Calculate the one-bin population calibration gap after the proportions change, and explain why a predictor of each type's exact probability avoids it.
 \end{exercises}
 
-\begin{challengeexercises}
-\item \exercisetag{Diagnosis}{Advanced}A teammate reports that on a customer-churn dataset, a LightGBM model achieves AUC $0.97$ on cross-validation and $0.92$ on a temporal holdout. The single most important SHAP feature is \texttt{customer\_lifetime\_value\_estimate}. Investigate: state two distinct hypotheses for how this feature could be leaking, design an experiment to distinguish them, and propose a remedy for each case.
-\item \exercisetag{Implementation}{Advanced}Implement a leakage canary test. Given a feature engineering pipeline, the test should (a) inject a synthetic feature equal to the label plus small noise, (b) re-run the pipeline as if this feature were just another column, and (c) verify that any cross-validated metric becomes near-perfect. The point is to confirm that the test infrastructure can detect leakage when it is present, so that absence of leakage in the real run is meaningful evidence.
-\item \exercisetag{Design}{Advanced}A team deploys a tabular model that retrains weekly. Design a deployment monitoring stack that distinguishes (i) covariate shift requiring retraining, (ii) schema drift requiring upstream investigation, (iii) label drift requiring threshold recalibration, and (iv) genuine model degradation requiring a model rollback. Include the alerting thresholds, the routing rules, and the rollback criterion.
-\item \exercisetag{Research}{Advanced}Read the \citep{grinsztajn2022tabularnn} benchmark and the \citep{shwartz2022tabular} review. Summarize, in your own words and within 300 words, the conditions under which neural tabular methods are competitive with gradient-boosted trees, the conditions under which they are not, and the methodological caveats the papers raise about benchmark comparisons.
-\item \exercisetag{Diagnosis}{Advanced}A tabular model's calibration on a held-out fold is excellent (ECE $= 0.02$). One month after deployment, a downstream automated decision rule that uses the score as a probability begins making systematically too-aggressive choices. Outline at least three distinct mechanisms by which this could happen, even though the model has not been retrained, and propose how each would be detected.
+\clearpage
+\begin{challengeexercises}[Connect the mathematical claim to a complete information and evaluation protocol.]
+\item \textbf{Historical value.} A customer-value predictor uses historical purchase aggregates and a category mean of future customer value. Describe legal snapshot times and outer entity or temporal splits. Show two ways an apparently historical aggregate or encoder could violate them.
+\item \textbf{A copied outcome.} Suppose an input field equals the target in both training and a random holdout, but is unavailable at prediction time. Explain why holdout accuracy can be perfect and operational evidence absent. Would shuffling training labels alone reliably diagnose every kind of leakage? Justify your answer.
+\item \textbf{Monitoring responses.} Design an investigation of changed input distributions, missingness, calibration, and error costs. Separate evidence for a schema problem, covariate shift, label shift, and conditional change. State what additional observations are needed before choosing retraining, recalibration, or a decision-rule change.
+\item \textbf{Comparative evidence.} Read the cited 2022 tabular comparisons and the 2025 TabPFN study. In about 300 words, compare dataset scope, model versions, pretraining access, and tuning protocols. Form a conditional model-selection argument rather than a universal ranking of families.
+\item \textbf{Small ECE, poor decisions.} A deployed model reports ECE $0.02$ yet produces costly decisions. Give mechanisms involving coarse bins, subgroup errors, shifted inputs, incorrect costs, capacity, or a proxy mistaken for benefit. Specify evidence that distinguishes probability error from decision-objective error.
 \end{challengeexercises}
+
+\clearpage
+\begingroup\pagestyle{empty}\cleardoublepage\endgroup
+\endgroup

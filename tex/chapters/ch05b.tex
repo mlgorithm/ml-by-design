@@ -1,553 +1,466 @@
+\begingroup
+\raggedbottom
+\clubpenalty=10000
+\widowpenalty=10000
 \chapter{Probabilistic Models and Latent Structure}
 \label{ch:probabilistic-models}
 
-A triage classifier flags two messages this morning. The first is labeled URGENT with $0.99$ confidence. The second is also labeled URGENT, with $0.51$ confidence. Both go into the same alert queue. The on-call human treats them as if the model had said the same thing about each. By the end of the week, eleven of the borderline cases have wasted reviewer time. The model was not wrong. The system was: it threw away the difference between $0.99$ and $0.51$.
+A probability model assigns distributions to quantities such as outcomes, observations, latent variables, or unknown parameters. These distributions answer different questions. A class probability describes possible outcomes for an input; a likelihood compares parameter values through observed data; a posterior updates uncertainty about parameters or latent variables within a specified model.
 
-A point prediction hides what the model does not know. Probabilistic models make that uncertainty explicit, and that change in what a prediction \emph{is} ripples through how predictions are used, how failures are detected, and how systems are designed for safety. Sometimes the most important structure in the data is not visible at all---it is \emph{latent}, hidden behind the observations.
+Earlier chapters used probability forecasts to evaluate predictions and choose actions. This chapter develops the models behind several such distributions. Gaussian mixtures introduce unobserved component assignments. Expectation--maximization alternates inference and parameter fitting. Bayesian regression carries parameter uncertainty into predictions. The equations also show the limits of these claims: a distribution can be precise within its assumptions and inaccurate for the population of interest.
 
-This chapter introduces probabilistic models: models that reason about distributions rather than single predictions. Three ideas anchor the chapter. Latent variables capture structure we must infer rather than observe. Generative modeling describes how data is produced rather than only how to classify it. Uncertainty separates what the model does not know from what is inherently unpredictable. These ideas connect to everything that follows. Representation learning (Chapter~\ref{ch:representation-foundation-models}) depends on learned latent spaces, generative models produce new data from latent structure, and responsible deployment (Part~V) requires knowing when the model's confidence is trustworthy.
+\section{Probabilities, Likelihoods, and Decisions}
 
-Point predictions hide what the model does not know. Probabilistic models make uncertainty explicit, and that changes how predictions are used, how failures are detected, and how systems are designed for safety.
+In the student--course task, information available at the end of week 2 supports a forecast of whether at least one of two specified deadlines in weeks 3--4 will be missed. A probability forecast concerns that future event. It does not directly measure the need for support or the benefit of a check-in. An adviser can review at most five cases, so the final policy must respect that capacity on each batch.
 
-\textbf{Generative vs.\ discriminative.} When evaluating a model, ask whether it learns to \emph{classify} inputs (discriminative: $P(Y \mid X)$) or to \emph{generate} them (generative: $P(X \mid Y)$ or $P(X, Y)$). Generative models can do things discriminative models cannot: detect outliers, sample new data, and reason about missing observations. The price is stronger assumptions about the data distribution.
+Let $p=P(Y=1\mid x,D)$ be a model's probability for the event after development data $D$. Under a simplified binary action problem with false-positive cost $C_{FP}>0$, false-negative cost $C_{FN}>0$, and zero cost for correct decisions, expected costs are
+\[
+R(+\mid x)=C_{FP}(1-p),\qquad R(-\mid x)=C_{FN}p.
+\]
+Choosing the positive action minimizes these modeled costs when
+\[
+p\ge\frac{C_{FP}}{C_{FP}+C_{FN}},
+\]
+with a specified convention at equality. For $C_{FP}=1$, $C_{FN}=9$, and $p=0.2$, the costs are $0.8$ and $1.8$, so the positive action is preferred even though the event is less likely than its complement. A review queue is a different constraint: equal-effort ranking by event probability can maximize expected events selected, but does not establish intervention benefit. Chapter~\ref{ch:prediction-loss-decision} develops those distinctions.
 
-\begin{prereqbridge}
-Review Bridge~II if conditional probability, likelihood, expectation, or variance slows down the reading. The core path in this chapter is design fluency with probabilistic structure and uncertainty; the EM proof and deeper Gaussian-process derivations can be treated as extension work in a first course.
-\end{prereqbridge}
+For observed data $D$ and parameter $\theta$, the \emph{likelihood} is $L(\theta)=p(D\mid\theta)$ viewed as a function of $\theta$. It is not a probability distribution over $\theta$. For continuous observations, it uses density values, which can exceed one and depend on measurement units. A \emph{posterior} instead combines the likelihood with a prior and normalizes over the unknown quantity. Neither a large likelihood nor a concentrated posterior is itself an action rule.
 
-\section{Why Probabilistic Thinking Matters}
-
-Most models encountered so far produce a single operational output for each input: a score, a class label, or a thresholded decision. Some, such as logistic regression and softmax classifiers, also produce class probabilities. The problem is not that previous models were never probabilistic. It is that their probabilities were typically used only to choose a label, not calibrated, audited, or propagated into downstream decisions.
-
-Three levels are worth keeping separate: point labels or scores; class-probability models such as logistic regression; and full predictive or generative distributions that capture richer uncertainty about labels, inputs, or latent structure. This chapter focuses on the latter two and asks how uncertainty should be represented and used.
-
-Probabilistic models take a different stance: the output is a \emph{distribution}, not a point. Rather than asking only ``what is the predicted class?'' a probabilistic model asks ``what distribution over possible outcomes does the model represent, and how spread out is it?'' That shift has practical consequences.
-
-\textbf{Decision-making under uncertainty.} A hospital triage system predicting 51\% probability of a serious condition should behave differently from one predicting 99\%. Both predict the same class (``serious''), but the appropriate action differs. Probabilistic outputs enable cost-sensitive decisions: the downstream system can fold prediction uncertainty into its response.
-
-\textbf{Detecting the unknown.} A discriminative classifier trained on three classes still assigns one of those three labels even to an input belonging to none of them---unless extra uncertainty or out-of-distribution machinery is added. A generative model can sometimes help by flagging inputs that look unlikely under the learned distribution, but this depends on how well the density model matches reality. Validate it empirically rather than assuming it works.
-
-\textbf{Missing data and partial observations.} In many real-world settings, some features are missing for some examples. A probabilistic model that learns the joint distribution $P(X_1, X_2, \ldots, X_d)$ can marginalize over the missing features and still predict. A discriminative model trained on complete data may fail or require imputation heuristics.
-
-\begin{example}[Probabilistic Thinking in Course Support]
-The course-support early-warning system classifies student messages as ROUTINE, CONCERNING, or URGENT. A discriminative classifier may produce class probabilities, but a thresholded workflow often surfaces only the top decision. A probabilistic workflow keeps the full distribution: $P(\text{URGENT}) = 0.15$, $P(\text{CONCERNING}) = 0.60$, $P(\text{ROUTINE}) = 0.25$. The top label is CONCERNING, but the 15\% probability of URGENT is high enough to warrant a secondary review. Without the full distribution, that nuance is lost. If the model was trained only on fall-semester data, a probabilistic model can also flag a spring-semester message as low-likelihood under the training distribution, warning the advisor that the prediction may be unreliable here.
-\end{example}
-
-\section{Generative vs.\ Discriminative Models}
+\section{Generative and Discriminative Models}
 \label{sec:gen-vs-disc}
 
-The split between generative and discriminative models is fundamental to probabilistic reasoning.
-
-\textbf{Discriminative models} learn a decision rule or score for predicting $Y$ from $X$. Probabilistic discriminative models such as logistic regression estimate $P(Y \mid X)$. Models such as support vector machines are discriminative without being probability models, unless they are separately calibrated. Both answer one question: ``given this input, what is the most likely label?''
-
-\textbf{Generative models} learn the joint distribution $P(X, Y)$, or equivalently the class-conditional $P(X \mid Y)$ together with the prior $P(Y)$. They answer a different question: ``how is the data produced?'' Given a generative model, Bayes' theorem recovers $P(Y \mid X)$:
+A discriminative model specifies a prediction rule or a conditional distribution $p(y\mid x)$. Logistic regression supplies class probabilities; an SVM supplies a score and boundary unless a separate probability mapping is fitted. A generative classifier specifies $p(x,y)=p(y)p(x\mid y)$, from which
 \[
-P(Y \mid X) = \frac{P(X \mid Y) \, P(Y)}{P(X)}
+p(y\mid x)=\frac{p(y)p(x\mid y)}{\sum_{y'}p(y')p(x\mid y')}
 \]
-Generative models \emph{can} classify, but they model more than classification requires.
+follows whenever the denominator is positive. An unsupervised generative model may instead specify only $p(x)$. That input model does not predict a target $Y$ unless a relationship to $Y$ is also modeled or learned.
 
-\subsection{Tradeoffs}
+The two approaches constrain different quantities. Modeling $p(x,y)$ can support sampling inputs, reasoning about missing measurements, or using unlabeled observations under suitable assumptions. Modeling only $p(y\mid x)$ focuses directly on conditional prediction and can still sample a target for a given input. Thus sampling \emph{inputs} and sampling \emph{conditional outcomes} are different capabilities. Generative and discriminative descriptions do not establish a universal ranking in accuracy, data efficiency, or interpretability.
 
-Generative models are more flexible but harder to fit. The key tradeoffs:
+If inputs have observed coordinates $x_o$ and missing coordinates $x_m$, a joint model including the target can use
+\[
+p(y\mid x_o)=\int p(y,x_m\mid x_o)\,dx_m,
+\]
+with a sum for discrete missing values. This predicts from the observed subset under that joint model. If the fact that a coordinate is missing conveys information about $Y$, the required distribution is also conditional on the missingness pattern. Ignoring it requires an appropriate assumption that it supplies no additional target information given $x_o$, or a model of the observation process. Integrating missing features does not remove these assumptions or repair an incorrectly specified joint distribution.
 
-\begin{itemize}[leftmargin=*]
-\item \emph{Classification accuracy.} When the only goal is to predict $Y$ from $X$, discriminative models often win. They spend all their capacity on the decision boundary, while generative models spend capacity modeling the full input distribution---capacity that may not help with classification.
-\item \emph{Data efficiency.} Generative models can sometimes learn from less labeled data because they capture the structure of $X$ itself, not just the relationship between $X$ and $Y$. This connects to semi-supervised learning (Chapter~\ref{ch:dataset-design}).
-\item \emph{Outlier detection.} Generative models can support density-based checks that flag inputs unlikely under the learned distribution. The signal must be validated, however, because likelihood can mislead out of domain. Plain discriminative classifiers have no built-in input-density model; they need a separate rejection rule, uncertainty check, or out-of-distribution detector.
-\item \emph{Generation.} Only generative models can sample new data points---useful for data augmentation, creative applications, and understanding what the model has learned.
-\item \emph{Assumptions.} Generative models must specify a distributional form for $P(X \mid Y)$: Gaussian, multinomial, or some other family. When the assumption is wrong, the model can underperform a discriminative alternative that makes no such assumption.
-\end{itemize}
+An input density can also supply a score for unfamiliar-input checks, but density is not the probability that an input belongs to the deployment population. Nalisnick et al.\ showed cases where deep generative models assigned higher likelihood to images from another dataset than to their training-distribution images \citep{nalisnick2019ood}. Any density-based rejection rule needs evaluation on relevant alternatives, together with the costs of rejecting familiar cases and accepting unfamiliar ones.
 
-\begin{decisionbox}
-\textbf{When to use a generative model:}
-\begin{itemize}
-\item You need to detect out-of-distribution inputs (outlier detection)
-\item You have missing data or partial observations
-\item You want to generate new examples (data augmentation, creative applications)
-\item You have limited labeled data but abundant unlabeled data
-\item You need interpretable, decomposable probability statements
-\end{itemize}
-\textbf{When to use a discriminative model:}
-\begin{itemize}
-\item Classification accuracy is the primary goal and data is abundant
-\item The input distribution is complex and hard to model (e.g., high-resolution images)
-\item You do not need outlier detection or generation capabilities
-\end{itemize}
-\end{decisionbox}
+\section{Latent Variables Are Part of a Model}
 
-\section{Latent Variables and the Idea of Hidden Structure}
+A \emph{latent variable} is included in the probability model but not observed in the dataset. A model $p(x,z\mid\theta)$ describes observed input $x$ together with latent quantity $z$. Its observable distribution is
+\[
+p(x\mid\theta)=\sum_z p(x,z\mid\theta),
+\]
+or an integral for continuous $z$. Inference calculates $p(z\mid x,\theta)$; fitting estimates $\theta$ from the observations or updates a posterior over it. These are distinct operations.
 
-Many interesting patterns in data are not directly observed. A dataset of student messages may contain clusters---messages about deadlines, messages about personal struggles, messages asking procedural questions---but the cluster identities are not labeled. A collection of images may form natural groupings by scene type without any annotation. The structure is \emph{latent}: it exists in the data but must be inferred.
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram]
+\node[circle,draw=mlAccent,fill=white,minimum size=1.0cm] (z) at (0,0) {$z$};
+\node[circle,draw=mlLine,fill=mlWash,minimum size=1.0cm] (x) at (6.1,0) {$x$};
+\draw[ml arrow] (z.north) to[bend left=22]
+ node[ml label,above] {$p(x\mid z,\theta)$: sample} (x.north);
+\draw[ml feedback] (x.south) to[bend left=22]
+ node[ml label,below] {$p(z\mid x,\theta)$: infer} (z.south);
+\node[ml label,align=center] at (0,-1.3) {latent quantity\\prior $p(z\mid\theta)$};
+\node[ml label] at (6.1,-1.3) {observed input};
+\end{tikzpicture}
+\captionof{figure}{Sampling follows the model from a latent quantity to an observation. The dashed reverse arrow denotes inference under the same fixed parameters, not an additional generative or causal relation.}
+\label{fig:latent-generation-inference}
+\end{minipage}\par\addvspace{\intextsep}
 
-A \emph{latent variable} is a variable that is part of the model but not observed in the data. The model assumes the data arose from a process involving both observed variables (the data we see) and latent variables (the hidden structure). Learning the model means inferring the latent variables from the observations.
+A latent coordinate is not automatically a discovered cause or a real category. Different latent descriptions can produce the same observable distribution. For example, permuting mixture-component names changes neither the density nor its predictions. Other models can have rotation or scaling ambiguities. Interpreting a latent quantity as motivation, scene type, or a mechanism requires additional evidence and identifying assumptions.
 
-\begin{example}[Latent Variables in Pedestrian Detection]
-A pedestrian detector receives video frames from campus cameras. Some frames come from class changes (high traffic) and others from off-hours (low traffic). The scene type (busy vs.\ quiet) is not labeled in the training data, but it strongly affects how many pedestrians appear, where they walk, and how occluded they are. A model with a latent scene-type variable can learn different detection strategies for busy and quiet scenes, even though the scene type was never annotated.
-\end{example}
-
-The simplest and most important latent-variable model is the Gaussian mixture model.
-
-\section{Gaussian Mixture Models and the EM Algorithm}
+\section{Gaussian Mixtures and Expectation--Maximization}
 \label{sec:gmm-em}
 
-\emph{Back to the course-support team.} The team has thousands of unlabeled student messages and no taxonomy. A $k$-means partition would force each message into exactly one cluster, but ``I can't figure out the homework and I'm really stressed'' is part content question, part frustration, part personal disclosure --- the team wants membership in degrees, not a forced label. That is the modeling shape a Gaussian mixture model fits.
+A Gaussian mixture model (GMM) describes numeric observations using $K$ component distributions. For $x\in\mathbb R^d$, mixing weights satisfy $\pi_k\ge0$ and $\sum_k\pi_k=1$. Each component has mean $\mu_k$ and, for an ordinary multivariate Gaussian density, positive-definite covariance $\Sigma_k$.
 
-\subsection{The Gaussian Mixture Model}
-
-A Gaussian mixture model (GMM) assumes the data was generated by a mixture of $K$ Gaussian distributions. Each data point came from one of $K$ components, but which component is unknown (latent). The generative story is:
-
-\begin{enumerate}[leftmargin=*]
-\item Choose a component $k$ with probability $\pi_k$ (the \emph{mixing weight}).
-\item Draw the data point $x$ from a Gaussian with mean $\mu_k$ and covariance $\Sigma_k$.
-\end{enumerate}
-
-The overall density of an observed data point is
+The model first draws $Z=k$ with probability $\pi_k$, then draws $X\mid Z=k\sim\mathcal N(\mu_k,\Sigma_k)$. Its density is
 \[
-p(x) = \sum_{k=1}^{K} \pi_k \, \mathcal{N}(x \mid \mu_k, \Sigma_k).
+p(x\mid\theta)=\sum_{k=1}^K\pi_k\mathcal N(x\mid\mu_k,\Sigma_k),
 \]
+where $\theta$ collects weights, means, and covariances. The model assumes one component generated each observation. It does not assume a message contains a mixture of several semantic intentions; uncertain component assignment is different from mixed membership.
 
-\begin{prereqbridge}
-Read $\mathcal{N}(x \mid \mu_k, \Sigma_k)$ as the multivariate Gaussian density introduced in Mathematical Bridge II: $\mu_k$ is a vector (the centre of the $k$th cluster), $\Sigma_k$ is a covariance matrix (the shape and orientation of that cluster). On a first pass it is enough to picture each component as an ellipsoidal cloud and the mixture as a weighted overlay of those clouds.
-\end{prereqbridge}
-
-The parameters are the mixing weights $\{\pi_k\}$, the means $\{\mu_k\}$, and the covariances $\{\Sigma_k\}$. The latent variable for each data point is $z_i \in \{1, \ldots, K\}$: the component that generated it.
-
-\subsection{Soft vs.\ Hard Clustering}
-
-The $k$-means algorithm from earlier chapters assigns each data point to exactly one cluster. GMMs generalize this: each data point gets a \emph{soft assignment}, a probability distribution over clusters. After fitting, data point $x_i$ belongs to cluster $k$ with probability
+For conditionally independent observations $D=(x_1,\ldots,x_n)$, the observed-data log-likelihood is
 \[
-\gamma_{ik} = P(z_i = k \mid x_i) = \frac{\pi_k \, \mathcal{N}(x_i \mid \mu_k, \Sigma_k)}{\sum_{j=1}^{K} \pi_j \, \mathcal{N}(x_i \mid \mu_j, \Sigma_j)}.
+\ell(\theta)=\sum_{i=1}^n\log\!\left[\sum_{k=1}^K
+\pi_k\mathcal N(x_i\mid\mu_k,\Sigma_k)\right].
 \]
+Fitting a mixture to message vectors, for example, requires an explicit numeric representation and a reason to regard Gaussian components as useful approximations in that space. A fitted component is a distributional summary, not a verified message category.
 
-This is just Bayes' theorem. The soft assignment reflects genuine ambiguity: a data point on the boundary between two clusters should not be forced into either. This echoes the soft-labels discussion in Chapter~\ref{ch:dataset-design}: ambiguity is information, not noise.
+\subsection{Posterior Responsibilities}
 
-GMMs reduce to $k$-means in a special case. When all covariance matrices are $\sigma^2 I$ (spherical, equal variance) and $\sigma \to 0$, the soft assignments harden into hard assignments and the EM algorithm (below) becomes the $k$-means update rule. So $k$-means is the hard-assignment limit of EM for a constrained spherical GMM, even though it is used as a distinct algorithm in practice.
-
-\subsection{The Expectation-Maximization Algorithm}
-
-GMM parameters cannot be estimated in closed form because the latent variables $z_i$ are unknown. If we knew which component generated each data point, estimating the means and covariances would be easy: compute the statistics of each group. If we knew the parameters, computing the latent assignments would also be easy: apply Bayes' theorem. The problem is that neither is known.
-
-The \emph{Expectation-Maximization} (EM) algorithm breaks this chicken-and-egg problem by alternating between two steps:
-
-\textbf{E-step (Expectation).} Using the current parameters, compute the soft assignments $\gamma_{ik}$ for each data point---the probability that data point $i$ belongs to component $k$. This is the Bayes' theorem calculation above.
-
-\textbf{M-step (Maximization).} Using the soft assignments as weights, re-estimate the parameters:
-\begin{align}
-\mu_k &= \frac{\sum_{i=1}^{N} \gamma_{ik} \, x_i}{\sum_{i=1}^{N} \gamma_{ik}} \\[6pt]
-\Sigma_k &= \frac{\sum_{i=1}^{N} \gamma_{ik} \, (x_i - \mu_k)(x_i - \mu_k)^\top}{\sum_{i=1}^{N} \gamma_{ik}} \\[6pt]
-\pi_k &= \frac{1}{N} \sum_{i=1}^{N} \gamma_{ik}
-\end{align}
-
-Each $\mu_k$ is a weighted average of the data points, with weights given by the soft assignments. Each $\Sigma_k$ is a weighted covariance. Each $\pi_k$ is the average responsibility of component $k$.
-
-\textbf{Where the M-step formulas come from (skip on a first pass).} The M-step maximizes the expected complete-data log-likelihood under the current responsibilities $\gamma_{ik}$:
+For fixed parameters, Bayes' rule gives the \emph{responsibility} of component $k$ for case $i$:
 \[
-Q(\theta) = \sum_{i=1}^N \sum_{k=1}^K \gamma_{ik}\Bigl[\log \pi_k + \log \mathcal{N}(x_i \mid \mu_k, \Sigma_k)\Bigr].
+\gamma_{ik}=P(Z_i=k\mid x_i,\theta)
+=\frac{\pi_k\mathcal N(x_i\mid\mu_k,\Sigma_k)}
+{\sum_j\pi_j\mathcal N(x_i\mid\mu_j,\Sigma_j)}.
 \]
-Setting $\partial Q / \partial \mu_k = 0$ and using $\partial \log \mathcal{N}(x_i \mid \mu_k, \Sigma_k)/\partial \mu_k = \Sigma_k^{-1}(x_i - \mu_k)$ gives
+Responsibilities sum to one. They describe uncertainty about the assumed single component conditional on the fitted parameters; they do not incorporate uncertainty about those parameters unless it is separately integrated.
+
+Take one-dimensional components with means $0,2$, common variance $1$, and equal weights. At $x=1$, the weighted densities coincide, so each responsibility is $1/2$. At $x=0$, the first responsibility is
 \[
-\sum_{i=1}^N \gamma_{ik}\,\Sigma_k^{-1}(x_i - \mu_k) = 0
-\;\;\Longrightarrow\;\;
-\mu_k = \frac{\sum_i \gamma_{ik}\, x_i}{\sum_i \gamma_{ik}}.
+\frac{1}{1+e^{-2}}\approx0.881;
 \]
-The $\Sigma_k$ update follows analogously by setting $\partial Q/\partial \Sigma_k = 0$. The $\pi_k$ update needs the Lagrange multiplier for the constraint $\sum_k \pi_k = 1$. In all three cases, EM treats $\gamma_{ik}$ as fixed weights, which is exactly what makes the M-step a tractable weighted-MLE problem rather than an intractable joint optimization. A first-pass reader can accept the three M-step formulas operationally; the derivation is here for readers who want to see why ``weighted mean, weighted covariance, weighted mixing'' is not a guess.
+at $x=2$, it is about $0.119$. A point near both components can have a diffuse responsibility vector without implying that two real-world categories generated it simultaneously.
 
-The whole loop fits in twenty lines of numpy. The following snippet runs a complete EM iteration on a 1D two-component GMM and prints the log-likelihood after each pass.
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=1.35cm,y=11cm]
+\draw[ml axis] (-2.25,0) -- (4.3,0);
+\draw[ml axis] (-2.25,0) -- (-2.25,0.24);
+\draw[ml curve,domain=-2:4,samples=90] plot (\x,{0.19947114*exp(-\x*\x/2)});
+\draw[ml reference,domain=-2:4,samples=90] plot (\x,{0.19947114*exp(-(\x-2)*(\x-2)/2)});
+\draw[draw=mlLine,dotted] (1,0) -- (1,0.121);
+\fill[mlInk] (1,0.120985) circle (2.3pt);
+\node[ml label,below=3pt] at (0,0) {$\mu_1=0$};
+\node[ml label,below=3pt] at (2,0) {$\mu_2=2$};
+\node[ml label,below=3pt] at (1,-0.025) {$x=1$};
+\node[ml label,anchor=west] at (-2.25,0.27) {weighted component density};
+\node[ml label,anchor=east] at (4.3,-0.025) {$x$};
+\end{tikzpicture}
+\captionof{figure}{Equal-weight Gaussian components with variance one. Their weighted densities coincide at $x=1$, giving equal posterior responsibilities there. Solid and dashed curves distinguish the components.}
+\label{fig:gmm-responsibilities}
+\end{minipage}\par\addvspace{\intextsep}
 
-\begin{codeexample}
-import numpy as np
+\subsection{The E-Step and M-Step}
 
-def gaussian_pdf_1d(x, mu, var):
-    return np.exp(-(x - mu) ** 2 / (2 * var)) / np.sqrt(2 * np.pi * var)
+Expectation--maximization (EM) alternates latent-variable inference and parameter fitting \citep{dempster1977em}. At iteration $t$, the E-step evaluates responsibilities using $\theta^{(t)}$. Holding those responsibilities fixed, define $N_k=\sum_i\gamma_{ik}$. The unconstrained Gaussian M-step, when $N_k>0$ and the resulting covariance is positive definite, is
+\begin{align*}
+\pi_k^{(t+1)}&=\frac{N_k}{n},\\
+\mu_k^{(t+1)}&=\frac1{N_k}\sum_i\gamma_{ik}x_i,\\
+\Sigma_k^{(t+1)}&=\frac1{N_k}\sum_i\gamma_{ik}
+(x_i-\mu_k^{(t+1)})(x_i-\mu_k^{(t+1)})^\top.
+\end{align*}
+The covariance uses the \emph{new} mean. Its denominator is the effective count $N_k$, not an unbiased-sample-covariance adjustment. A zero effective count makes these component updates undefined; empty-component handling or constraints must be part of the fitting rule.
 
-def em_step(x, mu, var, pi):
-    # E-step: responsibilities gamma[i, k] = P(z_i = k | x_i, theta)
-    likelihood = np.stack(
-        [pi[k] * gaussian_pdf_1d(x, mu[k], var[k]) for k in range(len(mu))],
-        axis=1,
-    )
-    gamma = likelihood / likelihood.sum(axis=1, keepdims=True)
-    # M-step: weighted MLE under the current gamma
-    Nk    = gamma.sum(axis=0)
-    mu_n  = (gamma * x[:, None]).sum(axis=0) / Nk
-    var_n = (gamma * (x[:, None] - mu_n) ** 2).sum(axis=0) / Nk
-    pi_n  = Nk / len(x)
-    log_lik = np.log(likelihood.sum(axis=1)).sum()
-    return mu_n, var_n, pi_n, log_lik
-
-# Toy 1D mixture: cluster near 0 and cluster near 8
-np.random.seed(0)
-x = np.concatenate([np.random.randn(100), np.random.randn(100) + 8.0])
-
-# Start from rough guesses
-mu, var, pi = np.array([1.0, 7.0]), np.array([1.0, 1.0]), np.array([0.5, 0.5])
-for it in range(8):
-    mu, var, pi, ll = em_step(x, mu, var, pi)
-    print(f"iter {it}: log-likelihood = {ll:8.3f}, mu = {mu.round(3)}")
-\end{codeexample}
-
-Running this prints a log-likelihood that increases monotonically iteration after iteration. That monotonic increase is not a coincidence---it is a theorem about EM.
-
-\textbf{EM never decreases the log-likelihood (Extension; the empirical printout above is enough for a first reading).} Write the marginal log-likelihood as
+To derive the updates, maximize the expected complete-data log-likelihood
 \[
-\log p(x \mid \theta) = \log \sum_z p(x, z \mid \theta).
+Q(\theta)=\sum_{i,k}\gamma_{ik}
+\left[\log\pi_k+\log\mathcal N(x_i\mid\mu_k,\Sigma_k)\right].
 \]
-For any distribution $q(z)$, Jensen's inequality (Mathematical Bridge II) gives
+Differentiating with respect to $\mu_k$ gives $\Sigma_k^{-1}\sum_i\gamma_{ik}(x_i-\mu_k)=0$, so the mean is the responsibility-weighted average. For its weighted scatter matrix $S_k$, the covariance terms are
 \[
-\log p(x \mid \theta) \;\ge\; \sum_z q(z)\log\frac{p(x,z\mid\theta)}{q(z)} \;=:\; \mathcal{L}(q, \theta).
+-\frac{N_k}{2}\log|\Sigma_k|
+-\frac12\operatorname{tr}(\Sigma_k^{-1}S_k).
 \]
-The E-step sets $q(z) = p(z \mid x, \theta^{(t)})$, which makes the bound \emph{tight}: $\mathcal{L}(q, \theta^{(t)}) = \log p(x\mid\theta^{(t)})$. The M-step then maximizes $\mathcal{L}(q, \theta)$ over $\theta$ with $q$ fixed, so $\mathcal{L}(q, \theta^{(t+1)}) \ge \mathcal{L}(q, \theta^{(t)})$. Combining tightness with the M-step improvement gives $\log p(x\mid \theta^{(t+1)}) \ge \mathcal{L}(q, \theta^{(t+1)}) \ge \log p(x\mid\theta^{(t)})$. The marginal log-likelihood is non-decreasing, which is why the printout above is monotone. The argument does not rule out local optima: it only guarantees the bound never moves the wrong direction. The same evidence-lower-bound construction reappears in Chapter~\ref{ch:generative-representations} as the training objective of variational autoencoders.
+Their maximizer is $S_k/N_k$ when that matrix is positive definite. Finally, maximizing $\sum_kN_k\log\pi_k$ under $\sum_k\pi_k=1$ gives $\pi_k=N_k/n$. These are weighted maximum-likelihood fits for fixed responsibilities, not a joint closed-form solution of the mixture problem.
 
-\begin{example}[One EM Pass in One Dimension]
-Suppose three points are \(x=\{0,2,8\}\), and a two-component mixture starts with rough means \(\mu_1=1\) and \(\mu_2=7\). Suppose the E-step gives component-1 responsibilities
+For a complete iteration, return to the equal-weight components with means $0,2$ and variances $1$, and take observations $0,1,2$. The E-step gives the responsibility matrix
 \[
-\gamma_{\cdot 1}=(0.90,\ 0.80,\ 0.05),
+\Gamma\approx
+\begin{pmatrix}
+0.880797&0.119203\\
+0.500000&0.500000\\
+0.119203&0.880797
+\end{pmatrix}.
 \]
-so component-2 responsibilities are \((0.10,0.20,0.95)\). The M-step updates the first mean as a responsibility-weighted average:
+Each effective count is $1.5$, so the updated weights remain $1/2$. Using the unrounded responsibilities, the M-step gives
 \[
-\mu_1^{\text{new}}=\frac{0.90(0)+0.80(2)+0.05(8)}{0.90+0.80+0.05}
-=\frac{2.0}{1.75}\approx 1.14.
+\mu_1^{\mathrm{new}}\approx0.492271,\qquad
+\mu_2^{\mathrm{new}}\approx1.507729,\qquad
+(\sigma_1^2)^{\mathrm{new}}=(\sigma_2^2)^{\mathrm{new}}\approx0.408877.
 \]
-The second mean updates similarly:
+For example, the first mean is $(0.5+2\gamma_{31})/1.5$, and its variance averages the three squared distances from that new mean with the same responsibility weights. The next E-step would use these updated means, variances, and mixing weights. Its responsibilities would generally differ from the first matrix.
+
+\subsection{Why Exact EM Improves Likelihood}
+
+Let $Z$ denote all latent assignments and let $q(Z)$ be a distribution with suitable support. Assume the likelihood and the following quantities are finite. Define
 \[
-\mu_2^{\text{new}}=\frac{0.10(0)+0.20(2)+0.95(8)}{0.10+0.20+0.95}
-=\frac{8.0}{1.25}=6.40.
+\mathcal F(q,\theta)
+=\mathbb E_q[\log p(D,Z\mid\theta)]+H(q),
 \]
-That is the EM rhythm: infer soft membership using the current parameters, then recompute parameters as weighted statistics under those memberships.
-\end{example}
+where $H(q)=-\mathbb E_q[\log q(Z)]$ for the discrete assignments here. The identity
+\[
+\ell(\theta)=\mathcal F(q,\theta)
++\operatorname{KL}\!\left(q(Z)\,\|\,p(Z\mid D,\theta)\right)
+\]
+shows that $\mathcal F$ is a lower bound. It is not just the expected log joint: the entropy term matters.
 
-\textbf{Convergence.} EM repeats the E-step and M-step until the parameters stop changing (or the log-likelihood stops increasing). EM never decreases the log-likelihood, but it can converge to a local optimum. Different initializations can produce different solutions.
+The E-step sets $q_t=p(Z\mid D,\theta^{(t)})$, making the bound tight. An exact M-step maximizes $\mathcal F(q_t,\theta)$; a generalized M-step need only increase it while remaining in the allowed parameter space. Therefore
+\begin{align*}
+\ell(\theta^{(t+1)})&\ge\mathcal F(q_t,\theta^{(t+1)})\\
+&\ge\mathcal F(q_t,\theta^{(t)})
+=\ell(\theta^{(t)}).
+\end{align*}
+This guarantees non-decreasing observed-data likelihood under the stated exact E-step and bound-improving M-step. It does not guarantee a global maximum, identifiable components, or better held-out predictions. Approximate inference, numerical errors, or arbitrary modifications to updates need not preserve this likelihood guarantee. A penalized or constrained fit requires improvement of its own declared objective.
 
-\begin{warningbox}
-EM is sensitive to initialization. If a component's mean starts far from any data, the component can collapse and end up empty (all soft assignments near zero). Common practice is to run EM multiple times from different random starts and keep the solution with the highest log-likelihood. Initializing the means with $k$-means is often more robust than pure random initialization.
-\end{warningbox}
+\subsection{Collapse, Identifiability, and the K-Means Limit}
 
-\begin{failurebox}
-\textbf{Label-swap non-identifiability of mixture components.} A GMM's likelihood is invariant to permutations of the components: swapping component 1's parameters with component 2's gives the same density, the same log-likelihood, and the same soft assignments up to relabeling. EM is therefore not guaranteed to label clusters consistently across runs; ``component 3 is frustration messages'' in one run might be ``component 1 is frustration messages'' in the next. This is not a bug; it is a property of any latent-variable model whose components are exchangeable. The consequence is downstream. Never report soft assignments by component index without first aligning indices across runs (the Hungarian algorithm on per-cluster means is the standard fix), and never train a fixed downstream classifier on raw $\gamma_{ik}$ values from one EM run without re-labeling.
-\end{failurebox}
+An unrestricted mixture likelihood need not have a finite maximum. With at least two components, put one mean at an observed point, keep its weight positive, and let its covariance be $\epsilon^2I$. Its density at that point grows proportionally to $\epsilon^{-d}$. Another nondegenerate component can keep densities positive at the remaining observations, so the total log-likelihood tends to infinity as $\epsilon\to0$. A nearly collapsed component is a fitting pathology, not increasingly persuasive evidence of a tiny real group.
 
-\begin{sanitycheck}
-\textbf{Monitor the log-likelihood for monotonicity.} The EM monotonicity theorem says $\log p(x \mid \theta^{(t+1)}) \ge \log p(x \mid \theta^{(t)})$ at every iteration. The numpy EM loop above prints the log-likelihood per pass; verify that the printed sequence is non-decreasing. A decrease by even a small amount signals a bug --- usually a mismatched responsibility update, a forgotten $\log$ in the M-step derivation, or numerical underflow in the responsibilities. Convergence itself is fine to declare when the change per iteration drops below a small threshold (relative $10^{-6}$ on the log-likelihood is typical); just do not declare convergence on parameter equality alone, because the label-swap symmetry above can keep parameters moving slightly even after the likelihood has settled.
-\end{sanitycheck}
+Fixed covariance restrictions, eigenvalue bounds, or suitable priors can prevent this particular behavior. Specify them before comparing fits. A proper prior alone does not guarantee a bounded posterior density or MAP estimate; its behavior near the problematic boundary matters. A covariance modification added to a numerical update also does not automatically retain monotonicity for the original likelihood.
 
-\begin{example}[GMM for Student Message Clustering]
-A course-support team has 5{,}000 unlabeled student messages. A GMM does not operate on raw strings directly: each message is first embedded or featurized into a numeric space where Gaussian clusters are at least a defensible approximation. That representation choice decides whether the mixture assumption is reasonable.
+Component indices remain exchangeable: permuting weights, means, and covariances gives the same density. Overlapping or coincident components can create further identification problems. Compare runs by aligning their component distributions or use invariant quantities such as the mixture density. A downstream predictor using responsibility coordinates must account for any relabeling or refit.
 
-They fit a GMM with $K=5$ to discover natural groupings. EM converges and reveals five clusters: administrative questions (``when is the assignment due?''), technical help requests (``I can't log in''), content questions (``I don't understand the difference between X and Y''), expressions of frustration (``this is impossible''), and personal disclosures (``I've been dealing with a family issue''). Each message receives a soft assignment. A message like ``I can't figure out the homework and I'm really stressed'' has probability 0.40 for content questions, 0.35 for frustration, and 0.25 for personal disclosures. The soft assignments carry more information than a forced hard label.
-\end{example}
+A precise connection to k-means uses a constrained model with fixed covariance $\sigma^2I$ for every component and fixed positive weights. Then
+\[
+\gamma_{ik}=\frac{\pi_k\exp[-\|x_i-\mu_k\|^2/(2\sigma^2)]}
+{\sum_j\pi_j\exp[-\|x_i-\mu_j\|^2/(2\sigma^2)]}.
+\]
+If each point has a unique nearest mean, responsibilities tend to its hard nearest-center assignment as $\sigma^2\to0$. The corresponding mean update tends to the mean of the assigned points for each nonempty component. Distance ties and empty groups require separate rules. This limiting assignment-and-mean procedure is not unrestricted EM with freely updated covariances.
 
-\subsection{Choosing the Number of Components}
+\subsection{Choosing Components Is a Model-Selection Question}
 
-GMMs require specifying $K$, the number of components. That is a model-selection problem. Common approaches:
+For a fitted model with log-likelihood $\ell(\hat\theta)$, $r$ free parameters, and $n$ independent observations, familiar criteria are
+\[
+\mathrm{AIC}=-2\ell(\hat\theta)+2r,\qquad
+\mathrm{BIC}=-2\ell(\hat\theta)+r\log n.
+\]
+Lower values are preferred within a comparable fitting setup. AIC's usual correction estimates predictive log-likelihood optimism in a regular large-sample setting; BIC's usual penalty comes from a regular large-sample approximation to Bayesian model evidence \citep{akaike1974aic,schwarz1978bic}. These ordinary arguments assume an identifiable model of fixed dimension with an interior optimum and nonsingular information; BIC also uses a prior that is smooth and positive near that optimum. AIC's simple $2r$ correction relies on the fitted model being correctly specified, or sufficiently close for that approximation. The criteria have different aims. BIC's per-parameter penalty exceeds AIC's only when $\log n>2$.
 
-\begin{itemize}[leftmargin=*]
-\item \emph{Information criteria.} The Bayesian Information Criterion (BIC) and Akaike Information Criterion (AIC) balance fit against complexity. Fit GMMs for $K = 1, 2, \ldots, K_{\max}$ and pick the $K$ that minimizes BIC (or AIC). BIC penalizes complexity more heavily and tends to favor simpler models.
-\item \emph{Held-out likelihood.} Fit on training data and score the log-likelihood on a validation set. Pick the $K$ with the highest validation log-likelihood.
-\item \emph{Domain knowledge.} Sometimes the number of components is known from the domain. If the course-support team expects five message types, $K=5$ is a reasonable starting point.
-\end{itemize}
+For $K$ full-covariance Gaussian components in $d$ dimensions, the nominal count is
+\[
+r=(K-1)+Kd+K\frac{d(d+1)}2.
+\]
+This count does not make every mixture fit regular. Vanishing weights, coincident components, and singular covariance limits violate important assumptions behind ordinary information-criterion arguments; singular models require different theory \citep{watanabe2013wbic}. The formulas can be used as declared approximations in a constrained comparison, but they do not prove that the selected components are real categories.
 
-The ``correct'' $K$ rarely exists---the data may not have been generated by any finite mixture. Treat $K$ as a complexity parameter that controls model granularity, not as the true number of clusters. If BIC suggests $K=4$ but the domain expects 6 categories, two expected categories may be too similar for the model to separate, or the data may not support that resolution.
+Held-out log density directly assesses a specified density-prediction task. If the purpose is a later target prediction or review queue, evaluate that purpose instead. Keep representation, covariance restrictions, starts, and evaluation boundaries comparable. The number of components useful for approximation need not equal the number of categories expected by domain experts.
 
-\section{Bayesian Reasoning: Priors, Posteriors, and Uncertainty}
+\par\addvspace{18pt plus 4pt minus 2pt}\noindent\begin{minipage}{\linewidth}
+\section{Bayesian Parameters: A Posterior Instead of One Fit}
 \label{sec:bayesian-reasoning}
 
-EM showed one use of Bayes' theorem: computing soft assignments (posteriors over latent variables) given observed data. Bayesian reasoning applies more broadly---to the model's \emph{parameters} themselves.
-
-\subsection{Maximum Likelihood vs.\ Maximum a Posteriori}
-
-For probabilistic models, a common fitting principle is \emph{maximum likelihood estimation} (MLE): find the parameters $\theta$ that maximize $P(\text{data} \mid \theta)$. MLE treats parameters as unknown but fixed and returns the single best value. Earlier loss-minimization examples can often be given likelihood interpretations, but the important point here is narrower: MAP adds a prior to the likelihood-based fitting story.
-
-\emph{Maximum a posteriori} (MAP) estimation adds a prior: find the parameters that maximize $P(\theta \mid \text{data}) \propto P(\text{data} \mid \theta) \, P(\theta)$. The prior $P(\theta)$ encodes beliefs about which parameter values are plausible before seeing the data.
-
-The connection to regularization is direct. $L_2$ regularization (ridge regression) is MAP estimation with a Gaussian prior on the parameters: the prior says ``parameters should be small,'' and the penalty $\lambda \|\theta\|^2$ implements that belief. $L_1$ regularization (lasso) corresponds to a Laplace prior, which says ``most parameters should be zero.'' What seemed like an ad hoc penalty in earlier chapters is a principled statement of prior belief.
-
-\textbf{Regularization as prior knowledge.} Common parameter penalties like $L_2$ and $L_1$ can be read as priors. When choosing a regularization scheme, ask what belief about the parameters the penalty implicitly encourages---and whether that belief fits the problem.
-
-\subsection{Bayesian Linear Regression}
-
-\emph{Dilemma.} A safety team trains a linear pedestrian-count model on a few hundred dashcam frames. The point estimate fits the visible data well, but at deployment one image is a nighttime crosswalk---a regime nothing in the training set really resembles. Ordinary linear regression returns the same kind of number it returned for every other frame: a single predicted count, with no signal that the model is now extrapolating outside its training experience. The team needs more than a best guess; they need a way to say ``the data we have does not strongly constrain the answer here.''
-
-Ordinary linear regression finds a single weight vector $w$ that minimizes squared error. Bayesian linear regression treats $w$ as a random variable with a prior distribution and computes a \emph{posterior distribution} over weights after observing data. That posterior is what lets the model report, at prediction time, how much of its answer is supported by data and how much is being filled in from prior assumptions.
-
-The prior is typically Gaussian: $P(w) = \mathcal{N}(0, \sigma_w^2 I)$. Given data $(X, y)$ and the noise model $y_i = w^\top x_i + \epsilon$ with $\epsilon \sim \mathcal{N}(0, \sigma^2)$, the posterior is also Gaussian. The Gaussian prior and Gaussian likelihood produce a Gaussian posterior because they form a \emph{conjugate pair}: a prior is \emph{conjugate} to a likelihood when posterior and prior belong to the same parametric family. Conjugacy is what lets the update stay in closed form; without it, the posterior would be available only up to an unnormalized expression and would require numerical methods (MCMC, variational inference) to use. Other classical conjugate pairs --- Beta with Bernoulli, Dirichlet with Categorical, Gamma with Poisson --- play the same role for binary, categorical, and count data, and recur whenever a closed-form Bayesian update appears in the book.
-
+Mixture responsibilities condition on fitted parameters. Bayesian parameter inference instead places a prior density $p(\theta)$ on the unknown parameters and updates it with observations:
 \[
-P(w \mid X, y) = \mathcal{N}(\mu_{\text{post}}, \Sigma_{\text{post}}).
+p(\theta\mid D)=\frac{p(D\mid\theta)p(\theta)}{p(D)},
+\qquad p(D)=\int p(D\mid\theta)p(\theta)\,d\theta.
 \]
+\end{minipage}\par\addvspace{\belowdisplayskip}
+A proper prior integrates to one; assume $0<p(D)<\infty$ so the posterior is proper. The marginal likelihood $p(D)$ normalizes the update and can compare specified models with their priors. It is not the expected log joint or the likelihood at its largest value. An improper prior requires a separate posterior-propriety check and does not supply an unambiguous model evidence through an arbitrary normalization constant.
 
-The posterior mean and covariance have closed forms,
+\subsection{MLE, MAP, and Posterior Decisions}
+
+Maximum likelihood estimation chooses a maximizer of $p(D\mid\theta)$, if one exists. Maximum a posteriori (MAP) chooses a maximizer of the posterior density in specified parameter coordinates, again if one exists. With fixed prior hyperparameters,
 \[
-\Sigma_{\text{post}} \;=\; \Bigl(\frac{1}{\sigma^2} X^\top X + \frac{1}{\sigma_w^2} I\Bigr)^{-1},
+\hat\theta_{\mathrm{MAP}}\in\arg\min_\theta
+\left[-\log p(D\mid\theta)-\log p(\theta)\right].
+\]
+A Gaussian prior produces a quadratic penalty; a Laplace prior produces an absolute-value penalty. A continuous Laplace prior has no atom at zero. Zeros in its MAP fit arise from the cusp of the penalty, whereas a prior with an actual point mass at zero expresses a different model.
+
+Constants may be omitted from MAP optimization only when they are independent of the quantities being optimized. If prior scale or observation variance is also fitted, its normalizing factors generally matter. A squared-error penalty alone is not a complete Gaussian likelihood for an unknown noise variance.
+
+MAP also depends on parameterization. Under a one-to-one change $u=g(\theta)$, the transformed density includes the Jacobian factor. As a simple example, the proper density $p(\theta)=\theta e^{-\theta}$ for $\theta>0$ has mode $1$ and mean $2$. In coordinates $u=\log\theta$, its density is proportional to $\exp(2u-e^u)$ and its mode maps back to $\theta=2$. The posterior distribution represents the same probability measure; its density peak changes with the coordinates.
+
+A MAP point is not generally the posterior mean or a full uncertainty description. Under squared error for an unknown scalar, the posterior mean minimizes expected loss when the second moment is finite; under absolute error, a posterior median minimizes expected loss. For a future target, use its posterior \emph{predictive} distribution and the action's loss. Discrete zero--one classification selects the largest predictive class probability, not necessarily the prediction from a MAP parameter fit.
+
+For eight successes and two failures, a Bernoulli model with a $\mathrm{Beta}(2,2)$ prior gives posterior $\mathrm{Beta}(10,4)$. MLE is $0.8$, posterior mode is $0.75$, and posterior mean is $5/7\approx0.714$. The predictive success probability for a future trial, conditionally independent of the earlier trials given the success parameter, is the posterior mean. Integrating their shared uncertain parameter generally makes trials dependent. Different summaries answer different questions.
+
+\section{Bayesian Linear Regression}
+
+Condition on a design matrix $X$ with rows $x_i^\top$ and observed numeric targets $y$. Specify
+\[
+w\sim\mathcal N(m_0,S_0),\qquad
+y=Xw+\varepsilon,\qquad
+\varepsilon\sim\mathcal N(0,\sigma^2I),
+\]
+where $S_0$ is positive definite, $\sigma^2>0$ is known, and noise is independent of $w$. The coordinates may include a constant feature for an intercept; the stated prior then applies to that coefficient too. These Gaussian assumptions describe a numeric regression target, not the binary deadline label without a different likelihood.
+
+The posterior is $w\mid D\sim\mathcal N(m_n,S_n)$, with
+\[
+S_n^{-1}=S_0^{-1}+\frac1{\sigma^2}X^\top X,
 \qquad
-\mu_{\text{post}} \;=\; \frac{1}{\sigma^2}\,\Sigma_{\text{post}}\, X^\top y.
+m_n=S_n\left(S_0^{-1}m_0+\frac1{\sigma^2}X^\top y\right).
 \]
-The posterior mean $\mu_{\text{post}}$ matches the MAP estimate (equivalent to ridge regression with $\lambda = \sigma^2/\sigma_w^2$). The posterior covariance $\Sigma_{\text{post}}$ is the new piece: it tells us how uncertain we are about the weights. Directions in parameter space where the data provides strong evidence have low posterior variance; directions where data is sparse have high posterior variance.
-
-\textbf{Where the closed form comes from (Extension).} A first-pass reader can accept the formulas above and skip directly to the predictive distribution; the derivation here is for readers who want to see why the posterior is Gaussian and why MAP equals ridge. The Bayesian update is
+To see why, expand the log likelihood plus log prior into
 \[
-P(w \mid X, y) \;\propto\; P(y \mid X, w)\, P(w),
+-\frac12w^\top S_n^{-1}w
++w^\top\left(S_0^{-1}m_0+\frac1{\sigma^2}X^\top y\right)
++\text{constant},
 \]
-with a Gaussian likelihood $P(y \mid X, w) = \mathcal{N}(y \mid Xw, \sigma^2 I)$ and a Gaussian prior $P(w) = \mathcal{N}(0, \sigma_w^2 I)$. Take logs:
+then complete the square around $m_n$. Positive definiteness gives a proper Gaussian posterior. Gaussian conjugacy permits this closed form; nonconjugacy does not by itself mean that inference is impossible, but often requires approximation or numerical integration.
+
+For $m_0=0$ and $S_0=\tau^2I$, the mean and MAP coincide and minimize
 \[
-\log P(w \mid X, y) \;=\; -\frac{1}{2\sigma^2}\,(y - Xw)^\top (y - Xw) \;-\; \frac{1}{2\sigma_w^2}\,w^\top w \;+\; \text{const}.
+\|y-Xw\|_2^2+\frac{\sigma^2}{\tau^2}\|w\|_2^2.
 \]
-This is quadratic in $w$, so the posterior is Gaussian. Group terms in $w$ using fact (2) from Mathematical Bridge I (gradient of a quadratic form):
+This is ridge under the \emph{sum}-of-squared-errors convention, with penalty $\lambda=\sigma^2/\tau^2$. A mean-loss convention rescales that coefficient by $1/n$. Equality of mean and mode here follows from Gaussian symmetry, not a general property of Bayesian models.
+
+\subsection{Predicting a Fresh Numeric Outcome}
+
+For a fixed query $x_\star$, let
 \[
--\frac{1}{2}\,w^\top \underbrace{\Bigl(\frac{1}{\sigma^2}X^\top X + \frac{1}{\sigma_w^2} I\Bigr)}_{\Sigma_{\text{post}}^{-1}} w
-\;+\; w^\top\, \underbrace{\frac{1}{\sigma^2} X^\top y}_{\Sigma_{\text{post}}^{-1}\,\mu_{\text{post}}}
-\;+\; \text{const}.
+Y_\star=x_\star^\top w+\varepsilon_\star,
+\qquad \varepsilon_\star\sim\mathcal N(0,\sigma^2),
 \]
-The covariance is the inverse of the matrix in front of the quadratic term, and the mean is read off from the linear term. The MAP-equals-ridge connection follows immediately: maximizing the log-posterior over $w$ gives $\mu_{\text{post}}$, and the corresponding objective is $\|y - Xw\|^2/\sigma^2 + \|w\|^2/\sigma_w^2$, which is exactly ridge with $\lambda = \sigma^2/\sigma_w^2$. The full posterior carries strictly more information than the MAP point: it also tells us how concentrated the posterior is around the mean, which is what $\Sigma_{\text{post}}$ encodes.
-
-\textbf{Predictive distribution.} For a new input $x_*$, the prediction is a distribution rather than a single value:
+where the fresh noise is independent of $w$ and the training noises and observations under the model. Integrating over the posterior gives
 \[
-P(y_* \mid x_*, X, y) = \mathcal{N}(\mu_{\text{post}}^\top x_*, \; x_*^\top \Sigma_{\text{post}} x_* + \sigma^2).
+Y_\star\mid x_\star,D\sim
+\mathcal N\!\left(x_\star^\top m_n,
+\sigma^2+x_\star^\top S_nx_\star\right).
 \]
-The marginalization $P(y_* \mid x_*, X, y) = \int P(y_* \mid x_*, w)\, P(w \mid X, y)\, dw$ is itself a Gaussian convolution: the likelihood contributes $\sigma^2$, the posterior over $w$ contributes the input-dependent term $x_*^\top \Sigma_{\text{post}} x_*$, and the two add because they correspond to independent sources of variability.
+The latent regression mean $x_\star^\top w$ has posterior variance $x_\star^\top S_nx_\star$; a fresh observed target also contains noise variance $\sigma^2$. Keeping these prediction targets distinct prevents a credible interval for the mean from being mistaken for a predictive interval for a new outcome.
 
-The prediction variance therefore has two terms. The first, $x_*^\top \Sigma_{\text{post}} x_*$, captures \emph{epistemic uncertainty}: uncertainty about the model parameters that would shrink with more data. The second, $\sigma^2$, captures \emph{aleatoric uncertainty}: inherent noise that cannot be reduced by more data. This decomposition is one of the most important ideas in probabilistic modeling.
+With fixed prior and known noise, posterior covariance depends on the input design rather than the observed targets. Additional observations add positive semidefinite terms to its precision and can reduce uncertainty in directions they constrain. This statement is conditional on this model; fitted noise parameters or a revised representation can change the comparison.
 
-\begin{codeexample}
-import numpy as np
+For $Y=wx+\varepsilon$, take prior $w\sim\mathcal N(0,1)$, noise variance $1$, and observations $(x,y)=(-1,-1),(1,1)$. Then $S_n=1/3$ and $m_n=2/3$, giving
+\[
+\mathbb E[Y_\star\mid x_\star,D]=\frac23x_\star,
+\qquad\operatorname{Var}(Y_\star\mid x_\star,D)
+=1+\frac{x_\star^2}{3}.
+\]
+At $x_\star=0$, the variance is smallest despite the absence of a training input there: the intercept-free linear model fixes its latent mean at zero. A gap in input coverage does not necessarily create a local uncertainty peak. A posterior can also be narrow around a misspecified linear relationship.
 
-def bayes_lr_fit(X, y, sigma2, sigma_w2):
-    """Closed-form posterior over weights for Bayesian linear regression."""
-    d = X.shape[1]
-    Sigma_post = np.linalg.inv(X.T @ X / sigma2 + np.eye(d) / sigma_w2)
-    mu_post    = Sigma_post @ X.T @ y / sigma2
-    return mu_post, Sigma_post
-
-def bayes_lr_predict(x_star, mu_post, Sigma_post, sigma2):
-    """Predictive mean and variance at one or more new inputs."""
-    mean = x_star @ mu_post
-    var  = np.einsum('ij,jk,ik->i', x_star, Sigma_post, x_star) + sigma2
-    return mean, var
-
-# Tiny demo: 1D linear data with a gap in the middle
-rng = np.random.default_rng(0)
-x   = np.concatenate([rng.uniform(-3, -1, 8), rng.uniform(1, 3, 8)])
-y   = 1.5 * x + 0.4 * rng.standard_normal(x.shape)
-Phi = np.stack([np.ones_like(x), x], axis=1)
-mu_post, Sigma_post = bayes_lr_fit(Phi, y, sigma2=0.16, sigma_w2=4.0)
-x_grid = np.linspace(-4, 4, 9)
-Phi_g  = np.stack([np.ones_like(x_grid), x_grid], axis=1)
-mean, var = bayes_lr_predict(Phi_g, mu_post, Sigma_post, sigma2=0.16)
-for xg, m, v in zip(x_grid, mean, var):
-    print(f"x={xg:+.1f}  mean={m:+.2f}  std={np.sqrt(v):.2f}")
-# The standard deviation is smallest where x_grid sits inside the training
-# support and widest in the [-1, 1] gap and at the extrapolation tails.
-\end{codeexample}
-
-The printout confirms the geometric intuition: predictive standard deviation is smallest where the training inputs cluster and grows toward the extrapolation tails and inside the held-out gap. This is the practical use of the decomposition---an honest model knows where its training data was, and tells you about it through the predictive variance.
-
-\begin{example}[Bayesian Regression for Pedestrian Counts]
-A campus shuttle team uses linear regression to predict pedestrian density from time of day, weather, and academic-calendar features. Ordinary regression returns a point prediction: ``expect 45 pedestrians per minute at the main crosswalk at 12:15 PM on a Tuesday.'' Bayesian regression returns a predictive distribution: ``expect $45 \pm 8$ pedestrians per minute.'' The uncertainty is not uniform. Midday predictions during the academic term, where the training data is dense, have small uncertainty ($\pm 4$). Predictions at 6 AM during winter break, where data is sparse, have large uncertainty ($\pm 20$). The shuttle system uses this uncertainty to decide when to trust the model and when to fall back on conservative behavior.
-\end{example}
-
-Full Bayesian inference (exact posteriors) is tractable for linear regression with Gaussian assumptions but becomes intractable for neural networks and other complex models. In practice, approximate methods---variational inference, Monte Carlo dropout, and deep ensembles---approximate Bayesian uncertainty for larger models. The uncertainty section below discusses them briefly.
-
-\subsection{Gaussian Processes: A Pointer}
+\section{Gaussian Processes: Priors on Functions}
 \label{sec:gaussian-processes}
 
-\begin{advancednote}
-\textbf{Gaussian processes: a pointer.} A \emph{Gaussian process} (GP) places a prior directly on functions rather than on weights, expressed through a kernel $k(x,x')$ that says ``nearby inputs should produce nearby outputs.'' The kernel \emph{is} the hypothesis: a squared-exponential kernel encodes smoothness, a periodic kernel encodes repetition, and so on. For standard GP regression with a Gaussian likelihood, the predictive distribution at any new input is Gaussian, with variance that is small where training points cluster and grows toward the prior variance far from any training data---an ``I do not know'' signal that parametric models do not produce on their own.
+A Gaussian process (GP) specifies a distribution over functions through a mean $m(x)$ and covariance kernel $k(x,x')$. For every finite collection of inputs, the corresponding function values are jointly Gaussian. A valid real covariance kernel is symmetric and has a positive semidefinite Gram matrix for every finite input set. Positive definiteness is not required for every such matrix; a Gaussian vector may be degenerate.
 
-The hedges are real. Kernel hyperparameters (length-scales, noise variance) are almost always fit from the data, which couples the predictive variance to the outputs and makes the geometry-of-inputs intuition only partially correct in practice; non-Gaussian likelihoods break the closed-form posterior. The decisive scaling fact is that exact GP inference is $O(n^3)$ in the training-set size, which rules them out for large datasets unless sparse approximations are used.
+Let $f\sim\operatorname{GP}(m,k)$ and $Y_i=f(x_i)+\varepsilon_i$, where the zero-mean Gaussian noises have known variance $\sigma^2>0$ and are independent of $f$ and one another. Condition on fixed kernel settings and training inputs. Write $K_{ij}=k(x_i,x_j)$, $(k_\star)_i=k(x_i,x_\star)$, and $(m_X)_i=m(x_i)$. Then
+\begin{align*}
+\mathbb E[f(x_\star)\mid D]
+&=m(x_\star)+k_\star^\top(K+\sigma^2I)^{-1}(y-m_X),\\
+\operatorname{Var}(f(x_\star)\mid D)
+&=k(x_\star,x_\star)
+-k_\star^\top(K+\sigma^2I)^{-1}k_\star.
+\end{align*}
+The independent noise term $\sigma^2$ is added for a fresh observed target \citep{rasmussen2006gp}. The posterior mean is one function summary, not the full posterior. It is a linear combination of kernel evaluations at a query; it need not be a weighted sum of the query's original coordinates.
 
-Readers who want the full treatment should consult the canonical reference (Rasmussen and Williams, 2006). The closest the chapter's own Bayesian-LR machinery comes to GP regression is when the feature map $\phi(x)$ is implicit through a kernel; the closed-form Bayesian linear regression posterior derived earlier in this chapter is the parametric analogue that GPs generalize to function space.
-\end{advancednote}
+A finite-feature Bayesian linear model induces $k(x,x')=\phi(x)^\top S_0\phi(x')$. Other GP kernels specify other function-space assumptions. If $k_\star$ tends to zero along a sequence of increasingly distant queries, the latent posterior mean tends to the prior mean and variance tends to $k(x_\star,x_\star)$. Distance alone does not ensure that condition: periodic or long-range kernels can retain covariance far away. Nor must uncertainty grow monotonically with the nearest observed distance.
 
-\section{Naive Bayes: A Transparent Probabilistic Baseline}
+For one observation $x=0,y=1$, zero prior mean, kernel $k(x,x')=\exp[-(x-x')^2/2]$, and noise variance $1$, the predictive mean and fresh-target variance are
+\[
+\mu_\star=\tfrac12e^{-x_\star^2/2},\qquad
+v_\star=2-\tfrac12e^{-x_\star^2}.
+\]
+At the observed input, these are $0.5$ and $1.5$. Far away they approach $0$ and $2$, respectively. This behavior follows from that fixed kernel and noise model, not a universal detection rule for unfamiliar data. Estimating kernel or noise settings and treating them as fixed omits uncertainty about those settings; non-Gaussian likelihoods generally require additional inference work.
+
+\section{Naive Bayes and Probability Calibration}
 \label{sec:naive-bayes}
 
-\emph{Same team, smaller budget.} Before the course-support team can justify a learned representation or a fine-tuned encoder for triaging messages into ROUTINE / CONCERNING / URGENT, they need a baseline they can defend. Naive Bayes is what they build first: cheap, transparent, and a useful diagnostic in its own right --- if the cheap baseline is already competitive, the team has learned that class-conditional word patterns carry most of the signal and a heavier model has to earn its keep.
-
-Chapter~\ref{ch:structure-beyond-linearity} previewed Naive Bayes as a structural baseline for classification. This section gives the full probabilistic treatment: the formal model, why the ``naive'' assumption works despite being wrong, calibration issues, and when it is the right design choice. Naive Bayes is one of the simplest generative classifiers. Despite its strong assumptions, it often performs surprisingly well and offers a useful probabilistic baseline.
-
-\subsection{The Model}
-
-Naive Bayes models the joint probability $P(X_1, X_2, \ldots, X_d, Y)$ by assuming that all features are \emph{conditionally independent} given the class label:
+Naive Bayes supplies a generative classifier with a simplifying factorization. For class $c$,
 \[
-P(X_1, X_2, \ldots, X_d \mid Y = k) = \prod_{j=1}^{d} P(X_j \mid Y = k).
+p(x\mid Y=c)=\prod_{j=1}^d p(x_j\mid Y=c),
+\qquad
+p(Y=c\mid x)\propto\pi_c\prod_jp(x_j\mid Y=c).
 \]
+The class prior $\pi_c$ matters. Conditional independence concerns relationships within classes and does not generally imply unconditional independence, or follow from it. A misspecified factorization may retain a useful class ordering on some data, but neither accurate ordering nor calibrated probabilities is guaranteed.
 
-That is the ``naive'' assumption: within each class, features are independent. Classification then reduces to
+For Gaussian Naive Bayes, each coordinate has a class-conditional Gaussian distribution, corresponding to a diagonal covariance within each class. Bernoulli Naive Bayes models conditionally independent binary indicators. For text, multinomial Naive Bayes instead models conditionally independent token draws given class and document length; the resulting word counts have a multinomial distribution and are not independent counts. Its class-dependent log score is
 \[
-\hat{y} = \arg\max_k \; P(Y = k) \prod_{j=1}^{d} P(X_j \mid Y = k).
+s_c(x)=\log\pi_c+\sum_j x_j\log\theta_{cj},
 \]
+where $\theta_{cj}$ is the class-specific probability of word $j$. The multinomial coefficient is the same for every class for a fixed document and cancels in classification. This score treats length $N$ as given and uses the declared class prior. If length itself carries class information, a joint model must include $p(N\mid Y=c)$, or a conditional model must use $p(Y=c\mid N)$.
 
-Estimate the prior $P(Y = k)$ from class frequencies and the class-conditional distributions $P(X_j \mid Y = k)$ from the data within each class. For continuous features, a Gaussian is common: $P(X_j \mid Y = k) = \mathcal{N}(\mu_{jk}, \sigma_{jk}^2)$. For text, a multinomial or Bernoulli distribution over word counts or word presence is standard.
+Fit priors, feature distributions, and any smoothing on training data. Zero counts can otherwise make a whole class likelihood zero. Examine the representation and class-conditional assumptions through held-out comparisons rather than assuming that a small factorized model cannot overfit. Feature score contributions describe associations in that model, not effects of changing the feature.
 
-\subsection{Why ``Naive'' Still Works}
+For a simple binary example, let $P(Y=1)=0.2$ and, for both conditionally independent features, $P(X_j=1\mid Y=1)=0.8$ and $P(X_j=1\mid Y=0)=0.1$. With both features equal to one,
+\[
+p(Y=1\mid X_1=X_2=1)=
+\frac{0.2(0.8)^2}{0.2(0.8)^2+0.8(0.1)^2}
+=\frac{16}{17}\approx0.941.
+\]
+If the second feature is an exact copy of the first, observing both is just observing one event. The correct posterior for that copied-feature model is $0.16/(0.16+0.08)=2/3$. Treating the copies as independent doubles the evidence and inflates confidence in this example. Dependence can distort other models differently; overconfidence is not an inevitable direction for every violation.
 
-The conditional independence assumption is almost always violated. Student messages that mention ``deadline'' are more likely to also mention ``extension''---the features are correlated. Yet Naive Bayes still classifies well despite the violation. The reason: classification needs the \emph{ranking} of class probabilities to be right, not the exact values. Even when the absolute probabilities are wrong (because independence distorts them), the highest-probability class can still be correct.
+\subsection{Calibration Is an Evaluation Property}
 
-The broader lesson: a model can be wrong about the joint distribution and still useful for classification. But Naive Bayes probabilities should \emph{not} be trusted as calibrated. They tend toward overconfidence---pushed near 0 or 1---because independence ignores the correlations that would otherwise spread probability mass.
+A score calibrated for the binary target satisfies $P(Y=1\mid S=s)=s$ on the specified population, for relevant score values. This does not imply that it equals the full-information conditional probability $P(Y=1\mid X=x)$ for every input. Reliability diagrams and binned expected calibration error (ECE) estimate aspects of calibration, with dependence on sample size and binning. Neither a small binned ECE nor accuracy at one threshold proves complete calibration.
 
-\begin{warningbox}
-Naive Bayes probabilities are typically poorly calibrated. A Naive Bayes probability of 0.99 does not mean 99\% of such predictions are correct; it often means the model is overconfident. If you need calibrated probabilities (for cost-sensitive decisions or as input to another system), apply Platt scaling or isotonic regression to the Naive Bayes outputs.
-\end{warningbox}
+Post-hoc probability mappings are fitted development choices. A logistic mapping, often called Platt scaling, uses $\sigma(as+b)$ for binary score $s$; isotonic regression fits a nondecreasing mapping, commonly by squared error. Isotonic fits can be flexible but cannot recover distinctions discarded by the score. A logistic fit may alter ordering if its slope is unrestricted; specify any monotonicity constraint. Neither method guarantees calibration outside its fitting population.
 
-\textbf{Two post-hoc calibrators.} \emph{Platt scaling} fits a single-parameter logistic function that maps raw scores to calibrated probabilities, $\hat p = \sigma(a\,s + b)$, where $s$ is the model's score and $a, b$ are fit on a held-out validation set by minimizing log loss. It assumes a sigmoid-shaped relationship between score and probability and works well when that assumption is roughly correct. \emph{Isotonic regression} is non-parametric: it fits the best monotone-non-decreasing step function from score to probability under squared error on the validation set. It is more flexible (it can correct any monotone miscalibration) but needs more validation data to avoid overfitting bin boundaries.
+For multiclass logits $s_c$, temperature scaling uses
+\[
+\hat p_c=\frac{\exp(s_c/T)}{\sum_j\exp(s_j/T)},\qquad T>0,
+\]
+with $T$ fitted on separate development predictions, commonly by log loss \citep{guo2017}. A positive temperature preserves the ordering of classes while changing their probabilities. Calibration data must supply appropriate held-out or out-of-fold scores from the base fitting process; a final protected test evaluates the complete calibrated predictor and decision policy.
 
-\subsection{When to Use Naive Bayes}
-
-\begin{itemize}[leftmargin=*]
-\item \emph{As a baseline.} Naive Bayes trains fast, needs almost no hyperparameter tuning, and sets a lower bound for more complex models. If a neural network barely beats it, the task may be simpler than expected---or the neural network may be poorly configured.
-\item \emph{With small data.} Because each feature is estimated independently, Naive Bayes has very few parameters relative to feature count. It is less prone to overfitting than models that estimate feature interactions, which makes it effective when labels are scarce.
-\item \emph{For text classification.} Multinomial Naive Bayes remains a strong baseline for document classification, spam filtering, and sentiment analysis. Conditional independence is a reasonable approximation for bag-of-words representations.
-\item \emph{For interpretability.} Each feature's contribution to classification can be examined independently---which words raise $P(\text{URGENT})$ most? That transparency is valuable when stakeholders must understand and trust the model.
-\end{itemize}
-
-\begin{example}[Naive Bayes for Course Support Triage]
-The course-support team builds a Naive Bayes classifier as a first baseline. Using a bag-of-words representation, the model learns which words associate with each class. ``Deadline'' has high probability under CONCERNING; ``emergency'' under URGENT; ``quiz'' under ROUTINE. The model reaches 78\% accuracy---not state-of-the-art, but trained in seconds, runs without a GPU, and produces fully interpretable predictions. The team treats it as a baseline: any more complex model must meaningfully exceed 78\% to justify its added complexity and opacity.
-\end{example}
-
-\section{Uncertainty: What the Model Knows It Does Not Know}
+\section{Decomposing Predictive Uncertainty}
 \label{sec:uncertainty}
 
-\emph{Why the running cases need this.} The course-support assistant returns a $0.62$ risk score on a student it has barely ever seen --- a transfer student in a new programme with two early submissions, no quiz history, and a course format the training set did not cover. The pedestrian detector returns the same kind of confident number for a dusk-on-elm-lined-road frame nothing in its training data resembles. Both models report a probability; neither says ``the data I was trained on does not constrain this answer.'' That gap is what the next two definitions name.
+The terms \emph{aleatoric} and \emph{epistemic} distinguish conditional outcome variability from uncertainty about a predictor. Their mathematical versions are relative to an observation set and a probability model. More relevant features can reduce outcome variability conditional on those features. More informative data can constrain an adequate model, yet a misspecified posterior may instead concentrate around an inaccurate prediction. An uncertainty decomposition does not automatically measure all ignorance about the real world.
 
-Uncertainty is not a single concept. Conflating its types leads to poor decisions: collecting more data when the problem is irreducible noise, or trusting a model's confidence when it has never seen similar inputs. This section sharpens the distinction.
+\par\addvspace{12pt plus 3pt minus 1pt}\noindent\begin{minipage}{\linewidth}
+\subsection{Regression: The Law of Total Variance}
 
-\subsection{Aleatoric vs.\ Epistemic Uncertainty}
+Let $p(\theta\mid D)$ be a proper posterior and assume the predictive second moment is finite. Define $m_\theta(x)=\mathbb E[Y_\star\mid x,\theta,D]$ and $v_\theta(x)=\operatorname{Var}(Y_\star\mid x,\theta,D)$. Total variance gives
+\begin{align*}
+\operatorname{Var}(Y_\star\mid x,D)
+&=\mathbb E_{\theta\mid D}[v_\theta(x)]\\
+&\quad+\operatorname{Var}_{\theta\mid D}[m_\theta(x)].
+\end{align*}
+\end{minipage}\par\addvspace{\belowdisplayskip}
+When a fresh target is conditionally independent of development data given $x,\theta$, its conditional mean and variance can omit $D$. The first term averages outcome variation under the conditional likelihood; the second describes variation in conditional means under the parameter posterior. In the stated Bayesian linear model they are $\sigma^2$ and $x^\top S_nx$.
 
-\textbf{Aleatoric uncertainty} (from the Latin \emph{alea}, ``dice'') is inherent randomness in the data-generating process. Even with a perfect model and infinite data, some outcomes cannot be predicted exactly. A coin flip is aleatoric. A student borderline between CONCERNING and ROUTINE may be genuinely ambiguous---the uncertainty lives in the world, not in the model.
+The first term is often called aleatoric and the second epistemic, but these names do not establish correct modeling. An estimated noise term can change as its parameters are learned. More examples of the same input type do not remove genuine remaining outcome randomness. A narrow parameter posterior does not account for every missing feature, wrong likelihood, or unrepresented population.
 
-\textbf{Epistemic uncertainty} (from the Greek \emph{episteme}, ``knowledge'') reflects the model's ignorance: insufficient data, wrong model family, or unseen conditions. A pedestrian detector never trained on nighttime images has high epistemic uncertainty on nighttime inputs. More (or more relevant) data can reduce it.
+\subsection{Classification: Entropy and Model Disagreement}
 
-The distinction matters because the two call for different responses:
+For a finite set of $C$ classes, write $p_\theta(c)=p(Y_\star=c\mid x,\theta,D)$ and $\bar p(c)=\mathbb E_{\theta\mid D}[p_\theta(c)]$. With a proper posterior and convention $0\log0=0$, categorical entropies are finite. The identity is
+\begin{align*}
+H(\bar p)&=\mathbb E_{\theta\mid D}[H(p_\theta)]
++I(Y_\star;\Theta\mid x,D),\\
+I(Y_\star;\Theta\mid x,D)
+&=\mathbb E_{\theta\mid D}
+\left[\operatorname{KL}(p_\theta\|\bar p)\right]\ge0.
+\end{align*}
+Expanding the KL sum yields $H(\bar p)-\mathbb E[H(p_\theta)]$. Expected conditional entropy describes within-model uncertainty; the mutual-information term measures disagreement relevant to the predicted label under the posterior \citep{houlsby2011bald}. It is not a probability that the classifier is wrong or that an input is unfamiliar.
 
-\begin{itemize}[leftmargin=*]
-\item \emph{High aleatoric uncertainty:} the outcome is inherently unpredictable. More data of the same type will not help. Design the system to handle ambiguity---use soft predictions, involve a human, or defer the decision.
-\item \emph{High epistemic uncertainty:} the model has not seen enough relevant examples. More data, especially from the uncertain region, will help. Use active learning: target data collection at regions of high epistemic uncertainty.
-\end{itemize}
+For two equally weighted binary predictors with positive probabilities $0.1$ and $0.9$, the mixture probability is $0.5$. Using natural logarithms, total entropy is $\log2\approx0.693$, average conditional entropy is $H(0.1)\approx0.325$, and the difference is about $0.368$. If both predictors instead give $0.5$, the total entropy is unchanged but the disagreement term is zero. The same predictive distribution can arise from different conditional-model descriptions.
 
-\begin{example}[Uncertainty in Pedestrian Detection]
-A pedestrian detector reports high uncertainty on a nighttime frame. Is this aleatoric or epistemic? If the training set already contained many nighttime frames and the image is genuinely ambiguous (a shadow that might be a pedestrian), the uncertainty is aleatoric---more nighttime data will not resolve it. If the training set contained almost no nighttime frames, the uncertainty is epistemic: the model has never learned what nighttime pedestrians look like, so nighttime data would reduce it. The shuttle team checks and finds that only 3\% of training frames are nighttime. The uncertainty is mostly epistemic. The fix is to collect and label more nighttime footage, not to lower the detection threshold.
-\end{example}
-
-\subsection{Measuring Uncertainty in Practice}
-
-Bayesian linear regression decomposes uncertainty into aleatoric and epistemic parts analytically (Section~\ref{sec:bayesian-reasoning}). Complex models need approximations.
-
-\textbf{Deep ensembles.} Train $M$ copies of the same model with different random initializations (and optionally different data subsets). Each model produces a prediction for a given input. Spread across the ensemble indicates epistemic uncertainty: agreement means the model has seen enough data to be confident; disagreement means it is uncertain. Use the average prediction as the point estimate and the variance as the uncertainty.
-
-\textbf{Monte Carlo dropout.} At prediction time, keep dropout enabled and run the input through the network $M$ times with different random masks. The spread of predictions approximates epistemic uncertainty. This is cheaper than training a full ensemble.
-
-\textbf{Calibration.} As introduced in Chapter~\ref{ch:prediction-loss-decision}, a model is well calibrated when events predicted with probability $p$ occur about a fraction $p$ of the time---across all predictions near $0.9$, roughly $90\%$ should turn out positive. This is a property of the probabilities themselves, distinct from accuracy at any single threshold. Reliability diagrams and the Expected Calibration Error (ECE) measure it. Temperature scaling is a simple post-hoc fix: divide the logits by a scalar temperature $T$ before softmax, with $T$ tuned on validation data.
-
-Deep ensembles are the most reliable uncertainty method in practice but the most expensive (train and store $M$ models). Monte Carlo dropout is cheaper but noisier. Temperature scaling often improves held-out in-distribution calibration, but it does not distinguish aleatoric from epistemic uncertainty and can leave subgroup or out-of-distribution calibration problems unresolved. Start with temperature scaling as a cheap first calibration check, then add ensembles when the application requires detecting out-of-distribution inputs or distinguishing uncertainty types.
-
-\begin{warningbox}
-A confident model is not necessarily a correct one. Neural networks are notoriously overconfident on out-of-distribution inputs, assigning high probability to a class even for inputs nothing like the training data. Confidence must be validated through calibration analysis, not assumed to be meaningful.
-\end{warningbox}
-
-\section{Chapter Artifact: The Uncertainty Audit Card}
-\label{sec:uncertainty-audit}
-
-The chapter artifact is the \emph{uncertainty audit card}: a structured document that records what kinds of uncertainty the model faces, how they are measured, and which decisions depend on the estimates. It complements the data design card from Chapter~\ref{ch:dataset-design} and the evaluation plan from earlier chapters.
-
-\subsection{Uncertainty Audit Card Structure}
-
-\begin{table}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}L{2.8cm}L{7.2cm}@{}}
-\toprule
-Card field & What must be documented \\
-\midrule
-Model type & Generative or discriminative; probabilistic output format (class probabilities, predictive distribution, etc.) \\
-Uncertainty method & How uncertainty is estimated (exact Bayesian posterior, ensemble, MC dropout, temperature scaling, none) \\
-Aleatoric sources & Known sources of inherent randomness in the task (ambiguous labels, noisy measurements, stochastic outcomes) \\
-Epistemic gaps & Known regions where the model has insufficient training data or where the deployment distribution differs from training \\
-Calibration status & Whether the model's confidence has been validated (reliability diagram, ECE score); what calibration method was applied \\
-Out-of-distribution behavior & How the model behaves on inputs unlike the training data; whether OOD detection is in place \\
-Downstream decisions & What decisions depend on the model's uncertainty estimates; what happens if uncertainty is ignored or miscalibrated \\
-Monitoring plan & How uncertainty will be tracked in deployment; what triggers re-calibration or retraining \\
-\bottomrule
-\end{tabular}
-\caption{An uncertainty audit card documents how uncertainty is measured, what its sources are, and what depends on it.}
-\label{tab:uncertainty-audit-card}
-\end{table}
+\begin{tikzpicture}[ml diagram,x=1cm,y=1cm]
+\node[ml label,anchor=east,align=right] at (0,1.1) {both $p=0.5$};
+\node[ml label,anchor=east,align=right] at (0,0) {$p=0.1$ and $0.9$};
+\draw[draw=mlMuted,fill=mlWash] (0.3,0.8) rectangle (5.6,1.4);
+\node[ml label] at (2.95,1.1) {$\mathbb E[H(p_\theta)]$};
+\draw[draw=mlMuted,fill=mlWash] (0.3,-0.3) rectangle (2.7856,0.3);
+\draw[draw=mlAccent,dashed,fill=mlAccent!5] (2.7856,-0.3) rectangle (5.6,0.3);
+\node[ml label] at (1.5428,0) {$\mathbb E[H(p_\theta)]$};
+\node[ml label] at (4.1928,0) {$I(Y;\Theta)$};
+\node[ml label] at (2.95,1.85) {same total predictive entropy: $\log2$};
+\end{tikzpicture}
+\captionof{figure}{Two equal-weight predictor collections give the same binary probability forecast. The solid outlined part is average conditional entropy; the dashed part is the disagreement term. These quantities describe the collections, not a diagnosis of the cause of a real prediction error.}
+\label{fig:uncertainty-entropy-decomposition}
+\end{minipage}\par\addvspace{\intextsep}
 
-\subsection{Filled Example: Pedestrian Detector}
+\subsection{Approximation, Validation, and Data Collection}
 
-\begin{example}[Uncertainty Audit Card for Campus Pedestrian Detector]
+For a finite ensemble with weights $\omega_t\ge0$ summing to one, use the mixture $p(y\mid x)=\sum_t\omega_t p_t(y\mid x)$. The variance and entropy identities hold for this mixture as algebra, even if the members are not posterior samples. Their between-member term measures disagreement within that collection. Deep ensembles can provide useful uncertainty estimates \citep{lakshminarayanan2017ensembles}, but shared data, representation, fitting assumptions, or label errors can make every member confidently wrong.
 
-\textbf{Model type.} Discriminative convolutional neural network. For each region proposal, it outputs class probabilities via softmax over two classes (pedestrian present, pedestrian absent).
+Monte Carlo dropout uses repeated stochastic predictions under the specified dropout procedure. A Bayesian approximation interpretation requires assumptions about the model, prior, training objective, and approximation \citep{gal2016dropout}; arbitrary stochastic variation is not automatically a faithful posterior. Approximate posteriors can also miss modes or understate variation. Evaluate uncertainty quality rather than treating the approximation's name as validation.
 
-\textbf{Uncertainty method.} Deep ensemble of 5 models with different initializations. The prediction is the ensemble mean; uncertainty is the variance across members. Temperature scaling ($T = 1.8$) is applied to each member's logits before averaging.
-
-\textbf{Aleatoric sources.} Partial occlusion---a pedestrian behind a tree may be genuinely ambiguous. Motion blur at dusk reduces image clarity. Some frames contain pedestrian-like objects (mannequins, statues) that are inherently ambiguous without context.
-
-\textbf{Epistemic gaps.} The training data is 72\% daytime, 25\% dusk/dawn, and 3\% nighttime, so nighttime predictions carry high epistemic uncertainty. Coverage is limited to the main campus; satellite parking areas are underrepresented. No training data from snow conditions (the campus rarely has snow, but it does occur).
-
-\textbf{Calibration status.} After temperature scaling, ECE = 0.04 on the validation set (well-calibrated). The reliability diagram shows slight overconfidence in the 0.8--0.9 bin. ECE has not been measured separately for nighttime frames.
-
-\textbf{Out-of-distribution behavior.} Ensemble disagreement rises sharply on nighttime frames and frames with unusual lighting (e.g., emergency vehicle lights). Ensemble variance $> 0.15$ triggers a fallback to conservative braking.
-
-\textbf{Downstream decisions.} The shuttle's autonomous driving system uses detection probability to decide braking intensity. High-confidence detections ($> 0.9$) trigger immediate braking. Medium confidence ($0.5$--$0.9$) triggers slowing plus sensor fusion with lidar. Low confidence ($< 0.5$) with high ensemble disagreement alerts a human driver.
-
-\textbf{Monitoring plan.} Weekly calibration checks on new frames. Monthly review of the ensemble-disagreement distribution. Recalibrate temperature scaling quarterly. Retrain if ECE exceeds 0.08 or nighttime frames exceed 10\% of inference volume.
-
-\end{example}
-
-The uncertainty audit card is not a one-time document. As the deployment environment changes---new lighting conditions, new camera angles, different seasons---the epistemic gaps shift. Review the card whenever the model is retrained or the deployment context shifts.
-
-\section{Common Mistakes in Probabilistic Modeling}
-
-Several mistakes recur when building probabilistic models. First, treating all uncertainty as the same. A single confidence score that does not distinguish aleatoric from epistemic sources leads to poor decisions about when to collect more data and when to accept irreducible noise. Second, trusting uncalibrated probabilities. Neural network softmax outputs are not calibrated by default, and using them as if they were yields overconfident systems. Third, choosing $K$ for a mixture model on aesthetics rather than evidence---rely on information criteria, held-out likelihood, stability checks, and domain constraints. Fourth, assuming that the Naive Bayes independence assumption makes the model useless: the assumption is wrong but often useful, and dismissing it costs a fast, interpretable baseline. Finally, treating EM as a black box. Failing to check convergence, initialization sensitivity, or empty components leads to unreliable clustering.
-
-\section{Looking Ahead}
-
-This chapter treated probability as a modeling commitment rather than a calculation. Latent variables, posteriors, calibration, and the split between aleatoric and epistemic uncertainty are how the model says what it knows and what it does not know.
-
-The next chapter widens the reuse story. If a probabilistic model is one way to encode structure, a learned representation is another: a vector space designed so that downstream tasks become easy on top of it. Chapter~\ref{ch:representation-foundation-models} asks what a representation has to preserve to make the next task simpler, and how to tell whether it has actually done so.
-
-Two later chapters return to the uncertainty thread directly. Chapter~\ref{ch:experiments-claims} asks what counts as evidence for a probabilistic claim; Chapter~\ref{ch:reliability} asks how to design fallback and escalation policies around the uncertainties this chapter taught how to measure.
-
-\begin{chaptersummary}
-\item Probabilistic models reason about distributions, not point predictions. The choice between a generative model of $P(X,Y)$ and a discriminative model of $P(Y\mid X)$ is a choice about what the system must do, not a contest of accuracy.
-\item Latent variables are how a model represents hidden structure. Gaussian mixture models with EM are the canonical example: soft cluster assignments are the latent variables, and the E-step and M-step alternate between inferring them and refitting the components.
-\item EM is iterative coordinate ascent on a lower bound of the log-likelihood. It converges, but to a local optimum; initialization, restarts, and stability checks are part of using it honestly.
-\item Bayesian reasoning treats parameters as random variables. Priors encode prior knowledge, MAP estimation connects regularization to that prior, and the posterior predictive distribution carries both noise (aleatoric) and ignorance (epistemic) forward to the prediction.
-\item Gaussian processes place a kernel-based prior directly on functions and yield predictive variance that grows where data is sparse---with the caveat that fitted hyperparameters and non-Gaussian likelihoods complicate the picture in practice.
-\item Naive Bayes works despite its wrong independence assumption because classification depends on the ranking of class scores, not their absolute calibration. Its probabilities are correspondingly badly calibrated by default.
-\item The aleatoric / epistemic distinction is not a calibration footnote. It tells the team whether more data will help (epistemic) or whether the task itself is irreducibly noisy (aleatoric).
-\item The uncertainty audit card documents which uncertainties the model faces, how each is measured, and which downstream decisions depend on each---and it is meant to be updated as the model is retrained or redeployed.
-\end{chaptersummary}
+For the student task, a forecast on a previously unrepresented course format is a reason to investigate coverage, not proof of high measured epistemic uncertainty. Assess prediction and review performance on the intended later cohorts, examine relevant subgroups, and compare uncertainty scores with errors and review consequences. Confidence alone cannot identify who benefits from outreach. Data collection guided by disagreement may be useful, but must be checked against the learning objective, label availability, and the cost of obtaining information.
 
 \begin{studyquestions}
-\item What is the difference between a generative and a discriminative model?
-\item Why can a generative model sometimes support unfamiliar-input checks more naturally than a plain closed-set discriminative classifier, and what validation would you need before trusting that signal?
-\item What is a latent variable, and why must it be inferred rather than observed?
-\item How does the EM algorithm resolve the chicken-and-egg problem of unknown latent variables and unknown parameters?
-\item In what sense is $k$-means a special case of Gaussian mixture models?
-\item What is the difference between MLE and MAP estimation? How does MAP connect to regularization?
-\item Why does the posterior predictive distribution in Bayesian linear regression have two uncertainty terms?
-\item In a standard Gaussian process with fixed kernel hyperparameters, how does the predictive variance behave as a new input moves away from the training data, and what caveats apply once kernel hyperparameters are fitted to the data?
-\item Why does Naive Bayes classify well despite violating the conditional independence assumption?
-\item Why are Naive Bayes probabilities typically poorly calibrated?
-\item What is the difference between aleatoric and epistemic uncertainty, and why does the distinction matter for data collection?
-\item How do deep ensembles estimate epistemic uncertainty?
-\item What should an uncertainty audit card document, and why should it be updated over time?
+\item How do likelihood, latent posterior, parameter posterior, and predictive distribution differ?
+\item Which distribution must a model specify to predict a target when some inputs are missing?
+\item Why does a GMM responsibility not imply simultaneous membership in real semantic categories?
+\item What objective do the E-step and M-step share, and what does monotonicity leave unproved?
+\item Why can an unconstrained mixture likelihood have no finite maximum?
+\item Under what restrictions does the GMM assignment-and-mean update approach k-means?
+\item Why do MAP, posterior mean, and predictive decisions need not coincide?
+\item Why does a predictive interval for a fresh regression outcome differ from uncertainty about its conditional mean?
+\item What property of a GP kernel makes far-away variance approach its prior value?
+\item How can copied Naive Bayes features distort a posterior calculation?
+\item How do classification entropy and its disagreement term differ from calibration?
+\item Why can an ensemble agree and still be wrong on a new population?
 \end{studyquestions}
 
 \begin{exercises}
-\item \exercisetag{Calculation}{Core}Compute one responsibility by hand. Take a two-component 1D mixture with $\pi_1=0.4$, $\pi_2=0.6$, $\mu_1=0$, $\mu_2=5$, $\sigma_1^2=1$, $\sigma_2^2=1$. For the point $x=2$, compute $\gamma_{x,1} = P(z=1 \mid x)$ using the responsibility formula. Show the numerator, the normalizer, and the final probability. Then repeat for $x=4$ and explain why the two answers differ.
-\item \exercisetag{Implementation}{Advanced}Fit a Gaussian mixture model with $K=2$ to a two-dimensional dataset of your choice. Visualize the data, the fitted Gaussian components (means and covariance ellipses), and the soft assignments. Run EM from three different initializations and compare the results.
-\item \exercisetag{Calculation}{Intermediate}Implement one iteration of the EM algorithm by hand for a simple 1D dataset with two Gaussian components. Start with initial guesses for the means and variances, compute the E-step (soft assignments), and then the M-step (updated parameters). Show all intermediate values.
-\item \exercisetag{Implementation}{Intermediate}Train a Naive Bayes classifier on a text classification dataset (e.g., 20 Newsgroups or a sentiment dataset). Report accuracy and compare to a logistic regression baseline. Examine the top-10 most informative features for each class.
-\item \exercisetag{Implementation}{Intermediate}For the Naive Bayes model from the previous exercise, plot a reliability diagram and compute the Expected Calibration Error. Apply Platt scaling (for the binary setting) or isotonic regression to the Naive Bayes outputs and report the change in ECE. Explain why temperature scaling, which rescales logits in a softmax model, is not the natural post-hoc fix for Naive Bayes.
-\item \exercisetag{Implementation}{Advanced}Using Bayesian linear regression on a dataset with one input feature, plot the posterior predictive distribution: show the mean prediction and the uncertainty band. Observe how the band widens in regions with sparse training data.
-\item \exercisetag{Diagnosis}{Intermediate}Compare the predictions of a single neural network to a deep ensemble of 5 networks on a regression task. Identify inputs where the ensemble members disagree most and explain whether the uncertainty is likely aleatoric or epistemic.
+\item \exercisetag{Calculation}{Core}For binary error costs $C_{FP}=1$, $C_{FN}=9$, find the action threshold and expected costs at event probabilities $0.05$ and $0.20$. Explain why this is not a complete policy for five adviser reviews or a measure of outreach benefit.
+\item \exercisetag{Calculation}{Core}For a one-dimensional mixture with weights $0.4,0.6$, means $0,5$, and both variances $1$, compute the first-component responsibility at $x=2$ and $x=4$. Show weighted density numerators and normalizers.
+\item \exercisetag{Calculation}{Intermediate}For observations $0,2,8$, an E-step supplies component-1 responsibilities $(0.90,0.80,0.05)$ and complementary component-2 responsibilities. Calculate both effective counts and one M-step: mixing weights, means, and variances. Explain why the initial means alone would not determine these responsibilities.
+\item \exercisetag{Calculation}{Intermediate}For a full-covariance GMM with $d=2$, compute the nominal parameter counts for $K=2$ and $K=3$. With $n=100$ and fitted log-likelihoods $-200$ and $-190$, compute AIC and BIC. State their preferred fits and why ordinary asymptotic claims need caution for mixtures.
+\item \exercisetag{Calculation}{Core}Use eight Bernoulli successes and two failures with a $\mathrm{Beta}(2,2)$ prior. Find the posterior, MLE, posterior mode, posterior mean, and next-trial predictive success probability. State the conditional independence assumption for that trial and explain why marginal independence need not hold.
+\item \exercisetag{Calculation}{Intermediate}For $Y=wx+\varepsilon$, take prior $w\sim\mathcal N(0,1)$, independent unit-variance Gaussian noise, and observations $(-1,-1),(1,1)$. Derive posterior mean and variance of $w$, then predictive means and variances at $x_\star=0,1,3$. Separate mean-function variance from fresh-target variance.
+\item \exercisetag{Calculation}{Intermediate}In the one-observation GP example, compute predictive mean, latent-function variance, and fresh-target variance at $x_\star=0$ and $x_\star=2$. Explain which kernel assumption produces the far-away limit.
+\item \exercisetag{Calculation}{Core}Compute the two-feature Naive Bayes posterior in the chapter, then repeat when the second feature is a copy of the first. Explain why the evidence differs.
+\item \exercisetag{Calculation}{Intermediate}Two equally weighted regression members have means $0,2$ and conditional variances $1,1$. Compute mixture mean, within-member variance, between-member variance, and total variance. What does this calculation leave uncertain about model adequacy?
+\item \exercisetag{Calculation}{Intermediate}For equal-weight binary members with probabilities $0.1,0.9$, compute total entropy, average conditional entropy, and the disagreement term in nats. Repeat for members $0.5,0.5$. Explain why neither decomposition alone diagnoses a population shift.
+\item \exercisetag{Calculation}{Core}For equal-size forecast bins with mean probabilities $0.2,0.8$ and observed positive frequencies $0.3,0.6$, compute binned ECE. State two limitations of that number and a protected way to fit a post-hoc calibrator.
+\item \exercisetag{Design}{Intermediate}A student-course forecast is confident on a new course format and turns out wrong. Propose evidence to investigate measurement problems, remaining outcome variation, and inadequate model or population coverage. Explain why one error does not identify its uncertainty source.
 \end{exercises}
 
+\par\noindent\begin{minipage}{\linewidth}
 \begin{challengeexercises}
-\item \exercisetag{Design}{Advanced}A team deploys a student-support classifier that reports 95\% confidence on a message from a graduate student (the model was trained only on undergraduate messages). The prediction turns out to be wrong. Was the uncertainty aleatoric or epistemic? What changes to the model or the uncertainty estimation would have caught this?
-\item \exercisetag{Proof}{Advanced}Prove that the EM algorithm never decreases the log-likelihood. (Hint: use Jensen's inequality applied to the log of a weighted sum.)
-\item \exercisetag{Diagnosis}{Advanced}A GMM with $K=3$ fits a dataset well (high log-likelihood, low BIC), but domain experts insist there should be 5 clusters. Design an experiment to determine whether the discrepancy reflects genuine cluster overlap, insufficient data, or a mismatch between the Gaussian assumption and the true cluster shapes.
-\item \exercisetag{Design}{Advanced}Design an uncertainty-aware decision system for the course-support assistant: specify what prediction confidence levels trigger automatic routing, human review, or escalation to a supervisor. Justify each threshold using the aleatoric/epistemic distinction.
+\item \exercisetag{Proof}{Advanced}Derive the EM lower-bound identity and monotonicity chain. State the support, finiteness, exact-inference, and M-step assumptions. Explain why covariance collapse and poor held-out prediction are compatible with increasing likelihood.
+\item \exercisetag{Proof}{Advanced}For the density $p(\theta)=\theta e^{-\theta}$ on $\theta>0$, verify normalization, mean, and mode. Transform to $u=\log\theta$ and find its mode. Explain why this does not describe a change in the underlying posterior probability measure.
+\item \exercisetag{Proof}{Advanced}Derive the regression total-variance identity and the finite-class entropy/KL identity. State the required posterior and moment assumptions, then explain why they also hold for a finite predictor mixture without proving that its members are Bayesian posterior samples.
+\item \exercisetag{Design}{Advanced}Domain experts expect five message categories while constrained GMM comparisons favor three components. Design an investigation of representation, component overlap, stability, and category evidence. Separate density approximation from a supervised taxonomy and from intervention benefit.
+\item \exercisetag{Design}{Advanced}Design a probability-based five-review policy for the week-2 deadline task, with a development calibration procedure and protected later-cohort evaluation. Specify tie handling and one evidence-based response to unfamiliar inputs; justify decisions by costs and capacity rather than arbitrary confidence bands.
 \end{challengeexercises}
+\end{minipage}
+\clearpage
+\begingroup\pagestyle{empty}\cleardoublepage\endgroup
+\endgroup

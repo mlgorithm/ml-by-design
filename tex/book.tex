@@ -6,7 +6,6 @@
 \usepackage{amsthm}
 \usepackage{mathpazo}          % Palatino text + matching math
 \usepackage[scaled=0.85]{helvet}  % Helvetica for sans-serif (headers, boxes)
-\usepackage{courier}           % Courier for monospace (code listings)
 \linespread{1.05}              % Palatino reads best with slightly opened leading
 % Springer Royal Octavo trim — 155 × 235 mm
 % Inner (gutter) margin wider to account for hardcover binding
@@ -23,16 +22,37 @@
 \usepackage{array}
 \usepackage{xcolor}
 \usepackage{booktabs}
+\usepackage{longtable}
 \usepackage[font=small,labelfont=bf]{caption}
 \usepackage{graphicx}
 \usepackage{tikz}
 \usepackage[most]{tcolorbox}
-\usepackage{listings}
 \usepackage[round,authoryear,sort&compress]{natbib}
 \PassOptionsToPackage{hyphens}{url}   % allow long URLs to break at hyphens
 \usepackage[hidelinks,plainpages=false,pdfpagelabels,pdfdisplaydoctitle=true]{hyperref}
 
 \usetikzlibrary{arrows.meta,backgrounds,decorations.pathmorphing,fit,matrix,patterns,positioning,shapes.geometric}
+
+% Chapter figures: a restrained palette and consistent visual vocabulary.
+\definecolor{mlAccent}{HTML}{356779}
+\definecolor{mlInk}{HTML}{25343B}
+\definecolor{mlMuted}{HTML}{61717A}
+\definecolor{mlLine}{HTML}{BAC5CB}
+\definecolor{mlWash}{HTML}{F1F5F6}
+\definecolor{mlAlert}{HTML}{8A6846}
+\tikzset{
+  ml diagram/.style={font=\sffamily\small, text=mlInk,
+    line cap=round, line join=round},
+  ml box/.style={draw=mlLine, fill=white, line width=0.6pt,
+    rounded corners=2pt, align=center, inner sep=5pt},
+  ml key box/.style={ml box, draw=mlAccent, fill=mlAccent!5},
+  ml arrow/.style={-{Latex[length=1.8mm]}, draw=mlMuted, line width=0.7pt},
+  ml feedback/.style={ml arrow, dashed},
+  ml label/.style={font=\sffamily\footnotesize, text=mlMuted},
+  ml axis/.style={-{Latex[length=1.5mm]}, draw=mlMuted, line width=0.5pt},
+  ml curve/.style={draw=mlAccent, line width=1pt},
+  ml reference/.style={draw=mlMuted, line width=0.7pt, dashed}
+}
 
 % ── Chapter and section heading styles ───────────────────────────────────
 \usepackage{titlesec}
@@ -107,33 +127,11 @@
 \renewcommand{\arraystretch}{1.08}
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 
-\definecolor{codebg}{RGB}{247,247,247}
-\definecolor{codecomment}{RGB}{90,90,90}
-\definecolor{codekeyword}{RGB}{0,92,175}
-\definecolor{codestring}{RGB}{163,21,21}
-
 \theoremstyle{plain}
 \newtheorem{theorem}{Theorem}[chapter]
 \theoremstyle{definition}
 \newtheorem{definition}{Definition}[chapter]
 \newtheorem{example}{Example}[chapter]
-
-\lstdefinestyle{bookpython}{
-  language=Python,
-  basicstyle=\ttfamily\small,
-  keywordstyle=\color{codekeyword}\bfseries,
-  commentstyle=\color{codecomment}\itshape,
-  stringstyle=\color{codestring},
-  showstringspaces=false,
-  breaklines=true,
-  frame=single,
-  backgroundcolor=\color{codebg},
-  columns=fullflexible
-}
-
-\lstnewenvironment{codeexample}[1][]
-  {\lstset{style=bookpython,#1}}
-  {}
 
 \newenvironment{learninggoals}
   {\section*{Learning Goals}\begin{itemize}[leftmargin=*]}
@@ -143,19 +141,15 @@
   {\section*{Study Questions}\begin{enumerate}[leftmargin=*,label=\arabic*.]}
   {\end{enumerate}}
 
-\newenvironment{chaptersummary}
-  {\section*{Chapter Summary}\begin{itemize}[leftmargin=*]}
-  {\end{itemize}}
-
 \newcommand{\exercisetag}[2]{\textbf{[#1; #2] }}
 
-\newenvironment{exercises}
-  {\section*{Exercises}%
-   \noindent\emph{Exercise ladder.} Each item begins with a type and difficulty tag:
-   Concept, Calculation, Implementation, Diagnosis, Design, Proof, or Research;
+\newenvironment{exercises}[1][\emph{Exercise ladder.} Each item begins with a type and difficulty tag:
+   Concept, Calculation, Diagnosis, Design, Proof, or Research;
    Core, Intermediate, or Advanced. The first items usually check concepts or small
-   calculations; later items move into implementation, diagnosis, or design. Use the
-   challenge exercises for open-ended transfer.\par\smallskip
+   calculations; later items develop derivations, diagnosis, or design. Use the
+   challenge exercises for open-ended transfer.]
+  {\section*{Exercises}%
+   \noindent#1\par\smallskip
    \begin{enumerate}[leftmargin=*,label=\arabic*.]}
   {\end{enumerate}}
 
@@ -196,7 +190,6 @@
 }
 
 % ── Blue family (conceptual / analytical) ─────────────────────────────────
-\newtcolorbox{mathlens}{mlbox=boxBlue, before upper={\textbf{Math Lens.}\ }}
 \newtcolorbox{thinkingtool}{mlbox=boxBlue, before upper={\textbf{Problem-Solving Technique.}\ }}
 \newtcolorbox{problemsolvinglens}{mlbox=boxBlue, before upper={\textbf{Problem-Solving Lens.}\ }}
 \newtcolorbox{complexitylens}{mlbox=boxBlue, before upper={\textbf{Complexity Lens.}\ }}
@@ -204,33 +197,18 @@
 \newtcolorbox{claimdefense}{mlbox=boxBlue, before upper={\textbf{Claim Defense.}\ }}
 \newtcolorbox{whychaptermatters}{mlbox=boxBlue, before upper={\textbf{Why This Part Matters.}\ }}
 
-% ── Amber family (warnings / failures) ────────────────────────────────────
-% All amber boxes render as one visual family with a single "Warning." prefix.
-% warningbox / failurebox / failurepattern: free-form callouts.
-% mistakebox keeps its itemize wrapper for bulleted checklists.
-\newtcolorbox{warningbox}{mlbox=boxAmber, before upper={\textbf{Warning.}\ }}
-\newtcolorbox{failurebox}{mlbox=boxAmber, before upper={\textbf{Warning.}\ }}
-\newtcolorbox{failurepattern}{mlbox=boxAmber, before upper={\textbf{Warning.}\ }}
-
-\newenvironment{mistakebox}
-  {\begin{tcolorbox}[mlbox=boxAmber, before upper={\textbf{Warning.}}]\begin{itemize}[leftmargin=*]}
-  {\end{itemize}\end{tcolorbox}}
-
 % ── Green family (practical / decisions) ──────────────────────────────────
 \newtcolorbox{practicalnote}{mlbox=boxGreen, before upper={\textbf{Practical Note.}\ }}
 \newtcolorbox{decisionbox}{mlbox=boxGreen, before upper={\textbf{Decision Box.}\ }}
 \newtcolorbox{evidencebox}{mlbox=boxGreen, before upper={\textbf{Evidence Box.}\ }}
 \newtcolorbox{prereqbridge}{mlbox=boxGreen, before upper={\textbf{Prerequisite Bridge.}\ }}
 
-% ── Gray family (advanced / supplementary) ────────────────────────────────
-\newtcolorbox{advancednote}{mlbox=boxGray, before upper={\textbf{Advanced Note.}\ }}
-
 % ── Challenge exercises (unchanged) ───────────────────────────────────────
-\newenvironment{challengeexercises}
-  {\section*{Challenge Exercises}%
-   \noindent\emph{Challenge exercises are transfer tasks.} The tags mark the main
+\newenvironment{challengeexercises}[1][\emph{Challenge exercises are transfer tasks.} The tags mark the main
    kind of work expected. Expect to make assumptions explicit, choose evidence, and
-   defend a design choice rather than produce only one numeric answer.\par\smallskip
+   defend a design choice rather than produce only one numeric answer.]
+  {\section*{Challenge Exercises}%
+   \noindent#1\par\smallskip
    \begin{enumerate}[leftmargin=*,label=\arabic*.]}
   {\end{enumerate}}
 
@@ -266,6 +244,8 @@
 \input{frontmatter/citation}
 \input{frontmatter/preface}
 \tableofcontents
+\clearpage
+{\pagestyle{empty}\cleardoublepage}
 
 \mainmatter
 \part*{Mathematical Bridge: Just-in-Time Review}

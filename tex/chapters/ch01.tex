@@ -1,33 +1,27 @@
+\begingroup
+\raggedbottom
 \chapter{Framing Learning Problems}
 \label{ch:framing-learning-problems}
 
-Many AI projects begin with an ambition that sounds sensible but stays too vague for technical work. ``Use AI for student success.'' ``Detect bad content.'' ``Find fake news.'' These are not learning problems. They are institutional intentions. A team that builds from that level of abstraction tends to produce a system whose outputs look mathematically polished but remain practically confused.
+Machine learning uses observations to choose or adapt a model. The model may predict an outcome, describe structure in data, or guide a sequence of actions. Learning requires choices about what is observed, what feedback is available, and what counts as useful behavior. A rule can fit the observations used to construct it and still perform poorly on new cases.
 
-This chapter turns such ambitions into defensible learning problems. The first task is not to choose a model. It is to specify the user, the action, the proxy target, the acceptable inputs, and the evidence that could later justify the claim. By the end of the chapter, you should be able to write a concise \emph{framing memo}: a short statement of the task, the decision context, the inputs, and the standard of evidence that makes later modeling work worth doing.
+These choices begin before fitting. Recognizing a pedestrian, estimating an animal count, and predicting a missed assignment require different measurements and different definitions of success. A precise learning problem specifies what is to be learned, how the available evidence is represented, and what will count as a useful result.
 
-\section{Problem-Solving Technique: Decision-First Framing}
+\section{Choosing a Target and a Time Horizon}
 
-Before choosing a model, ask what decision is being supported, what measurable target can stand in for that decision, what data will make the task visible, what form of the input the model will actually receive, and how the later claim will be judged.
+Suppose a university asks: \emph{Can we identify students who may need help early?} The concern is understandable, but ``predict weak students'' does not define a learning task. It leaves the outcome, prediction date, and intended response unspecified. Missing an assignment, failing a course, and benefiting from tutoring are different events.
 
-\textbf{Decision-first framing.} State the action, the constraint, and the cost of mistakes before selecting a candidate model. A model becomes meaningful only inside that decision context.
+Consider one illustrative task. At the end of week 2, an adviser reviews students in a course. Two required assignments have deadlines in weeks 3 and 4. The model estimates whether each student will miss at least one of those deadlines, using only information already available when the review begins. The response is an invitation to a check-in, subject to human review and a limited number of available appointments.
 
-A simple workflow is enough to start: write the decision, name the user, choose a proxy target, list acceptable and excluded inputs, and draft a memo that makes the action and review path explicit---that is, who interprets the output before any action is taken. If that sequence feels fuzzy, the problem is not ready for model choice.
-
-\section{Opening Dilemma: A Messy Real Problem}
-
-Suppose a university asks: \emph{Can we identify students who may need help early?} That sounds like a sensible use of AI. But it is not precise enough to support technical work---the goal has not yet been translated into a usable specification.
-
-The first weak version of the request is usually ``predict weak students.'' That phrase hides nearly every important technical and ethical decision. Who is the user? What action will follow? What counts as ``weak''---missed deadlines, low quiz scores, course failure, or platform disengagement? Which inputs are acceptable, and which would be inappropriate or unavailable at prediction time? What is the most harmful mistake: missing a student who needs help, or bothering a student who does not?
-
-The educational point is already visible. The opening task is not to choose a model. It is to turn an institutional concern into a problem that can be specified, evaluated, and defended.
-
-If the problem statement stays vague here, later mathematical sophistication will conceal the confusion rather than resolve it.
-
-Keep one broader institutional setting in view from the start of the book: a course-support organization trying to help students earlier and more reliably. In Chapter 1, that setting appears as early-outreach risk scoring. Later it widens into message routing, policy retrieval, grounded answering, and escalation. The workflow changes; the framing discipline does not.
-
-The second running case---a pedestrian detector for a campus shuttle---appears fully in Chapter~\ref{ch:vision}. It needs the same framing discipline as the course-support assistant: What counts as a pedestrian? At what distance? Under what lighting? The vision-specific constraints are deferred, but the framing questions are identical. Keep this case in mind as a preview of how problem framing generalizes beyond text and tabular data.
-
-Before developing the full protocol, it is worth seeing what a rough first-pass framing memo already looks like.
+Let $t_0$ be the end of week 2 and $t_1$ the end of week 4. Each case is a student--course pair. Its input $x_i=x_i(t_0)$ contains measurements available by $t_0$; its binary target is
+\[
+y_i=
+\begin{cases}
+1, & \text{at least one specified deadline is missed},\\
+0, & \text{both assignments are submitted on time}.
+\end{cases}
+\]
+For cases whose applicable deadlines fall within this window, the target is determined after those deadlines, by $t_1$. Historical cohorts supply training cases by reconstructing their inputs at the same relative cutoff and observing their later outcomes. The predictor must not receive those later outcomes as inputs.
 
 \begin{table}[t]
 \centering
@@ -35,168 +29,106 @@ Before developing the full protocol, it is worth seeing what a rough first-pass 
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{L{3.06cm}L{7.17cm}}
 \toprule
-Field & Rough first-pass entry for the opening dilemma \\
+Part of the task & Student-support specification \\
 \midrule
-Decision and user & Adviser or instructor decides whether to invite a student to a check-in or tutoring conversation \\
-Proxy target & Risk of missing the first two major deadlines or failing to submit early core work rather than a vague idea such as ``weak student'' \\
-Acceptable inputs & Early quizzes, assignment submissions, attendance, and learning-platform activity related to the course \\
-Costliest mistake & Missing a student who needed timely human support \\
-Downstream action & Outreach and support, not punishment or automated judgment \\
-Review path & A human adviser interprets the score in context \\
+Case & One student in one course \\
+Prediction cutoff $t_0$ & End of week 2, before either specified deadline \\
+Outcome horizon $t_1$ & End of week 4, after both specified deadlines \\
+Measured target & At least one of the two assignments is not submitted on time \\
+Available evidence & Earlier quiz results, submissions, and course-platform records available by $t_0$ \\
+Decision & Adviser reviews selected cases before offering a check-in \\
 \bottomrule
 \end{tabular}
-\caption{A rough memo is better than a vague ambition. The chapter will refine this into a fuller framing artifact later, but students should see the target shape early.}
+\caption{The prediction cutoff and outcome horizon have different roles: inputs are available at the first, while the future target becomes observable by the second.}
 \label{tab:rough-framing-memo}
 \end{table}
 
-This table is intentionally incomplete. Its job is to make the chapter's destination visible early. The fuller memo later in the chapter adds excluded inputs, an evaluation preview, and cleaner justification for the task. Read the rest of Chapter 1 as the work needed to justify each row.
+A labeling guide must define ``on time,'' including approved extensions and incomplete records. If an applicable deadline moves beyond $t_1$, extend the horizon or mark the outcome unresolved at that horizon. An unknown outcome should not silently become a negative label. The time window also determines whether there is enough opportunity to act before the predicted event.
 
-The argument develops by making each hidden design choice explicit: first the decision, then the proxy target, then the evidence, and only then the model.
+Missing a deadline is a \emph{proxy target}: a measurable event used to support a broader goal. It is neither a complete measure of needing help nor evidence that a particular invitation will help. A student may submit both assignments while struggling, or miss one and recover without assistance. Predictive accuracy and the benefit of outreach require different evidence.
 
-Once the problem is framed at this level, only a small amount of field orientation is needed. The next step is not a survey of AI as a whole. It is a clearer view of where machine learning sits inside that larger landscape and why it is the right focus for the rest of the chapter.
+The same reasoning applies elsewhere. A pedestrian detector needs a definition of the object, the relevant distance, and the conditions of observation. A spam filter needs a definition of unwanted mail and a policy for acting on uncertain predictions. The mathematical model cannot resolve an undefined target.
 
-\section{Brief Orientation: Where Machine Learning Fits}
+\section{What Is Learned?}
 
-Artificial intelligence is a broad label that covers search, planning, reasoning, robotics, knowledge representation, and machine learning. This book focuses on machine learning because it provides the dominant framework for modern AI systems in vision, language, speech, recommendation, forecasting, and many decision-support applications. Machine learning is the part of AI that improves performance through data or experience rather than through hand-written rules. Sometimes that experience arrives with labels (desired outputs attached to examples); sometimes it arrives as rewards, raw data, or targets created from the data itself. The common structure is the same: define a set of candidate models, then use data to select or adapt one that behaves usefully. The distinction matters only to orient the scope; the chapter's real work is problem framing, not field taxonomy.
+For supervised learning, a collection of labeled observations is written
+\[
+\mathcal{D}=\{(x_i,y_i)\}_{i=1}^{n}.
+\]
+Here $n$ is the number of cases, $x_i$ is the representation of case $i$, and $y_i$ is its measured target. A predictor $f_\theta$ maps an input to an output; $\theta$ denotes the part of the model chosen through learning. Depending on the task, the output may be a number, a class, a vector of probabilities, or a structured object.
+
+The notation separates two choices. Defining $x_i$ and $y_i$ specifies the task. Fitting $\theta$ selects a rule for that task. A different deadline window or label rule changes the problem even if the model family stays the same.
+
+\subsection{Machine Learning Within AI}
+
+Artificial intelligence includes search, planning, reasoning, robotics, knowledge representation, and learning. Machine learning uses data or experience to select or adapt behavior. A fixed alert rule such as ``flag every student who has already missed two assignments'' can operate without learning; a predictor fitted to earlier cohorts estimates a future event from examples. Real systems often combine both approaches.
+
+Deep learning is a family of machine-learning methods that learns composed representations through multiple processing layers \citep{goodfellow2016}. Dataset size does not define the category, and deep models can still use hand-designed inputs. A model's complexity says little by itself about whether the task or evidence is appropriate.
 
 \begin{figure}[t]
 \centering
-\definecolor{c1aiBg}{RGB}{235,242,253}
-\definecolor{c1mlBg}{RGB}{189,212,240}
-\definecolor{c1dlBg}{RGB}{56,103,170}
-\definecolor{c1aiLine}{RGB}{56,103,170}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small]
-%% ── Outer AI zone ────────────────────────────────────────────────────────
-\draw[rounded corners=8pt, fill=c1aiBg, draw=c1aiLine!45, line width=1pt]
-    (0,0) rectangle (13.0,6.0);
-%% ── Middle ML zone ───────────────────────────────────────────────────────
-\draw[rounded corners=6pt, fill=c1mlBg, draw=c1aiLine!65, line width=1pt]
-    (0.6,0.5) rectangle (9.8,5.2);
-%% ── Inner DL zone ────────────────────────────────────────────────────────
-\draw[rounded corners=4pt, fill=c1dlBg, draw=c1aiLine, line width=1.2pt]
-    (1.2,1.0) rectangle (5.8,4.0);
-%% ── Zone labels ──────────────────────────────────────────────────────────
-\node[anchor=north west, font=\small\bfseries, text=c1aiLine!55!black]
-    at (0.25,5.82) {Artificial Intelligence};
-\node[anchor=north west, font=\small\bfseries, text=c1aiLine!80!black]
-    at (0.85,5.0) {Machine Learning};
-\node[anchor=north west, font=\small\bfseries, text=white]
-    at (1.5,3.8) {Deep Learning};
-%% ── DL examples ──────────────────────────────────────────────────────────
-\node[align=center, text width=2.6cm, font=\footnotesize, text=white]
-    at (3.5,2.2) {vision nets\\[3pt]language nets\\[3pt]multilayer nets};
-%% ── ML-only examples ─────────────────────────────────────────────────────
-\node[align=center, text width=2.2cm, font=\footnotesize, text=c1aiLine!80!black]
-    at (7.8,2.5) {decision trees\\[3pt]linear models\\[3pt]clustering};
-%% ── AI-only examples ─────────────────────────────────────────────────────
-\node[align=center, text width=2.3cm, font=\footnotesize, text=c1aiLine!55!black]
-    at (11.3,3.0) {planning\\[3pt]search\\[3pt]rule systems};
-\end{tikzpicture}%
-}
-\caption{Deep learning is a subset of machine learning, and machine learning is a subset of the broader AI field.}
+\begin{tikzpicture}[ml diagram]
+\draw[ml box, fill=mlWash] (0,0) rectangle (10.2,4.0);
+\node[anchor=west, font=\sffamily\small\bfseries] at (0.35,3.55) {Artificial intelligence};
+\draw[ml box] (0.35,0.35) rectangle (7.05,3.0);
+\node[anchor=west, font=\sffamily\small\bfseries] at (0.65,2.6) {Machine learning};
+\draw[ml key box] (0.65,0.65) rectangle (3.8,2.1);
+\node[font=\sffamily\small\bfseries] at (2.2,1.65) {Deep learning};
+\node[ml label, align=center] at (2.2,1.05) {multilayer neural networks};
+\node[ml label, align=center] at (5.35,1.35) {linear models\\trees and clustering};
+\node[ml label, align=center] at (8.6,1.9) {search\\planning\\rule systems};
+\end{tikzpicture}
+\caption{Deep learning is part of machine learning, which is part of AI. The other examples are illustrative: search and planning can also use learned components.}
 \label{fig:ai-ml-dl}
 \end{figure}
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.23cm}L{3.82cm}L{3.9cm}}
-\toprule
-System style & Where the behavior mostly comes from & Typical Chapter 1 example \\
-\midrule
-Rule-based system & Hand-written rules, search, or symbolic logic designed in advance & A student-support system that fires fixed alerts when two assignments are missed \\
-Machine learning system & A model fitted from examples, often using hand-designed summaries of the input & A spam detector trained on labeled email using counts of which words appear \\
-Deep learning system & A multi-layer model that learns internal features from large data rather than relying mostly on hand-designed ones & A neural vision model for counting objects from aerial images \\
-\bottomrule
-\end{tabular}
-\caption{The boundary is not absolute, because real systems often combine learned components with rules and search. The table is meant only to orient the reader before the framing method begins.}
-\label{tab:ai-ml-dl-contrast}
-\end{table}
+\subsection{Learning Settings and Feedback}
 
-A small amount of notation helps clarify what is being learned. Suppose each example consists of an input $x$ and a desired output $y$, often called a label. A dataset can be written as
-\[
-\mathcal{D} = \{(x_1, y_1), (x_2, y_2), \ldots, (x_n, y_n)\}.
-\]
-The model is a function $f_\theta$ with parameters $\theta$, the adjustable numbers that training will tune, and its prediction for an input $x$ is
-\[
-\hat{y} = f_\theta(x).
-\]
+Supervised learning uses externally supplied targets such as recorded outcomes or human annotations. Unsupervised learning seeks structure without those task labels, for example clusters or a compact representation. Self-supervised learning constructs prediction targets from the observations themselves: a masked word can become a target for the surrounding text. It uses supervised-style prediction losses without requiring a person to label each example.
 
-At this stage, read the notation informally: $x$ is the input, $y$ is the desired output, $\theta$ is the adjustable part of the model, and $\hat{y}$ is the model's prediction.
-
-That notation is enough for now. Chapter 1 is not about manipulating formulas. It is about deciding what the symbols should refer to in the first place. Even this small bit of notation lets us state a central distinction: predicting $\hat{y}$ from $x$ is not the same as deciding what to do with $\hat{y}$.
-
-\section{Prediction Is Not the Decision}
-
-The book's first major distinction is simple and easy to forget: a prediction is not the same as a decision.
-
-Spam filtering is a clean contrast case. Public resources such as the Enron Corpus and the Apache SpamAssassin project make it concrete rather than hypothetical \citep{klimt2004,spamassassin}. A model might output a score---say, an estimated probability $P(y=1 \mid x)$, the model's estimated chance that a message is spam given the email $x$. But the product still has to decide what action follows. One cutoff (or threshold) might trigger a warning. A higher one might quarantine the message. The same underlying score can support several different policies.
-
-The same distinction returns to the student-support opening. A risk score might trigger an adviser review, a tutoring invitation, or no action at all. These are different policies built on the same predictive output.
+Reinforcement learning uses rewards to learn a policy, a rule for choosing actions. The aim is to improve accumulated reward over time, which may require actions whose immediate reward is small. Online reinforcement learning collects new experience through environment interaction; offline reinforcement learning trains on previously collected interaction data without additional online collection. These settings differ in how evidence is obtained, not in whether outcomes matter.
 
 \begin{figure}[t]
 \centering
-\definecolor{c1zoneg}{RGB}{210,238,220}
-\definecolor{c1zonea}{RGB}{254,242,214}
-\definecolor{c1zoner}{RGB}{254,216,216}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small]
-%% ── Colored zone backgrounds ─────────────────────────────────────────────
-\fill[c1zoneg] (0,-0.7) rectangle (4,2.4);
-\fill[c1zonea] (4,-0.7) rectangle (9,2.4);
-\fill[c1zoner] (9,-0.7) rectangle (11,2.4);
-%% ── Zone dividers ────────────────────────────────────────────────────────
-\draw[gray!25, line width=0.6pt] (4,-0.7) -- (4,2.4);
-\draw[gray!25, line width=0.6pt] (9,-0.7) -- (9,2.4);
-%% ── Axis ─────────────────────────────────────────────────────────────────
-\draw[->, thick] (-0.2,0) -- (11.4,0)
-    node[right, font=\footnotesize] {Predicted spam probability};
-\foreach \x/\lbl in {0/0, 2/0.2, 4/0.4, 6/0.6, 8/0.8, 10/1.0}
-    \draw (\x,0.12) -- (\x,-0.12) node[below=3pt, font=\footnotesize] {\lbl};
-%% ── Threshold lines ──────────────────────────────────────────────────────
-\draw[dashed, gray!55, line width=1pt] (4,0) -- (4,2.2);
-\draw[dashed, gray!55, line width=1pt] (9,0) -- (9,2.2);
-\node[above, font=\footnotesize\bfseries, gray!65!black] at (4,2.1) {warn};
-\node[above, font=\footnotesize\bfseries, gray!65!black] at (9,2.1) {quarantine};
-%% ── Zone action labels ───────────────────────────────────────────────────
-\node[align=center, font=\footnotesize\bfseries, text=green!40!black]
-    at (2,1.4) {deliver\\normally};
-\node[align=center, font=\footnotesize\bfseries, text=orange!65!black]
-    at (6.5,1.4) {deliver with\\warning};
-\node[align=center, font=\footnotesize\bfseries, text=red!55!black]
-    at (10,1.4) {send to\\spam folder};
-%% ── Example data points ──────────────────────────────────────────────────
-\filldraw[fill=gray!65, draw=gray!40] (1.8,0) circle (3pt)
-    node[above=5pt, font=\footnotesize] {$0.18$};
-\filldraw[fill=gray!65, draw=gray!40] (6.2,0) circle (3pt)
-    node[above=5pt, font=\footnotesize] {$0.62$};
-\filldraw[fill=gray!65, draw=gray!40] (9.7,0) circle (3pt)
-    node[above=5pt, font=\footnotesize] {$0.97$};
-\end{tikzpicture}%
-}
-\caption{Prediction is not the same as decision. The same model score can feed several product actions through thresholds chosen by humans.}
-\label{fig:spam-thresholds}
+\begin{tikzpicture}[ml diagram]
+\foreach \x in {2.55,5.1,7.65}
+  \draw[draw=mlLine] (\x,0) -- (\x,2.25);
+\node[font=\sffamily\small\bfseries] at (1.25,2.05) {Supervised};
+\node[font=\sffamily\small\bfseries] at (3.8,2.05) {Unsupervised};
+\node[font=\sffamily\small\bfseries] at (6.35,2.05) {Self-supervised};
+\node[font=\sffamily\small\bfseries] at (8.9,2.05) {Reinforcement};
+\node[text=mlAccent] at (1.25,1.3) {$(x,y)$};
+\node[text=mlAccent] at (3.8,1.3) {$x_1,\ldots,x_n$};
+\node[text=mlAccent] at (6.35,1.3) {context $\rightarrow$ word};
+\node[text=mlAccent] at (8.9,1.3) {action $\rightarrow$ reward};
+\node[ml label,align=center] at (1.25,0.55) {provided targets\\risk prediction};
+\node[ml label,align=center] at (3.8,0.55) {unlabeled data\\behavioral groups};
+\node[ml label,align=center] at (6.35,0.55) {targets from input\\a masked word};
+\node[ml label,align=center] at (8.9,0.55) {reward feedback\\decisions over time};
+\end{tikzpicture}
+\caption{Learning settings differ in their feedback. Self-supervision constructs targets from observations; the categories can overlap within one system.}
+\label{fig:feedback-spectrum}
 \end{figure}
 
-When a system marks a legitimate email as spam, the mistake is a \emph{false positive}. When spam gets through untouched, the mistake is a \emph{false negative}. The names matter because the two mistakes usually have different costs.
+These descriptions can overlap. A system may learn a representation through self-supervision, fit a classifier using labeled examples, and use rewards to adapt a decision policy. Reinforcement learning from human feedback (RLHF) is one possible way to adapt a language model toward human preferences, often after supervised fine-tuning on demonstrations. It is not a required stage for every assistant; ordinary next-token language-model pretraining is self-supervised \citep{ouyang2022}.
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.25cm}L{3.85cm}L{3.85cm}}
-\toprule
-Mistake type & What happens & Why the cost matters \\
-\midrule
-False positive & A legitimate email is treated as spam & The user may miss bills, job offers, travel updates, or personal messages \\
-False negative & Spam reaches the inbox & The user faces annoyance, wasted attention, fraud attempts, or malware risk \\
-\bottomrule
-\end{tabular}
-\caption{Prediction quality depends on the consequences of mistakes, not only on whether the model makes an error in the abstract.}
-\label{tab:spam-mistakes}
-\end{table}
+\section{From Prediction to Action}
+
+Let $X$ and $Y$ denote the input and target for a case drawn from the population of interest. For the binary student-support target, let
+\[
+\hat p_\theta(x)=f_\theta(x) \approx P(Y=1\mid X=x)
+\]
+be a model's estimated probability of the future event for an input $x$. The hat distinguishes an estimate from the unknown conditional probability. An output between zero and one is not automatically a reliable probability. \emph{Calibration} asks whether events occur at frequencies consistent with the forecasts: among cases assigned probability $0.7$, roughly $70\%$ should have the event. This aggregate check can still hide group-specific errors.
+
+A decision rule uses the estimate. For example, let $a_\tau(x)$ indicate selection for adviser review:
+\[
+a_\tau(x)=
+\begin{cases}
+1, & \hat p_\theta(x)\geq\tau,\\
+0, & \hat p_\theta(x)<\tau.
+\end{cases}
+\]
+The threshold $\tau$ belongs to the policy. Changing it changes which cases are reviewed without changing the fitted predictor.
 
 \begin{table}[t]
 \centering
@@ -204,498 +136,285 @@ False negative & Spam reaches the inbox & The user faces annoyance, wasted atten
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{L{1.76cm}L{2.02cm}L{6.16cm}}
 \toprule
-Student & Risk score & Action at threshold 0.70 \\
+Student & Estimated risk & Action at threshold $0.70$ \\
 \midrule
-A & 0.12 & No outreach \\
-B & 0.29 & No outreach \\
-C & 0.48 & No outreach \\
-D & 0.62 & No outreach \\
-E & 0.74 & Invite to adviser review \\
-F & 0.91 & Invite to adviser review \\
+A & 0.12 & No model-triggered review \\
+B & 0.29 & No model-triggered review \\
+C & 0.48 & No model-triggered review \\
+D & 0.62 & No model-triggered review \\
+E & 0.74 & Adviser review \\
+F & 0.91 & Adviser review \\
 \bottomrule
 \end{tabular}
-\caption{A score becomes a decision only after a threshold is chosen. The scores stay fixed when the policy changes.}
+\caption{Six illustrative forecasts for the specified deadline event. A threshold of $0.70$ selects two cases; it does not yet determine whether an invitation will be offered.}
 \label{tab:threshold-worked-example}
 \end{table}
 
-If the threshold moved to 0.50, student D would also be reviewed. If it moved to 0.80, only student F would be. The prediction itself does not change; only the decision rule does.
+Using the forecasts in Table~\ref{tab:threshold-worked-example}, threshold $0.50$ selects D, E, and F; at $0.80$, only F is. If the adviser can review two cases, the first policy exceeds capacity. Another policy could select the two highest scores directly. Ranking under a budget and thresholding at a fixed value are related policies, but they need not select the same number of cases when the population changes.
+
+Spam filtering illustrates the same distinction. The SpamAssassin public corpus provides examples labeled as spam or legitimate mail; the Enron Corpus is a separate collection used for email research \citep{spamassassin,klimt2004}. A spam-probability estimate might support delivery, a warning, or quarantine at different thresholds.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[ml diagram]
+\fill[mlWash] (3.6,0) rectangle (8.1,1.05);
+\draw[ml axis] (0,0) -- (9.25,0);
+\draw[ml reference] (3.6,-0.15) -- (3.6,1.45);
+\draw[ml reference] (8.1,-0.15) -- (8.1,1.45);
+\node at (1.8,1.35) {deliver};
+\node at (5.85,1.35) {warn};
+\node at (8.85,1.8) {quarantine};
+\draw[draw=mlLine] (8.8,1.5) -- (8.55,0.85);
+\foreach \x/\lab in {0/0,3.6/0.4,8.1/0.9,9/1}
+  \draw[draw=mlMuted] (\x,0.07) -- (\x,-0.07) node[below=3pt,ml label] {$\lab$};
+\foreach \x/\lab in {1.62/0.18,5.58/0.62,8.73/0.97}{
+  \fill[mlAccent] (\x,0) circle (2.5pt);
+  \node[above=5pt,ml label] at (\x,0) {$\lab$};
+}
+\node[ml label] at (4.5,-0.7) {predicted spam probability};
+\end{tikzpicture}
+\caption{One score, several actions. Thresholds at $0.4$ and $0.9$ separate delivery, a warning, and quarantine; changing the thresholds changes the policy.}
+\label{fig:spam-thresholds}
+\end{figure}
+
+Taking spam as the positive class, a legitimate message classified as spam is a \emph{false positive}; spam classified as legitimate is a \emph{false negative}. Their costs differ. Quarantine may hide an important message, while allowing spam through may expose the user to fraud. The classification error and the consequence of the chosen action should both be considered.
+
+For student support, a false positive against the deadline target is a reviewed student who later submits both assignments on time. That does not prove the student needed no help. A false negative is an unselected student who misses at least one specified deadline. The label defines the predictive error; the institutional goal determines why the error matters.
+
+\subsection{Ranking and the Meaning of a Score}
+
+A ranking depends on order, whereas a numerical decision threshold and a probability forecast depend on the values themselves.
 
 \begin{theorem}[Monotone Score Transformations Preserve Ranking]
-Let $s(x)$ be a real-valued score and let $g$ be a strictly increasing function. Then for any two cases $x_i$ and $x_j$,
+Let $s(x)$ be a real-valued score and let $g$ be strictly increasing on its range. For any two cases,
 \[
-s(x_i) < s(x_j) \iff g(s(x_i)) < g(s(x_j)).
+s(x_i)<s(x_j) \iff g(s(x_i))<g(s(x_j)).
 \]
 \end{theorem}
 
-\begin{proof}[Proof Sketch]
-If $s(x_i) < s(x_j)$ and $g$ is strictly increasing, applying $g$ preserves the inequality, so $g(s(x_i)) < g(s(x_j))$. The reverse direction follows the same way: a strictly increasing function cannot reverse the order of two unequal inputs.
+\begin{proof}
+Strict increase preserves the forward inequality. Conversely, if $s(x_i)\geq s(x_j)$, then $g(s(x_i))\geq g(s(x_j))$, contradicting the inequality on the right. Equal scores remain equal after transformation.
 \end{proof}
 
-Any ranking based only on score order is therefore unchanged if the score is replaced by a strictly increasing transformation. This is one reason ranking quality and probability calibration are different questions: a transformed score preserves the ranking while changing the numerical meaning of the output.
+On $[0,1]$, the transformation $g(s)=s^2$ preserves order. It changes the threshold needed to reproduce the original policy: $0.70$ becomes $0.70^2=0.49$. Keeping the numerical threshold at $0.70$ after squaring would instead change the selected cases. Nor do squared probability estimates automatically remain calibrated: a forecast of $0.7$ becomes $0.49$ without changing the event's frequency.
 
 \begin{figure}[t]
 \centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  box/.style={draw, rounded corners, align=center, minimum height=0.95cm, minimum width=2.1cm, fill=black!4},
-  arrow/.style={-Latex, thick}
-]
-\node[box] (world) {Real-world\\process};
-\node[box, right=0.9cm of world] (data) {Collected\\data};
-\node[box, right=0.9cm of data] (model) {Chosen model\\$f_\theta$};
-\node[box, right=0.9cm of model] (pred) {Prediction\\$\hat{y}$};
-\node[box, right=0.9cm of pred] (decision) {Decision\\rule};
-\node[box, below=1.2cm of model] (outcome) {Observed\\outcome};
-\draw[arrow] (world) -- (data);
-\draw[arrow] (data) -- (model);
-\draw[arrow] (model) -- (pred);
-\draw[arrow] (pred) -- (decision);
-\draw[arrow] (decision) |- (outcome);
-\draw[arrow] (outcome) -| (data);
-\end{tikzpicture}%
-}
-\caption{A learning problem does not end at the model. Real systems move from world to data to prediction to decision and then back to new outcomes.}
+\begin{tikzpicture}[ml diagram]
+\node[align=center] (world) at (0,0) {world};
+\node[align=center] (data) at (2.1,0) {data};
+\node[ml key box, minimum width=1.6cm] (model) at (4.3,0) {model\\$f_\theta$};
+\node[align=center] (pred) at (6.6,0) {prediction\\$f_\theta(x)$};
+\node[ml box,minimum width=1.5cm] (act) at (8.9,0) {action};
+\draw[ml arrow] (world) -- (data);
+\draw[ml arrow] (data) -- (model);
+\draw[ml arrow] (model) -- (pred);
+\draw[ml arrow] (pred) -- (act);
+\draw[ml feedback] (act.south) -- (8.9,-1.25) -- (2.1,-1.25) -- (data.south);
+\node[ml label,fill=white,inner sep=3pt] at (5.5,-1.25) {observed outcomes become new data};
+\end{tikzpicture}
+\caption{Measurements support a fitted predictor; a policy turns its output into an action. Actions can change later outcomes and which observations enter the next dataset.}
 \label{fig:world-to-decision}
 \end{figure}
 
-This is why the book begins with framing rather than algorithms. A score without a downstream action is incomplete. An action without a stated cost of mistakes is hard to defend.
+Feedback adds another distinction. Outreach may prevent a predicted deadline miss, and a review policy may determine which cases receive further observations. Historical outcomes therefore reflect the support policies operating at the time. A predictor trained on those outcomes does not, by accuracy alone, establish what would happen under a different policy or whether outreach causes improvement.
 
-\section{Objective Hierarchy: Goal, Proxy, Label, Metric}
+\section{Goal, Target, Label, Loss, and Metric}
 
-One reason beginner projects drift so quickly is that several levels of description collapse into a single vague sentence. A team says it wants to ``improve retention'' or ``support students better,'' then jumps directly to labels and metrics as if those were the institutional goal. They are not.
-
-Keep four levels separate. The \emph{goal} is the real-world outcome that matters. The \emph{proxy target} is the narrower learning task that stands in for it. The \emph{label rule} turns that target into observed examples. The \emph{metric} is the number reported after development. A fifth quantity appears as soon as training begins: the \emph{objective}, the penalty minimized during fitting. In student support, the proxy target might be the risk of missing one of the first two major deadlines or failing to submit early core work; the objective might be log loss on the labeled examples; and the metric might be recall under a fixed review budget. A project can talk about one quantity, optimize another, and report a third, so the names are not interchangeable.
+The student-support example contains several quantities with different roles. The goal is timely, useful support. The proxy target is a future deadline event. The label rule records that event. The training loss compares forecasts with labels. A reporting metric summarizes some aspect of predictive performance. None is interchangeable with the others.
 
 \begin{table}[t]
 \centering
-{\footnotesize
-\setlength{\tabcolsep}{3pt}
-\renewcommand{\arraystretch}{1.0}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{1.38cm}>{\raggedright\arraybackslash}p{2.08cm}>{\raggedright\arraybackslash}p{4.45cm}>{\raggedright\arraybackslash}p{1.90cm}@{}}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{2.10cm}L{3.00cm}L{5.00cm}}
 \toprule
-Level & Core question & Student-support example & Common failure \\
+Quantity & Question & Student-support example \\
 \midrule
-Goal & What real-world outcome matters? & Help more students receive timely human support before early disengagement compounds & Treating an institutional hope as if it were already measurable \\
-Proxy target & What narrower learning task stands in for that goal? & Predict risk of missing the first two major deadlines or failing to submit early core work early enough to intervene & Choosing a proxy that is easy to log but poorly aligned with the real need \\
-Label & How will the proxy be turned into observed targets? & Mark a case positive if the student misses one of the first two major deadlines or fails to submit early core work by the review cutoff & Treating administratively produced labels as ground truth rather than as measurements \\
-Metric & What number will summarize success? & Recall among students who trigger the early-support proxy event, measured under a fixed advising-review budget & Optim\-izing a convenient number that ignores the decision constraint \\
+Goal & What outcome matters? & Timely support that benefits students \\
+Proxy target & What event is predicted? & At least one specified deadline missed in weeks 3--4 \\
+Label rule & How is the event recorded? & $y_i=1$ for a miss; $y_i=0$ for both on-time submissions, assessed by $t_1$ \\
+Training loss & What forecasts does fitting favor? & Small disagreement between risk estimates and observed binary labels \\
+Metric & What performance is reported? & Fraction of positive cases selected under a fixed review budget \\
 \bottomrule
 \end{tabular}
-\caption{Keep goal, proxy target, label construction, and reporting metric separate rather than pretending they are all the same thing.}
-}
+\caption{The loss used for fitting and the metric used for reporting answer different questions; both depend on the chosen label rule.}
 \label{tab:objective-hierarchy}
 \end{table}
 
-The difference becomes clearer in a concrete student-support story. The institutional goal is not ``predict failure'' in the abstract. It is to help students receive timely human support. The proxy target might therefore be the risk of missing the first two major deadlines or failing to submit early core work---waiting for final-course failure would make the intervention too late. The label depends on a measurable rule that records whether one of those early-support events occurred by the review cutoff. The reported metric may finally be recall at a fixed review budget, because the advising team can inspect only a limited number of cases each week.
+Many supervised methods formulate fitting in terms of an average training loss:
+\[
+\hat R_{\mathcal{D}}(\theta)=\frac{1}{n}\sum_{i=1}^{n}
+\ell\bigl(y_i,f_\theta(x_i)\bigr).
+\]
+The loss $\ell$ assigns a penalty to a prediction and its measured target; $\hat R_{\mathcal{D}}$ is the average penalty on the observed cases. Learning seeks a predictor with a small value of this objective. The definition of the target determines what the loss can reward.
 
-Notice what happened. The project became more precise at every step, and also more honest about where mismatch can enter. Weak projects often fail not because the model is poor, but because these four levels were never separated cleanly enough to inspect.
+For example, squared probability error uses $\ell(y,\hat p)=(\hat p-y)^2$. On a negative case, a forecast of $0.9$ incurs $0.81$, whereas $0.2$ incurs $0.04$. On a positive case, those penalties are $0.01$ and $0.64$. Raising every score would therefore improve some predictions and worsen others. A useful loss evaluates forecasts against both outcomes.
 
-\textbf{Objective hierarchy.} Before writing code, write four short sentences: the real-world goal, the proxy target, the label rule, and the reporting metric. If two of the sentences sound identical, the problem is probably still underframed.
+\begin{samepage}
+One possible reporting metric is \emph{recall}: the fraction of positive cases selected for review. Among a fully observed evaluation set, if $S_k$ contains the $k$ cases selected under a fixed budget,
+\[
+\operatorname{Recall}(S_k)=
+\frac{\sum_{i\in S_k}y_i}{\sum_i y_i},
+\qquad \sum_i y_i>0.
+\]
+\end{samepage}
+This measures coverage of the specified deadline event. It does not measure the benefit of a check-in, and it does not report how many reviewed cases are negative. The review budget and additional checks are needed to interpret it.
 
-\section{The Five Commitments}
+A proxy should be measurable after its stated horizon, relevant to the intended action, and recorded consistently. Its inputs must be available when the prediction is made. Requiring the future outcome itself to be known then would turn prediction into a report of an already observed event.
 
-Many beginner mistakes come from starting with a favorite model rather than the structure of the problem. A more reliable approach is to identify five commitments before training begins and answer them in order.
+\section{Observations as Evidence}
 
-\begin{enumerate}[leftmargin=*,label=\arabic*.]
-\item \textbf{Task.} What exactly is the system supposed to predict, estimate, rank, or decide?
-\item \textbf{Data.} What evidence will stand in for the world?
-\item \textbf{Representation.} What form of the input will the model actually see?
-\item \textbf{Objective.} What behavior is rewarded during training?
-\item \textbf{Evaluation.} What later claim will count as success?
-\end{enumerate}
+Data comes from a measurement process. Scanner settings affect medical images; collection choices affect a text corpus; interfaces and earlier policies affect interaction logs. The cases in a dataset are a sample of the world, not a complete description of it.
 
-Read these commitments as operational checkpoints, not vocabulary words. Each one makes the next more concrete. Task says what must be learned. Data and representation make that task visible. Objective says what training will reward. Evaluation states what later evidence must support.
+Sampling determines who and what is represented. Labeling determines which distinctions are recorded. Timing determines what information can legitimately be used. In the student example, a support flag created after $t_0$ is unavailable at the review date, even if it strongly predicts a later deadline miss. Using it would leak later information into an earlier prediction.
 
-The five commitments are the workshop view of the book's broader \emph{seven-question framework}, introduced in the preface and revisited in the conclusion:
-\begin{enumerate}[leftmargin=*,label=\arabic*.]
-\item What decision or action is being supported?
-\item What target will stand in for that decision?
-\item What evidence about the world is actually available?
-\item What representation will the model really see?
-\item What baseline must be beaten?
-\item What evidence would justify the claim?
-\item What system will carry the prediction into action?
-\end{enumerate}
+\subsection{Representation Changes What the Model Sees}
 
-Task answers Questions 1 and 2; data answers Question 3; representation answers Question 4; evaluation previews Question 6. The \emph{objective hierarchy} from the previous section drills further into Question 2 by separating goal, proxy target, label, and metric. Questions 5 and 7---baseline and system---wait, because a framing chapter should first make the problem legible before asking what baseline is credible or what deployment will carry the output.
+The raw record and its representation are different objects. If $r_i(t_0)$ is the record available at the cutoff, write
+\[
+x_i=\phi\bigl(r_i(t_0)\bigr),
+\]
+where $\phi$ is a designed or learned representation rule. When the representation is learned, fitting it is part of the development procedure and must respect the same protected evaluation. A sequence of platform visits might become a visit count, a time since last activity, or a sequence of timestamps. Each retains some information and discards some.
 
-\begin{table}[t]
-\centering
-\footnotesize
-\setlength{\tabcolsep}{2.5pt}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.45cm}>{\raggedright\arraybackslash}p{1.42cm}>{\raggedright\arraybackslash}p{1.72cm}>{\raggedright\arraybackslash}p{1.68cm}>{\raggedright\arraybackslash}p{2.53cm}@{}}
-\toprule
-Commitment & Guiding question & Student support & Spam filtering & Counting task \\
-\midrule
-Task & What must be predicted? & Risk of missing the first two major deadlines or failing to submit early core work & Probability an email is spam & Animal count from an aerial image \\
-Data & What evidence stands in for the world? & Quizzes, attendance, logs & Labeled email text and message details & Images paired with local count targets \\
-Representation & What form does the model actually see? & Early-course signals in a student table & Words, links, sender cues, and email metadata & Pixels, local patches, and count cues \\
-Objective & What behavior is rewarded in training? & Minimize a supervised loss that raises scores on students likely to trigger the early-support proxy event in time for human review & Minimize a training loss that separates spam from wanted mail & Minimize error between predicted and observed local count targets \\
-Evaluation & What claim is being tested? & Does it support advising without unfair profiling or useless alarms? & Does it protect inboxes without hiding wanted mail? & Does it perform well on evaluation images whose answers stayed hidden during development? \\
-\bottomrule
-\end{tabular}
-\caption{A framing canvas turns the five commitments into concrete questions before model choice begins.}
-\label{tab:chapter1-framing-cases}
-\end{table}
-
-Table~
-ef{tab:chapter1-framing-cases} expands the rough memo from Table~
-ef{tab:rough-framing-memo} into the chapter's first reusable protocol. If you cannot fill it out clearly, the project is usually not ready for model development.
-
-The order of use matters. First write the task in operational terms. Then ask what data and representation would make that task visible. Only then should the training objective and later evaluation claim be written down. In the broader seven-question framework, this table settles Questions 1 through 4 and previews Question 6.
-
-\section{Proxy Audit: From Vague Goal to Defensible Task}
-
-The next move is to repair vague openings---the chapter's most reusable habit. A proxy audit forces us to separate the real-world goal from the measurable target we can actually train on. That measurable target is the \emph{proxy target}: it stands in for the broader goal rather than matching it perfectly.
-
-\textbf{Proxy audit.} Write down the real-world goal and the label you can actually measure. Then list how sampling, timing, annotation, or historical process could make the measured target diverge from the real goal.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.83cm}L{7.4cm}}
-\toprule
-Weak opening & Better framed learning problem \\
-\midrule
-``Use AI to support students'' & Predict which students are likely to miss the first two major deadlines early enough to trigger human support. \\
-``Detect bad content'' & Estimate the probability that a comment should be queued for moderator review under a documented moderation policy. \\
-``Find fake news'' & Classify whether an article is likely to violate a specific fact-checking standard, with human review before public action. \\
-\bottomrule
-\end{tabular}
-\caption{The main improvement is not sophistication. It is moving from slogans to tasks with users, targets, and downstream actions.}
-\label{tab:bad-to-better-framing}
-\end{table}
-
-\begin{decisionbox}
-\textbf{Proxy stress test.} Is the proxy measurable, timely, available at prediction time, action-relevant, and hard to game? If any answer is no, revise the proxy before training.
-\end{decisionbox}
-
-Notice what changes in each rewrite. The user becomes clearer. The proxy target narrows. The downstream action becomes more defensible. The model has not improved yet---the \emph{problem statement} has.
-
-Once the proxy target is defensible, the next question is whether the available data actually makes that target visible.
-
-\section{What Data Actually Represents}
-
-Students often say ``the data speaks for itself.'' It does not. Data is produced by instruments, institutions, interfaces, and human choices. A medical image depends on scanner settings and clinical workflow. A text corpus depends on which languages, websites, or books were collected. A recommendation dataset depends on what users were previously shown. A dataset is never the world itself. It is a measurement process applied to the world.
-
-This matters for at least three reasons. First, sampling. If the data covers only some users or conditions, the model may generalize poorly elsewhere. Second, labeling. If labels are noisy, inconsistent, or based on weak proxies, the model learns the proxy instead of the intended target. Third, timing. Data gathered in one year or one market may not represent the next.
+A zero visit count also differs from an unavailable log. Combining them into the same input hides a measurement distinction. Representation choices can therefore change what the model is able to learn before any fitted parameter changes. The predictor uses $f_\theta(\phi(r))$, so the representation and fitted rule jointly determine its behavior.
 
 \begin{example}[Recommendation Logs Reflect Exposure]
-Recommendation data is a useful warning because labels are entangled with the system that produced them. A movie platform observes clicks and ratings only for items users were actually shown. AutoDebias describes this as a combination of selection bias and exposure bias: observed ratings are not a representative sample of all possible ratings, and a missing interaction may mean non-exposure rather than dislike \citep{autodebias2021}. A recommender dataset is therefore not a neutral reading of user preference. It is a record of preference filtered through previous ranking decisions.
+A recommendation log contains interactions with items users encountered. A missing click may indicate that an item was never shown, rather than that it was disliked. AutoDebias studies selection and exposure biases in recommendation data \citep{autodebias2021}. Such logs record responses filtered through earlier presentation and selection processes, not preferences for every possible item.
 \end{example}
 
 \begin{example}[Toxicity Labels Are Social Measurements]
-Content moderation provides a different warning. Sap et al.\ show that annotator identities and beliefs can systematically affect toxicity judgments \citep{sap2022}. Disagreement is not always random noise that averages out across enough labels. Sometimes it reflects real differences in how people interpret harm, offense, and context. A model trained on such labels learns a socially situated target, not an uncontested ground truth.
+Sap et al.\ show that annotator identities and beliefs can systematically affect toxicity judgments \citep{sap2022}. Disagreement may reflect differing interpretations of harm, offense, or context. A labeling policy must specify which judgment is being modeled; adding annotations does not by itself resolve that choice.
 \end{example}
 
-\begin{failurebox}
-A student-risk model can look strong if one of its inputs is a support flag created only after the first missed deadline. That feature may be predictive, but it is not available at prediction time; it leaks a later process back into the model. The same mistake appears in moderation when a post-hoc moderator outcome is reused as a feature.
-\end{failurebox}
+Zech et al.\ studied pneumonia detection from chest radiographs and found substantial changes in performance across hospital systems, including evidence of hospital-specific cues and confounding \citep{zech2018}. Strong performance on familiar cases did not establish the same performance elsewhere. The population, measurement process, and relationships between inputs and outcomes can all change.
 
-Treat a dataset as evidence rather than truth. Evidence can be strong or weak, representative or narrow, stable or outdated. The quality of the learning problem depends on the quality of that evidence.
+\subsection{Improving the Evidence}
 
-When a new dataset appears, ask three questions before trusting it: who or what is missing, how were the labels or measurements produced, and when was the data collected relative to the task you care about?
+Changing the model is only one way to improve a learning problem. Clearer label definitions, better measurements, removal of unintended duplicates, and coverage of missing conditions can matter as much as a more complex predictor. This emphasis on improving data is often called \emph{data-centric machine learning}.
 
-\section{Data-Centric ML: Improve the Evidence, Not Only the Model}
+When errors recur on a \emph{slice}---a subset of cases sharing a condition, such as a course format---ask what the evidence supports. The condition may be underrepresented, the measurements may mean something different, or labels may be inconsistent. More examples help only if they address the relevant gap.
 
-Once a task has been framed, beginners often assume the next improvement must come from a more sophisticated model. In many projects, the faster and more defensible improvement comes from the data: clearer label definitions, fewer duplicates, broader coverage, cleaner measurements, or better documentation. Data-centric machine learning treats data design, collection, annotation, and maintenance as first-class engineering work rather than a fixed backdrop.
+Dataset documentation makes these questions answerable. Datasheets for Datasets proposes recording motivation, composition, collection, and recommended uses \citep{gebru2018datasheets}. Work on \emph{data cascades} describes how problems in collection, labeling, and coordination can propagate into later failures \citep{sambasivan2021}. A different architecture cannot establish the validity of an undefined label or make an unavailable measurement available.
 
-This does not mean ``more data'' in the abstract. It means better evidence for the task being asked. If annotators disagree often, the question is not only who made the mistake. The real issue may be an ambiguous task definition, hidden context, or a label space too coarse for the problem. Changing the data specification may help more than changing the model.
+Record substantive changes as new dataset versions. Relabeling cases, changing preprocessing, or adding a new population changes the evidence. Compare versions under a documented evaluation procedure while protecting the final test from repeated development decisions.
 
-Documentation matters for the same reason. Gebru et al.\ argue that datasets should come with structured documentation about motivation, composition, collection process, and recommended uses \citep{gebru2018datasheets}. If a team cannot answer basic questions about who was included, how labels were produced, what preprocessing was applied, and which uses are out of scope, later claims about model quality become difficult to interpret.
+\section{Evaluation on New Observations}
 
-In high-stakes settings, weak data practice compounds downstream. Sambasivan et al.\ call these failures \emph{data cascades}: upstream problems in collection, labeling, or coordination reappear later as model failure, monitoring surprises, or unsafe deployment behavior \citep{sambasivan2021}. A stronger architecture does not repair a weak dataset. It may simply fit the dataset's accidental structure more efficiently.
+A small training loss describes performance on the cases used for fitting. It does not establish performance on the cases where the predictor will be used. Evaluation must specify which new observations represent that intended use.
 
-\textbf{Data iteration loop.} Before replacing the model, inspect failures and ask whether the problem is coverage, label definition, annotation consistency, preprocessing, or version control. Then change one data-side element deliberately and record a new dataset version.
+Training data fits the model. Validation data supports development choices, such as selecting a model or threshold. A final test is protected from those choices and assesses the frozen procedure. If a student appears in several course records, placing closely related records in different sets may make them look more independent than they are. If the intended use is next year's cohort, an evaluation on a later cohort is more relevant than an arbitrary mixture of years.
 
-Versioning is the practical habit that makes data-centric work scientific rather than anecdotal. If a team removes duplicates, relabels borderline cases, adds examples from an underrepresented setting, or changes preprocessing, the dataset has changed. Treat the result as a new version with its own documentation. Chapter~\ref{ch:experiments-claims} returns to this experimental discipline, but the habit starts here, while the problem is still being framed.
+A \emph{baseline} is a reference procedure evaluated under the same conditions. A complex predictor should be compared with an appropriate simpler rule. For student support, random selection and a rule based on earlier quiz results can provide distinct reference points at the same review capacity. A gain over a baseline establishes only the claim supported by that comparison.
 
-When a model fails on a recurring slice, do not only ask ``which model should we try next?'' Ask whether the slice is underrepresented, mislabeled, poorly defined, or missing key context. In many real projects, the first serious improvement is a better labeling guide and a versioned dataset release rather than a deeper network.
-
-Improving the evidence leads to the next issue: how later chapters will decide whether the resulting claim survives new data.
-
-\section{Evaluation Preview: Unseen Data and Hidden Targets}
-
-Chapters~\ref{ch:prediction-loss-decision} and~\ref{ch:evaluation-discipline} are the real judgment chapters, so evaluation appears here only as a preview. The essential preview is simple: a learning problem is not defined only by its inputs and targets. It is also defined by what counts as unseen evidence. That is why the framing memo already needs an evaluation preview. If you do not know which evidence will stay protected until the end, you do not yet know what claim the project is trying to defend.
-
-This is why machine learning separates training, validation, and test roles. Some data fits the model. Some compares settings. Some must remain protected until the end so the reported result means something. Chapter~\ref{ch:evaluation-discipline} turns that principle into a full evaluation workflow.
-
-The same discipline appears in public benchmark tasks, where some data is released for development and some answers are kept hidden until judging. Aerial wildlife counting is a useful supporting example. The input is an aerial image. The output is a density map---a grid of small values spread across the image whose sum gives the final animal count. The visible data lets the student build a model, but the real claim is judged on hidden targets.
-
-At Chapter 1 level, the detailed metrics can wait. The habit cannot. Protect some evidence so the final claim is judged on data that development did not already see.
+Some benchmarks hide test targets while releasing the inputs. This limits direct access to answers, but repeated test scores can still guide tuning. Test protection concerns the whole development process, not just whether target files are visible.
 
 \begin{figure}[t]
 \centering
-\definecolor{c1visBg}{RGB}{220,233,251}
-\definecolor{c1hidBg}{RGB}{228,228,228}
-\definecolor{c1modBg}{RGB}{237,224,250}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  x=1cm, y=1cm, font=\small,
-  visbox/.style={draw=blue!40, rounded corners=4pt, align=center,
-                 minimum height=1.2cm, minimum width=3.2cm,
-                 fill=c1visBg, line width=0.8pt},
-  hidbox/.style={draw=gray!50, rounded corners=4pt, align=center,
-                 minimum height=1.2cm, minimum width=3.2cm,
-                 fill=c1hidBg, line width=0.8pt},
-  modbox/.style={draw=purple!38, rounded corners=4pt, align=center,
-                 minimum height=1.2cm, minimum width=3.2cm,
-                 fill=c1modBg, line width=0.8pt},
-  arrow/.style={-Latex, thick, gray!70!black}
-]
-%% ── Region labels ────────────────────────────────────────────────────────
-\node[font=\scriptsize\bfseries, blue!45!black]  at (0, 3.65) {VISIBLE};
-\node[font=\scriptsize\bfseries, gray!55!black]  at (7.0, 3.65) {HIDDEN};
-%% ── Divider between visible and hidden regions ───────────────────────────
-\draw[dashed, gray!40, line width=0.8pt] (2.55,3.85) -- (2.55,-0.35);
-%% ── Top row: data splits ─────────────────────────────────────────────────
-\node[visbox] (train) at (0,   2.6) {Visible training set\\images + density maps};
-\node[hidbox] (valid) at (5.0, 2.6) {Hidden evaluation set\\counts not shown};
-\node[hidbox] (test)  at (9.6, 2.6) {Final hidden test set\\counts not shown};
-%% ── Model node ───────────────────────────────────────────────────────────
-\node[modbox] (model) at (0,   0.4) {Model development\\on visible data only};
-%% ── Arrows ───────────────────────────────────────────────────────────────
-%% train → model (straight down)
-\draw[arrow] (train.south) -- node[right, font=\scriptsize, text=blue!40!black]{trains on} (model.north);
-%% model → evaluation set: straight right, then straight up
-\draw[arrow, gray!70!black, thick] ([yshift=0.12cm]model.east) -- (5.0,0.52);
-\draw[-Latex, gray!70!black, thick] (5.0,0.52) -- (valid.south);
-\node[font=\scriptsize, text=gray!55!black, right] at (5.1, 1.4) {evaluate};
-%% model → final test set: straight right, then straight up
-\draw[arrow, gray!70!black, thick] ([yshift=-0.12cm]model.east) -- (9.6,0.28);
-\draw[-Latex, gray!70!black, thick] (9.6,0.28) -- (test.south);
-\node[font=\scriptsize, text=gray!55!black, right] at (9.7, 1.4) {final test};
-\end{tikzpicture}%
-}
-\caption{The logic of hidden evaluation is the same as sound machine learning practice: develop on visible data, then judge the claim on targets that were not available during development.}
+\begin{tikzpicture}[ml diagram]
+\node[ml box,minimum width=2.55cm,align=center] (visible) at (1.4,1.15) {visible data\\\footnotesize images + targets};
+\node[ml key box,minimum width=2.55cm] (model) at (1.4,-0.65) {develop model};
+\node[ml box,minimum width=2.5cm] (hidden) at (6.65,1.15) {held-out data\\\footnotesize targets hidden};
+\node[ml box,minimum width=2.5cm] (judge) at (6.65,-0.65) {evaluate predictions};
+\draw[ml arrow] (visible) -- (model);
+\draw[ml arrow] (hidden) -- (judge);
+\draw[ml reference] (4.1,-1.35) -- (4.1,1.95);
+\draw[ml arrow] (model) -- node[above,ml label,fill=white,inner sep=2pt] {freeze first} (judge);
+\node[ml label] at (1.4,2.05) {development};
+\node[ml label] at (6.65,2.05) {protected evidence};
+\end{tikzpicture}
+\caption{Develop on available targets, freeze the predictor and evaluation choices, then test on protected cases. Hidden targets help preserve this separation, but repeated score feedback can still influence development.}
 \label{fig:hidden-evaluation-example}
 \end{figure}
 
-\begin{example}[Why the Counting Example Fits Chapter 1]
-Aerial wildlife counting is not just a vision task. It is a framing task. The input is clear, but the target is richer than a single class label: it involves a spatial density map and a derived count. The evaluation is fixed in advance and hidden during development. This makes it a clean way to teach that a learning problem is defined by its structure, not only by its architecture.
+\begin{samepage}
+\begin{example}[Counting Has More Than One Formulation]
+In aerial wildlife counting, the input is an image and the target may be a total animal count. One possible predictor estimates the total directly. Another predicts a grid of local count contributions $\hat d_{uv}$, where $u$ and $v$ index the grid cells, giving
+\[
+\hat C=\sum_{u,v}\hat d_{uv}.
+\]
+The sum is the \emph{predicted} total. Training on spatial targets requires suitable spatial annotations or a stated construction rule; a total count alone does not uniquely determine the grid. The chosen target and evaluation procedure define what success means for either formulation.
 \end{example}
+\end{samepage}
 
-Zech et al.\ studied pneumonia detection from chest radiographs and found that performance changed substantially across hospital systems---the model could rely on hospital-specific cues that were not actually signs of disease \citep{zech2018}. The Chapter 1 lesson is simple: a model can look strong on familiar data and still fail when the measurement process shifts.
+\section{A Complete Problem Specification}
 
-\section{A Bad Framing Memo Rewritten}
+A vague description such as ``use all available student data to predict failure with high accuracy'' leaves several choices unresolved. It does not identify a prediction date, a label rule, an action, or a meaningful test. A concise specification records those choices so that the mathematical objects can be interpreted.
 
-Before reading the strong memo, it helps to see the weak version that many real projects begin with.
+OULAD, the Open University Learning Analytics Dataset, contains student information, assessment records, and virtual-learning-environment interactions that can support research on such questions \citep{kuzilek2017}. The example here is a hypothetical task specification, not a claim that OULAD contains every proposed field or already implements this label rule. Institutional predictive analytics also raises concerns about profiling, opacity, and privacy \citep{newamerica2016}.
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{3.08cm}L{7.15cm}}
-\toprule
-Memo field & A weak student-support memo \\
-\midrule
-Decision and user & ``Use AI to predict which students will fail'' \\
-Proxy target & ``Course failure'' with no time window or intervention logic \\
-Acceptable inputs & ``All available student data'' \\
-Excluded or sensitive inputs & not stated \\
-Most costly mistake & not stated \\
-Evaluation preview & ``High accuracy'' \\
-Downstream action & ``Intervene'' \\
-Review path & not stated \\
-\bottomrule
-\end{tabular}
-\caption{A bad memo is useful because it shows where vagueness hides. The fields are present, but they do not yet support a defensible learning problem.}
-\label{tab:bad-framing-memo}
-\end{table}
-
-This memo is weak in several ways. The decision is unclear because no user or workflow is named. The proxy target is late and blunt: by the time final failure is observed, it may be too late to help. The input policy is dangerous because ``all available data'' quietly invites irrelevant or sensitive variables. The evaluation plan is weak because accuracy alone says nothing about review burden, intervention usefulness, or unfair alerts. The downstream action is also underdefined. ``Intervene'' could mean an email, an adviser call, a tutoring offer, or a punitive step, and those actions demand different standards of evidence.
-
-The repair is not to make the memo longer. It is to make each field operational. Replace ``predict failure'' with an earlier support target. Replace ``all available data'' with course-related signals that exist before the decision moment and that the workflow can justify. Replace ``accuracy'' with an evaluation preview tied to human review and useful intervention. Replace vague action with a stated review path and a bounded support response. Each repaired field should force a later design choice rather than just sounding more polished.
-
-\begin{decisionbox}
-If a framing memo sounds impressive but leaves the user, action, time horizon, sensitive-input boundary, and most costly mistake unclear, the project is not yet ready for model choice. Rewrite the memo before writing the model code.
-\end{decisionbox}
-
-The next table is therefore not a more polished version of the same idea. It is a different kind of object: one that could actually guide data choice, evaluation, and system design.
-
-\section{Worked Framing Memo: Student Support}
-
-Public datasets make this example more than a classroom invention. The Open University Learning Analytics Dataset (OULAD) contains demographic information, assessment data, and virtual-learning-environment interactions across several university courses \citep{kuzilek2017}. Policy work on predictive analytics in higher education makes the institutional side equally clear: early-alert systems can support advising, but they raise concerns about profiling, opacity, and privacy when treated as automated judgments rather than support tools \citep{newamerica2016}.
-
-The system here is a triage tool. It surfaces cases for human support; it does not explain why a student is struggling and does not make the final judgment about the student.
-
-Now return to the opening dilemma. A university does \emph{not} want an automated system that decides who will pass or fail. It wants a tool that helps identify students who may benefit from timely human support. Once that shift is made, the framing memo becomes much clearer.
-
-\begin{table}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{L{3.15cm}L{7.08cm}}
 \toprule
-Memo field & One defensible student-support entry \\
+Field & Illustrative student-support specification \\
 \midrule
-Seven-question focus & Questions 1--4 are written directly here; question 6 appears as an evaluation preview, and question 7 appears through downstream action and review path \\
-Decision and user & An adviser or instructor decides whether to invite a student to a check-in, tutoring session, or office-hour conversation \\
-Proxy target & Risk of missing the first two major deadlines or failing to submit early core work \\
-Representation & One student per row, encoded with early-course features such as quizzes, submissions, attendance, and platform activity \\
-Acceptable inputs & Early quizzes, assignment submissions, attendance, and learning-platform activity directly related to the course \\
-Available at prediction time & Only early-course signals collected before the support decision; no later grades, no post-deadline outcomes, and no flags created after outreach \\
-Excluded or sensitive inputs & Sensitive personal attributes, disability information, or private data unrelated to learning support \\
-Training objective & Minimize a supervised loss that raises scores on students likely to trigger the early-support proxy event in time for human review \\
-Most costly mistake & Failing to flag a student who needed timely human help \\
-Evaluation preview & Later evidence should show that the system surfaces useful cases without creating unfair or noisy alerts \\
-Downstream action & Outreach, tutoring offers, office-hour invitations, or scheduling support rather than punishment \\
-Review path & An instructor, adviser, or student-support professional interprets the output in context \\
+User and decision & Adviser chooses cases for review and decides whether to offer a check-in \\
+Case and timing & One student--course pair; predict at the end of week 2 using records available by $t_0$ \\
+Target and label & At least one of two required deadlines in weeks 3--4 is missed; record $y$ after the deadlines, by $t_1$ \\
+Inputs and representation & Earlier quiz results, submissions, and platform activity summarized in a feature vector \\
+Input boundary & Exclude later outcomes and post-cutoff flags; justify each input's relevance and use \\
+Training objective & Compare probability forecasts with both positive and negative labels using a stated loss \\
+Baseline & Compare with random selection and a simple earlier-quiz rule at the same capacity \\
+Evaluation & Measure recall and false-positive burden on a protected cohort, with checks across relevant groups and course formats \\
+Policy and capacity & Review at most $k$ cases; human judgment determines the support response \\
+Scope of the claim & Predicts the deadline proxy; benefit from outreach needs separate outcome evidence \\
 \bottomrule
 \end{tabular}
-\caption{A framing memo turns a vague request into a concrete learning problem before any model training begins.}
+\captionof{table}{One specification connects the target, available evidence, fitting criterion, evaluation, and action. It records assumptions that can be checked and revised.}
 \label{tab:framing-memo}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-This is the test for Chapter 1. If the reader can take a messy idea and produce a memo like Table~\ref{tab:framing-memo}, the chapter has done its job. Everything earlier should cash out into this document. In Chapter 2, the evaluation preview inside the memo becomes explicit metrics, action rules, and probability checks.
+Sensitive personal information requires a justified purpose and appropriate handling; availability alone does not make a field suitable. Excluding a sensitive attribute also does not guarantee equal treatment, because other inputs may act as proxies. Predictive error patterns and review burden need assessment in their own right.
 
-\section{Framing Is Iterative, Not One-Shot}
+The specification states what the model is intended to estimate. It does not explain why a student is struggling or prove that changing a predictive feature would improve the outcome. For example, platform inactivity may be associated with a deadline miss without being its cause.
 
-Students sometimes read a memo like Table~\ref{tab:framing-memo} and assume framing happens once, before the ``real'' modeling work. Real projects are messier. The first memo is a disciplined starting point, not a sacred object that survives every later piece of evidence unchanged.
+\section{Revising the Task}
 
-Suppose the advising team trains an early model and sees three surprises. Many flagged students recover quickly without any support action, so the proxy target may be too noisy. One subgroup is systematically under-flagged because early platform activity is a weak signal for their course format. The current threshold would send far more students to review than the advising team can actually contact.
+A specification is a starting hypothesis about which observations and outcomes are useful. Early evidence can reveal several different problems, and the response depends on which one occurred.
 
-None of these findings means the framing work was wasted. They mean the framing must now be revised with evidence rather than defended out of pride.
+Suppose students who miss a deadline often recover quickly. Their deadline labels may be correct, yet the proxy may poorly identify the kind of sustained difficulty the institution wants to address. That is a proxy--goal mismatch, not automatically label noise. By contrast, inconsistent treatment of approved extensions is a labeling problem. A student with a high risk estimate who submits on time is also not, by that fact alone, evidence of an incorrect label: probabilistic predictions allow non-events.
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.62cm}L{2.99cm}L{4.34cm}}
-\toprule
-Memo field & What early evidence revealed & How the framing should change \\
-\midrule
-Proxy target & the current early-support proxy was too coarse and mixed routine recovery with serious disengagement & refine the proxy toward repeated non-submission or combine it with review notes \\
-Inputs & one course format produced weak platform signals & add course-format awareness or restrict the claim to settings where the inputs are meaningful \\
-Downstream action & current threshold overloads the advising queue & rewrite the policy around fixed review capacity or ranking under budget \\
-Evaluation preview & aggregate score hid subgroup undercoverage & require slice checks and workload-aware evaluation before any deployment claim \\
-\bottomrule
-\end{tabular}
-\caption{A framing memo should tighten when the first experiments expose mismatch. Revision is not a failure of framing; it is the point of framing under evidence.}
-\label{tab:framing-iteration}
-\end{table}
+Weak platform signals in one course format may call for different measurements or a narrower claim. Too many selected cases may call for a policy tied to review capacity. Different errors across groups may require changes to the data, target, or action policy rather than just more fitting.
 
-This is the more mature habit. Framing begins before model training but does not end there. If early experiments expose label noise, unrealistic inputs, missing slices, or impossible review load, the right response is often to rewrite the memo rather than keep optimizing the original task definition.
+If the proxy changes from one missed deadline to repeated non-submission, document a new label rule and reassess it as a different task. If the representation changes, reconstruct it using only information available at the prediction cutoff. Development evidence can motivate these revisions, but the revised procedure still needs protected evaluation.
 
-\begin{decisionbox}
-Treat the first framing memo as version 1, not as final truth. When the first experiments reveal a mismatch between proxy, data, action, and capacity, revise the memo before escalating model complexity.
-\end{decisionbox}
-
-\section{Brief Orientation: Learning Settings as Kinds of Feedback}
-
-The chapter's main deliverable is now on the page, so only brief orientation remains. With the framing memo in place, the main learning settings become easier to distinguish by the kind of feedback they provide. Supervised learning gets its signal from explicit labels. Unsupervised learning has no target labels; the task is to organize or summarize structure in the data itself. Self-supervised learning creates targets from the data so that useful representations can still be learned when manual labels are scarce. Reinforcement learning receives feedback through rewards attached to actions over time, rather than correct answers supplied in advance.
-
-\begin{figure}[t]
-\centering
-\definecolor{c1supBg}{RGB}{212,238,220}
-\definecolor{c1unsupBg}{RGB}{254,242,214}
-\definecolor{c1selfBg}{RGB}{220,233,251}
-\definecolor{c1rlBg}{RGB}{237,224,250}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  x=1cm, y=1cm, font=\small,
-  parbox/.style={draw, rounded corners=4pt, align=center,
-                 minimum height=1.25cm, minimum width=2.8cm, line width=0.9pt},
-  arrow/.style={-Latex, thick, gray!55}
-]
-%% ── Four paradigm boxes ──────────────────────────────────────────────────
-\node[parbox, fill=c1supBg,   draw=green!40!black]  (sup)   at (0,   1.6)
-    {\textbf{\textcolor{green!40!black}{Supervised}}\\[2pt]explicit labels};
-\node[parbox, fill=c1unsupBg, draw=orange!55!black] (unsup) at (3.6, 1.6)
-    {\textbf{\textcolor{orange!55!black}{Unsupervised}}\\[2pt]no labels};
-\node[parbox, fill=c1selfBg,  draw=blue!45!black]   (self)  at (7.2, 1.6)
-    {\textbf{\textcolor{blue!45!black}{Self-supervised}}\\[2pt]generated targets};
-\node[parbox, fill=c1rlBg,    draw=purple!45!black] (rl)    at (10.8,1.6)
-    {\textbf{\textcolor{purple!45!black}{Reinforcement}}\\[2pt]reward/return};
-%% ── Connecting arrows ────────────────────────────────────────────────────
-\draw[arrow] (sup.east)   -- (unsup.west);
-\draw[arrow] (unsup.east) -- (self.west);
-\draw[arrow] (self.east)  -- (rl.west);
-%% ── Example text below each box ──────────────────────────────────────────
-\node[align=center, text width=2.8cm, font=\footnotesize,
-      text=green!38!black]    at (0,   0.35) {student-risk\\prediction};
-\node[align=center, text width=2.8cm, font=\footnotesize,
-      text=orange!60!black]   at (3.6, 0.35) {student-behavior\\clustering};
-\node[align=center, text width=2.8cm, font=\footnotesize,
-      text=blue!55!black]     at (7.2, 0.35) {fill-in-the-\\missing-word};
-\node[align=center, text width=2.8cm, font=\footnotesize,
-      text=purple!55!black]   at (10.8,0.35) {games or tutoring\\actions over time};
-\end{tikzpicture}%
-}
-\caption{Learning settings differ mainly in the kind of feedback they provide. The distinction matters later when model families and data regimes become more specific.}
-\label{fig:feedback-spectrum}
-\end{figure}
-
-This orientation matters because later modeling choices depend on what kind of feedback is available, how expensive it is, and how directly it answers the task we care about.
-
-If that distinction still feels abstract, keep one sentence: the kind of feedback available constrains what the system can honestly learn.
-
-\subsection{Reinforcement Learning: A Different Feedback Regime}
-
-Reinforcement learning learns by taking actions and receiving scalar feedback---a reward---from the environment, rather than from labels supplied in advance. Online RL has no fixed dataset of (input, correct-output) pairs; the agent must discover which actions lead to good outcomes through repeated interaction, while offline RL works from historical interaction logs. This book's center of gravity is supervised and self-supervised machine learning, and reinforcement learning appears here only for orientation; Chapter~\ref{ch:reinforcementlearning} develops it properly with its own agent--environment diagram. The one connection worth flagging now is that \emph{Reinforcement Learning from Human Feedback (RLHF)} is the stage that turns a pretrained language model into a tuned assistant, so RL appears in modern NLP even when the upstream training is supervised. That connection returns in Chapter~\ref{ch:language-grounding}.
-
-\section{Common Mistakes in First Machine Learning Projects}
-
-Several mistakes appear so often in first machine-learning projects that they are worth naming directly. The most common is starting with a preferred model rather than with the task, the data, the cost of mistakes, and the evaluation plan. Another is treating labels as perfect truth rather than noisy measurements produced by a process. A third is forgetting that a prediction matters only inside a decision workflow, leaving the user and downstream action unspecified. Finally, students often slip from prediction to explanation too quickly, reading predictive features as causal mechanisms when they may only be proxies or shortcuts.
-
-\section{Looking Ahead}
-
-Chapter~\ref{ch:framing-learning-problems} identifies the task worth modeling. Chapter~\ref{ch:prediction-loss-decision} asks what kind of predictive behavior would count as success for that task. Chapter~\ref{ch:evaluation-discipline} asks whether the evidence for that judgment can survive protected evaluation on new data. Chapter~\ref{ch:framing-learning-problems} writes the claim in operational form; Chapters~\ref{ch:prediction-loss-decision} and~\ref{ch:evaluation-discipline} test whether later evidence deserves to support it.
-
-\subsection*{Where Each of the Seven Questions Is Answered}
-
-The seven-question framework returns in nearly every later chapter. The table below names which chapter answers each question most directly. Treat it as a map, not a syllabus: most chapters touch more than one question, but each question has a primary chapter where the operational answer lives.
-
-\begin{table}[h]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{0.42cm}L{4.8cm}L{4.9cm}}
-\toprule
-\# & Question & Primary chapter \\
-\midrule
-1 & What decision is being supported? & Chapter~\ref{ch:framing-learning-problems} (framing memo) \\
-2 & What target stands in for that decision? & Chapter~\ref{ch:framing-learning-problems} (proxy audit); Chapter~\ref{ch:prediction-loss-decision} (loss and threshold) \\
-3 & What data stands in for the world? & Chapter~\ref{ch:dataset-design} (dataset design) \\
-4 & What representation will the model see? & Chapter~\ref{ch:linear-models} (linear); Chapter~\ref{ch:representation-foundation-models} (learned and reusable) \\
-5 & What baseline must be beaten? & Chapter~\ref{ch:evaluation-discipline} (baseline ladder); Chapter~\ref{ch:linear-models} (the credible first baseline) \\
-6 & What evidence would justify the claim? & Chapter~\ref{ch:evaluation-discipline} (protected splits); Chapter~\ref{ch:experiments-claims} (claim audit); Chapter~\ref{ch:reliability} (reliability review) \\
-7 & What system carries the prediction into action? & Chapter~\ref{ch:models-systems} (input contract, monitoring, rollback) \\
-\bottomrule
-\end{tabular}
-\caption{The seven-question framework as a map of the book. The Five Commitments cover Questions 1--4 and preview Question 6; Questions 5 and 7 wait until baseline and system discipline can be addressed in their own right.}
-\label{tab:seven-question-map}
-\end{table}
-
-\section*{Chapter Summary}
-
-Chapter 1 argues that the first task in machine learning is not model selection but problem specification. A vague institutional aim becomes a defensible learning problem only after prediction is separated from decision, the real-world goal is distinguished from the proxy target and label rule, and the dataset is treated as evidence rather than truth. The Five Commitments provide a practical local protocol for naming the task, the evidence, the representation, the training objective, and the evaluation preview. The chapter ends with a framing memo because the real achievement at this stage is not a trained model but a question stated clearly enough that later modeling work can answer it honestly.
-
+\begin{samepage}
 \begin{studyquestions}
-\item Why is ``predict weak students'' a poor opening statement for an AI project?
-\item What is the difference between a prediction and a decision?
-\item Why are the Five Commitments better understood as Chapter 1's local protocol inside the broader seven-question framework rather than as a list of vocabulary words?
-\item In what sense is a dataset evidence rather than truth?
-\item What kinds of project improvements count as data-centric rather than model-centric?
-\item Why does a hidden-evaluation task such as aerial wildlife counting belong in Chapter 1 even though the full evaluation chapter comes later?
+\item What must be specified before ``identify students who need help'' becomes a learning task?
+\item Why are the prediction cutoff and outcome horizon different quantities?
+\item How do a goal, a proxy target, a label rule, a loss, and a metric differ?
+\item Why can two policies use the same predictor but select different cases?
+\item What does a score's ranking tell us, and what does it leave unresolved about probabilities?
+\item How can a label be correct while the proxy poorly represents the broader goal?
 \end{studyquestions}
+\end{samepage}
 
-\begin{exercises}
-\item \exercisetag{Concept}{Core}Prediction or decision? For each scenario, say whether it describes a prediction, a decision, or both: a spam score of $0.91$, automatically quarantining an email, estimating whether a student will miss a deadline, inviting a student to office hours, and ranking comments by toxicity risk for a moderator.
-\item \exercisetag{Concept}{Core}Rewrite each vague opening into a more defensible task: ``predict weak students,'' ``detect bad content,'' and ``find fake news.'' For each, name a likely user, proxy target, and downstream action.
-\item \exercisetag{Diagnosis}{Intermediate}Explain why the same spam-probability model could support different actions at different thresholds without the model itself changing.
-\item \exercisetag{Concept}{Core}Give one example each of supervised, unsupervised, self-supervised, and reinforcement learning, but explain them as different feedback regimes rather than as isolated categories.
-\item \exercisetag{Diagnosis}{Intermediate}Consider a university dataset containing attendance, quiz scores, and assignment submissions. List three ways in which the data collection process might bias the resulting model.
-\item \exercisetag{Design}{Intermediate}A moderation dataset shows frequent annotator disagreement on sarcasm and reclaimed slurs. Propose one data-centric intervention and explain why it may help more than simply swapping in a larger model.
-\item \exercisetag{Concept}{Intermediate}Suppose a moderation model predicts whether an online comment should be flagged for review. Explain why the predicted probability and the final moderation decision should be treated as separate components.
-\item \exercisetag{Design}{Intermediate}Write down a dataset $\mathcal{D} = \{(x_i, y_i)\}_{i=1}^n$ for a problem of your choice. State what $x_i$, $y_i$, $f_\theta$, and $\hat{y}_i$ mean in that context.
-\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:framing-memo} to write a one-page framing memo for either student support, spam filtering, or a problem from your own field. If you carry one running case through the book, keep this memo and use the same case again in Chapter 2 when you add metrics and action policy.
+\begin{exercises}[The tags indicate the kind of work and difficulty.]
+\item \exercisetag{Concept}{Core}Rewrite ``predict weak students,'' ``detect bad content,'' or a vague task from your field. State the case, intended user, measurable target, prediction time, and action.
+\item \exercisetag{Calculation}{Core}Use the six scores in Table~\ref{tab:threshold-worked-example}. List the selected students at thresholds $0.50$, $0.70$, and $0.80$. Which policies respect a capacity of two reviews? State a ranking rule that always selects at most two cases.
+\item \exercisetag{Calculation}{Intermediate}Suppose the later labels for A through F are $(0,1,0,1,0,1)$. At thresholds $0.50$ and $0.70$, count false positives and false negatives, then calculate recall. Explain why these numbers do not measure whether outreach helps.
+\item \exercisetag{Calculation}{Intermediate}Square each of the six scores. Check whether the ranking changes. Find the transformed threshold that reproduces selection at $0.70$, and explain why the squared values need not be calibrated probabilities.
+\item \exercisetag{Calculation}{Core}For squared probability error, compare forecasts $0.2$ and $0.8$ when the label is $0$, and when it is $1$. Explain why increasing every forecast cannot be assumed to reduce the average loss.
+\item \exercisetag{Diagnosis}{Intermediate}A week-2 predictor uses an earlier quiz score, a platform count available at week 2, a final course grade, and a flag created after week-3 outreach. Which inputs cross the timing boundary? What other questions must be asked about the permissible inputs?
+\item \exercisetag{Design}{Intermediate}Give three explicit $(x_i,y_i)$ examples for a task of your choice. State what the raw records contain, how $\phi$ represents them, and when each input and target becomes observable.
+\item \exercisetag{Concept}{Core}Give an example of each feedback setting in Figure~\ref{fig:feedback-spectrum}. Identify where its labels or rewards come from, and explain how two settings could be combined in one system.
+\item \exercisetag{Design}{Intermediate}Annotators disagree about whether quoted insults constitute toxicity. Propose a clearer labeling rule, explain which interpretation it represents, and describe how you would check annotation consistency without treating agreement as proof of validity.
+\begin{samepage}
+\item \exercisetag{Design}{Intermediate}Write a one-page specification using Table~\ref{tab:framing-memo}. Include the case unit, label rule, input and target availability, representation, baseline, and protected evaluation. State an action or resource constraint where applicable; for a future-outcome task, specify the prediction cutoff and outcome horizon.
+\end{samepage}
 \end{exercises}
 
-\begin{challengeexercises}
-\item \exercisetag{Diagnosis}{Advanced}Take a problem from your own domain and argue for two different proxy targets. Explain which one you would choose first and what failure mode the rejected proxy invites.
-\item \exercisetag{Design}{Advanced}Design a counting task analogous to aerial wildlife counting for another domain. State the input, target, representation, objective, and what an evaluation with hidden answers would need to protect.
-\item \exercisetag{Concept}{Advanced}Give an example of a predictive feature that could be useful for a model but unacceptable in deployment. Explain why the framing memo should reject it before training begins.
-\item \exercisetag{Research}{Advanced}Write a short critique of a published or public AI system description by identifying which part of the framing memo is missing, underdefined, or ethically unstable.
+\begin{challengeexercises}[State your assumptions and justify the evidence and choices in your answer.]
+\item \exercisetag{Diagnosis}{Advanced}Propose two proxy targets for the same goal. Define their measurement rules and time windows, then give a case where each could disagree with the goal despite being correctly measured.
+\item \exercisetag{Calculation}{Advanced}An evaluation cohort has $N$ cases and $m>0$ positive labels. Treat these labels as fixed. A policy selects exactly $k$ cases uniformly at random, where $0\leq k\leq N$. Show that its expected recall is $k/N$. State what this baseline establishes and what it cannot establish about support outcomes.
+\item \exercisetag{Design}{Advanced}Design a counting task in another domain. Explain whether total-count labels or spatial annotations are available, which prediction target they support, and what information the final evaluation must protect.
+\item \exercisetag{Research}{Advanced}Review a published AI system description. Identify its case unit, measured target, timing boundary, input justification, action policy, baseline, and evaluation evidence. Separate missing information from claims the reported evidence actually contradicts.
 \end{challengeexercises}
+
+% Flush the final text before an empty recto-opening padding page, if needed.
+\clearpage
+{\pagestyle{empty}\cleardoublepage}
+\endgroup

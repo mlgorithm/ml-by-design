@@ -1,484 +1,435 @@
-\chapter{Generalization, Leakage, and Evaluation Discipline}
+\begingroup
+\raggedbottom
+\clubpenalty=10000
+\widowpenalty=10000
+\chapter[Generalization, Leakage, and Evaluation Discipline]{Generalization, Leakage, and\\Evaluation Discipline}
 \label{ch:evaluation-discipline}
 
-A team announces $0.91$ AUC on their early-warning model. The reviewer asks one question---``how was the test set chosen?''---and the number collapses. The team had used random row sampling, and the test set turned out to share students with the training set across different terms. The model was being scored on people it had already seen. With proper grouping by student, the AUC drops to $0.74$.
+A model is fitted to observations, but its purpose usually concerns other cases. Evaluation connects those two settings. It asks how well a chosen procedure predicts for a specified population, with the information that will actually be available when a prediction is made.
 
-When does evidence deserve trust? Strong numbers can reflect real learning, but they can also come from leakage, weak baselines, unstable splits, or a test set that quietly became part of development.
+Return to the student--course task from Chapters~\ref{ch:framing-learning-problems} and~\ref{ch:prediction-loss-decision}. At the end of week 2, the model predicts whether at least one of two specified assignment deadlines in weeks 3--4 will be missed. An adviser can review at most five cases before deciding whether to offer a check-in. Historical data can support this task only if the inputs reconstruct what was known at the same cutoff. A high score obtained using later submissions answers a different question.
 
-This chapter turns evaluation discipline into procedure. It defines what should count as new evidence, why the train, validation, and test roles must stay separate, and which simple checks keep a promising result honest. By the end, the reader should be able to write a minimal evaluation plan that makes a model claim credible on genuinely new data.
+Evaluation also depends on which cases are new. Predicting for unseen students, for returning students next semester, and for students at another institution require different evidence. A random split of rows cannot establish all three claims.
 
-Protect the claim by keeping development, external evidence, and baseline comparison separate. A strong-looking score is not enough if the workflow that produced it made the result too easy to win.
+\section{What Generalization Means}
 
-\textbf{Claim protection.} Before trusting a win, ask what part of the pipeline could have let future information, duplicate cases, excessive tuning, or a weak baseline inflate the score.
-
-\section{Opening Dilemma: The Validation Score Looks Great. Can We Trust It?}
-
-Keep the course-support setting from the first two chapters in view. Suppose a support team trains several early-warning models on historical course data, and one of them produces excellent validation recall and a strong final test score. Before celebrating, the team still has to ask harder questions. Were the preprocessing steps learned only from the training data? Was the test set kept external until the end? Did the model beat a serious baseline or only an unrealistically weak comparison? Would the result still look strong next semester? Each later section turns one of those questions into a procedural safeguard.
-
-These questions are not paperwork added after the model. They are what make the number mean anything.
-
-\section{Can the Result Survive New Data? Generalization and Overfitting}
-
-Training loss tells us how well the model matches data it has already seen. The next judgment question is whether the result survives new examples.
-
-\begin{definition}[Generalization]
-Generalization is the ability of a model to maintain good performance on unseen examples drawn from the same underlying problem as the training data.
-\end{definition}
-
-Two classic failure modes define the landscape. \emph{Underfitting} means the model is too simple, too restricted, or too poorly trained to capture even the main patterns in the training data. \emph{Overfitting} means the model matches the training data too closely, including noise and accidental details that do not hold for new data.
-
-One way to see this is the \emph{generalization gap}: the difference between training performance and performance on held-out data. A small gap does not guarantee excellence, but a large gap warns that the model has learned something too specific to the observed sample.
-
-Model capacity---how complex a pattern the model can represent---plays a central role. A more flexible model can represent more complicated functions. That flexibility helps when the data contains real structure, but it hurts when the data is limited or noisy. Overfitting is not evidence of intelligence. It is evidence that the experimental setup let memorization or unstable pattern matching masquerade as learning.
-
-\textbf{Bias--variance decomposition (statement).} Underfitting and overfitting have a precise mathematical reading. For a regression target $y = f^*(x) + \epsilon$ with irreducible noise variance $\sigma^2$, the expected squared error of a learned predictor $\hat f$ at a point $x$ decomposes as
+Let $P$ denote the population distribution of an input--target pair $(X,Y)$, and let $\ell$ be the prediction loss. For a fixed predictor $f$, its \emph{population risk} is
 \[
-\mathbb{E}\bigl[(y - \hat f(x))^2\bigr] = \underbrace{\bigl(\mathbb{E}[\hat f(x)] - f^*(x)\bigr)^2}_{\text{bias}^2} + \underbrace{\mathbb{E}\bigl[(\hat f(x) - \mathbb{E}[\hat f(x)])^2\bigr]}_{\text{variance}} + \underbrace{\sigma^2}_{\text{noise}},
+R_P(f)=\mathbb{E}_{(X,Y)\sim P}[\ell(Y,f(X))].
 \]
-where the expectation is over training samples. \emph{Bias} measures systematic miss: a model class too restricted to represent the true function. \emph{Variance} measures sensitivity: how much the fit fluctuates as the training sample changes. Underfitting corresponds to high bias; overfitting to high variance. Total error is the sum; reducing one usually requires accepting a little of the other. The classification case is messier, but the same intuition---bias from a restricted model class, variance from finite-sample sensitivity---carries over. The derivation (add-and-subtract trick, cross-term cancellation) and a simulation that estimates each term directly are given in Section~\ref{sec:bias-variance} of Chapter~\ref{ch:linear-models}; for this chapter, the statement is enough to discuss generalization.
+A training sample $\mathcal D$ produces a fitted predictor $\hat f_{\mathcal D}$. Its risk $R_P(\hat f_{\mathcal D})$ concerns a fresh case drawn from $P$, not an observation already used to fit or select it. Generalization concerns performance on such new cases. The population and the meaning of ``new'' belong in the statement of the result.
 
-If generalization is the real target, evaluation cannot be improvised after training. It has to be built into the experimental workflow from the start.
+Training reveals the empirical risk
+\[
+\hat R_{\mathcal D}(\hat f_{\mathcal D})
+=\frac1n\sum_{i=1}^n\ell(y_i,\hat f_{\mathcal D}(x_i)).
+\]
+Because fitting used these observations, a low training risk need not imply a low population risk. The \emph{generalization gap}, expressed in loss units, is
+\[
+R_P(\hat f_{\mathcal D})-\hat R_{\mathcal D}(\hat f_{\mathcal D}).
+\]
+Population risk is usually unknown, so a held-out estimate is used in its place. That observed gap contains sampling error. If the held-out cases come from a different population, it also reflects distribution shift. A large gap alone does not identify its cause; a small gap can accompany poor performance on both samples.
 
-\begin{figure}[t]
+\subsection{Underfitting, Overfitting, and Shift}
+
+\emph{Underfitting} describes a procedure that fails to capture useful structure, even in its training data. A restricted representation, strong regularization, or incomplete optimization can cause it. High training loss is a clue, but its scale must be interpreted against a baseline and the uncertainty of the target.
+
+\emph{Overfitting} occurs when choices adapt to sample-specific variation that does not improve prediction on fresh cases. Parameters can overfit the training data; repeated model selection can overfit validation data. A flexible model makes some forms of adaptation possible, but flexibility does not by itself establish overfitting. More data, regularization, and the fitting method can change the outcome.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c3fitBlue}{RGB}{56,103,170}
-\definecolor{c3fitRed}{RGB}{180,40,40}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[font=\small, x=1cm, y=1cm]
-%% Panel 1: underfitting
-\begin{scope}[xshift=0cm]
-  \node[font=\small\bfseries, black!75] at (1.4,3.2) {underfitting};
-  \draw[->,black!70] (0,0) -- (2.9,0) node[right] {epoch};
-  \draw[->,black!70] (0,0) -- (0,2.6) node[above] {error};
-  \draw[thick,c3fitBlue]  plot[smooth] coordinates {(0.2,1.8)(1.0,1.6)(1.8,1.45)(2.5,1.35)};
-  \draw[thick,c3fitRed]   plot[smooth] coordinates {(0.2,1.9)(1.0,1.7)(1.8,1.60)(2.5,1.50)};
-\end{scope}
-%% Panel 2: healthy fit
-\begin{scope}[xshift=4.5cm]
-  \node[font=\small\bfseries, black!75] at (1.4,3.2) {healthy fit};
-  \draw[->,black!70] (0,0) -- (2.9,0) node[right] {epoch};
-  \draw[->,black!70] (0,0) -- (0,2.6) node[above] {error};
-  \draw[thick,c3fitBlue]  plot[smooth] coordinates {(0.2,1.8)(1.0,1.2)(1.8,0.80)(2.5,0.60)};
-  \draw[thick,c3fitRed]   plot[smooth] coordinates {(0.2,1.9)(1.0,1.3)(1.8,0.95)(2.5,0.72)};
-\end{scope}
-%% Panel 3: overfitting
-\begin{scope}[xshift=9.0cm]
-  \node[font=\small\bfseries, black!75] at (1.4,3.2) {overfitting};
-  \draw[->,black!70] (0,0) -- (2.9,0) node[right] {epoch};
-  \draw[->,black!70] (0,0) -- (0,2.6) node[above] {error};
-  \draw[thick,c3fitBlue]  plot[smooth] coordinates {(0.2,1.8)(1.0,1.0)(1.8,0.45)(2.5,0.18)};
-  \draw[thick,c3fitRed]   plot[smooth] coordinates {(0.2,1.9)(1.0,1.2)(1.8,0.95)(2.5,1.10)};
-\end{scope}
-%% Shared legend centered below all three panels
-\node[c3fitBlue,  font=\small] at (4.5,-0.9) {\rule{0.6em}{1.5pt}\ training error};
-\node[c3fitRed,   font=\small] at (8.0,-0.9) {\rule{0.6em}{1.5pt}\ validation error};
-\end{tikzpicture}%
+\begin{tikzpicture}[ml diagram,x=0.78cm,y=0.72cm]
+\foreach \shift/\title in {0/limited fit,3.4/useful fit,6.8/overfit}{
+  \begin{scope}[xshift=\shift cm]
+  \draw[ml axis] (0,0) -- (2.8,0);
+  \draw[ml axis] (0,0) -- (0,2.5);
+  \node[font=\sffamily\small\bfseries] at (1.4,2.85) {\title};
+  \node[ml label] at (1.4,-0.4) {fitting progress};
+  \end{scope}
 }
-\caption{The same training loop can fail in three different ways. Underfitting keeps both errors high. Healthy fitting lowers both while keeping them close. Overfitting continues improving training error while validation error turns upward.}
+\draw[ml curve] plot[smooth] coordinates {(0.2,1.8)(0.9,1.6)(1.7,1.45)(2.5,1.35)};
+\draw[ml reference] plot[smooth] coordinates {(0.2,1.9)(0.9,1.7)(1.7,1.6)(2.5,1.5)};
+\begin{scope}[xshift=3.4cm]
+\draw[ml curve] plot[smooth] coordinates {(0.2,1.8)(0.9,1.2)(1.7,0.8)(2.5,0.6)};
+\draw[ml reference] plot[smooth] coordinates {(0.2,1.9)(0.9,1.3)(1.7,0.95)(2.5,0.72)};
+\end{scope}
+\begin{scope}[xshift=6.8cm]
+\draw[ml curve] plot[smooth] coordinates {(0.2,1.8)(0.9,1)(1.7,0.45)(2.5,0.18)};
+\draw[ml reference] plot[smooth] coordinates {(0.2,1.9)(0.9,1.2)(1.7,0.95)(2.5,1.1)};
+\end{scope}
+\node[ml label,anchor=south] at (0,2.6) {loss};
+\draw[ml curve] (2.1,-1.05) -- (2.7,-1.05);
+\node[ml label,anchor=west] at (2.8,-1.05) {training};
+\draw[ml reference] (6.4,-1.05) -- (7.0,-1.05);
+\node[ml label,anchor=west] at (7.1,-1.05) {validation};
+\end{tikzpicture}
+\captionof{figure}{Illustrative fitting traces under comparable training and validation populations. A widening gap can suggest overfitting, but neither these curve shapes nor a small gap guarantee good generalization.}
 \label{fig:underfit-healthy-overfit}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-Zech et al.\ studied pneumonia detection from chest radiographs across multiple hospital systems. Generalization changed substantially across institutions, and hospital-specific cues acted as confounders \citep{zech2018}. That is the chapter's lesson in concrete form: success on familiar held-out data is not the same as robust generalization after deployment.
+Distribution shift is a separate possibility. The target population $Q$ may differ from the population $P$ that supplied the training observations, so the relevant deployment risk is $R_Q(f)$. A model can generalize well within $P$ and fail within $Q$. Zech et al.\ found variable cross-hospital performance in pneumonia prediction from chest radiographs and identified hospital-related information as a potential confounder \citep{zech2018}. A familiar held-out sample and an external hospital sample support different conclusions.
 
-\section{Protected Evaluation Workflow}
+\subsection{Bias and Variance Describe a Learning Procedure}
 
-The next question is procedural rather than mathematical: how do we protect evaluation from development? The answer is the disciplined split between training, validation, and test data. This is the chapter's workflow spine, because every later safeguard depends on these roles staying distinct. The \emph{training set} fits parameters. The \emph{validation set} chooses tuning settings, model structures, thresholds, or stopping points. The \emph{test set} is reserved for the final report after the important decisions are already made.
+For squared loss, a precise decomposition helps separate sources of error. Fix an input $x$, define $m(x)=\mathbb E[Y\mid X=x]$, and write a fresh target as $Y=m(x)+\varepsilon$, with conditional mean-zero noise and variance $\sigma^2(x)$. Let $D$ include all training, validation, and fitting randomness used by the learning procedure, and set $\bar f(x)=\mathbb E_D[\hat f_D(x)]$. Assume finite second moments and that the fresh target is independent of $D$, conditional on $X=x$.
 
-The workflow is simple enough to state plainly: split first, fit preprocessing on train only, train candidate models on train, choose among them on validation, and touch the test set once at the end.
-
-Students often understand the definitions and still run the workflow incorrectly. What matters is not only the names of the sets but the order in which they are used. Once information crosses from held-out evidence back into development, the claim is weaker even when the code runs cleanly.
-
-A protected test set matters statistically as well as procedurally. When a bounded metric is averaged over independent held-out examples, its empirical value concentrates around the true expected performance.
-
-The Hoeffding bound below makes the headline ``a larger untouched test set gives a tighter estimate'' formal. A first-pass reader can take that headline and skip the inequality; the formal statement and the numerical scale check that follows are for readers who want to know how big ``large enough'' really is.
-
-\begin{theorem}[Hoeffding Bound for Held-Out Evaluation {\citep{hoeffding1963}}]
-Let $Z_1,\ldots,Z_n$ be independent random variables with $0 \le Z_i \le 1$, and let
+Adding and subtracting $m(x)$ and $\bar f(x)$ gives
 \[
-\bar{Z}=\frac{1}{n}\sum_{i=1}^n Z_i.
+Y-\hat f_D(x)
+=\varepsilon+[m(x)-\bar f(x)]+[\bar f(x)-\hat f_D(x)].
 \]
-Then for any $\varepsilon > 0$,
+The noise and the centered fitted prediction have mean zero. Their cross-terms vanish in expectation, yielding
+\begin{align*}
+\mathbb E_{D,Y\mid x}[(Y-\hat f_D(x))^2]
+&=[\bar f(x)-m(x)]^2\\
+&\quad+\mathbb E_D[(\hat f_D(x)-\bar f(x))^2]+\sigma^2(x).
+\end{align*}
+The first term is squared bias, the second is variance across development samples, and the third is target noise conditional on the available input. Bias concerns the entire procedure: representation, fitting, regularization, and selection can all affect its average prediction.
+
+Underfitting is often associated with high bias and overfitting with high variance. These are useful tendencies, not definitions or universal laws about increasing model size. The identity itself imposes no particular relationship between capacity and error. Chapter~\ref{ch:linear-models} develops it further for linear models and regularization.
+
+\section{Estimating Risk from a Protected Sample}
+
+Suppose the complete predictor has been chosen without using the test sample. Conditional on that fitted predictor $f$, independent test cases $(X_i,Y_i)\sim P$ give
 \[
-P\!\left(\left|\bar{Z}-\mathbb{E}[\bar{Z}]\right|\ge \varepsilon\right)\le 2e^{-2n\varepsilon^2}.
+\hat R_{\mathrm{te}}(f)=\frac1n\sum_{i=1}^n\ell(Y_i,f(X_i)),
+\qquad
+\mathbb E_{\mathrm{te}}[\hat R_{\mathrm{te}}(f)\mid f]=R_P(f).
+\]
+This is an unbiased estimate of the risk of that particular fitted predictor, provided the loss is integrable. It does not eliminate uncertainty about future populations or measure how the result would vary across new training samples.
+
+\subsection{A Bound on Sampling Error}
+
+When the per-case quantities have a known bound, their average admits a distribution-free concentration inequality.
+
+\noindent\begin{minipage}{\linewidth}
+\begin{theorem}[Hoeffding bound {\citep{hoeffding1963}}]
+Let $Z_1,\ldots,Z_n$ be independent random variables satisfying $0\le Z_i\le1$, and let $\bar Z=n^{-1}\sum_i Z_i$. For every $\epsilon>0$,
+\[
+\Pr\!\left(\left|\bar Z-\mathbb E[\bar Z]\right|\ge\epsilon\right)
+\le 2e^{-2n\epsilon^2}.
 \]
 \end{theorem}
+\end{minipage}
 
-The practical point is not that a held-out score is infallible. It is that an untouched test set gives a statistically interpretable estimate of performance, and that repeated reuse of the same test set destroys that interpretation.
+For a fixed classifier, take $Z_i=\mathbf1\{f(X_i)=Y_i\}$. Then $\bar Z$ is test accuracy and, for identically distributed test cases, $\mathbb E[\bar Z]$ is population accuracy. The same argument applies to a loss known to lie in $[0,1]$. Independence is required conditional on the fitted rule.
 
-If the held-out metric is an average of bounded per-example quantities, such as accuracy indicators or a loss rescaled into $[0,1]$, this inequality explains why larger protected test sets produce more stable evidence and why repeated peeking at the same hold-out set is so damaging.
-
-For a rough scale check, plug in \(\varepsilon=0.10\). With \(n=100\) held-out examples, Hoeffding gives
+Setting the upper bound equal to a failure probability $\delta\in(0,1)$ gives
 \[
-P(|\bar Z-\mathbb{E}\bar Z|\ge 0.10)\le 2e^{-2}=0.27.
+\epsilon_n=\sqrt{\frac{\log(2/\delta)}{2n}}.
 \]
-With \(n=1000\), the same deviation bound becomes \(2e^{-20}\), essentially zero in practice. This does not mean the estimate is unbiased under distribution shift, duplicate examples, leakage, or test-set reuse. Under the stated independence and boundedness assumptions, larger untouched samples merely shrink random sampling noise.
+With probability at least $1-\delta$, population accuracy lies within $\epsilon_n$ of test accuracy, intersected with $[0,1]$. This is a confidence statement over repeated independent test samples, not a probability distribution assigned to the unknown accuracy after observing one sample.
 
-Here \emph{preprocessing} means data transformations such as scaling, normalization, or feature extraction that are learned from the training data and then applied unchanged to validation and test data.
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{3.5cm}L{6.7cm}@{}}
+\toprule
+Independent test cases & Hoeffding half-width for $\delta=0.05$ \\
+\midrule
+100 & $0.136$, about 13.6 percentage points \\
+1,000 & $0.043$, about 4.3 percentage points \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Conservative sampling-error bounds for a fixed rule evaluated by a bounded per-case average. They quantify random test sampling, not distribution shift or development contamination.}
+\label{tab:hoeffding-scale}
+\end{minipage}\par\addvspace{\intextsep}
 
-\begin{figure}[t]
+Requiring a half-width no greater than $\epsilon$ gives
+\[
+n\ge\frac{\log(2/\delta)}{2\epsilon^2}.
+\]
+For $\delta=0.05$ and $\epsilon=0.05$, 738 independent cases suffice for this bound. Halving the desired half-width requires four times as many cases. Other intervals can be tighter under additional assumptions; Hoeffding is a conservative guarantee.
+
+The bound does not apply directly to every metric in Chapter~\ref{ch:prediction-loss-decision}. F1 is a ratio of counts, and AUC compares pairs; neither is the simple average of independent per-case terms used above. Log loss and squared loss are generally unbounded. Rescaling by the largest loss observed in a test sample does not supply a known bound for future losses. If a clipped loss is specified in advance, concentration applies to that clipped quantity, whose interpretation differs from the original loss.
+
+\subsection{Rows Are Not Always Independent Cases}
+
+Repeated records from the same student, adjacent time windows, or duplicate images can be dependent. A larger row count then need not produce the uncertainty reduction promised for independent observations.
+
+Consider an extreme illustrative example. Ten independent cases each have a correctness indicator $Z_g$ with success probability $p$. Copy each case ten times. The mean across the resulting 100 rows is still
+\[
+\bar Z=\frac1{100}\sum_{g=1}^{10}10Z_g
+=\frac1{10}\sum_{g=1}^{10}Z_g,
+\qquad
+\operatorname{Var}(\bar Z)=\frac{p(1-p)}{10}.
+\]
+The copies supply no additional information. Treating them as 100 independent cases would divide the variance by 100 instead of 10.
+
+Real dependence is usually less extreme, but the principle remains: the evaluation unit and uncertainty calculation must respect the sampling structure. A held-out semester may contain thousands of rows yet offer only one semester of evidence about semester-to-semester variation.
+
+Even independently sampled inputs do not guarantee independent policy errors when decisions are coupled by a shared review budget. Evaluate such a policy with a sampling analysis that respects its batches, rather than applying a per-case bound automatically.
+
+\section{Separating Fitting, Selection, and Evaluation}
+
+Training, validation, and test are roles assigned to observations. Training fits parameters and learned transformations. Validation supports choices among alternatives. Test data assess the chosen procedure after those choices are fixed. A data split protects these roles only if information follows the intended boundaries.
+
+Let $\mathcal D_{\mathrm{tr}}$, $\mathcal D_{\mathrm{val}}$, and $\mathcal D_{\mathrm{te}}$ be the three samples. A candidate setting $\lambda$ produces
+\[
+\hat f_\lambda=A_\lambda(\mathcal D_{\mathrm{tr}}),
+\qquad
+\hat\lambda\in\arg\min_\lambda
+\hat R_{\mathrm{val}}(\hat f_\lambda).
+\]
+For a metric to be maximized, selection uses an argmax instead. The setting can include a feature set, regularization strength, stopping rule, calibration method, threshold, or review policy. All of these choices can adapt to validation observations.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c3wfRaw}{RGB}{235,242,253}
-\definecolor{c3wfRawLine}{RGB}{56,103,170}
-\definecolor{c3wfPrep}{RGB}{210,238,220}
-\definecolor{c3wfPrepLine}{RGB}{26,112,64}
-\definecolor{c3wfTrain}{RGB}{220,233,251}
-\definecolor{c3wfTrainLine}{RGB}{56,103,170}
-\definecolor{c3wfTune}{RGB}{254,242,214}
-\definecolor{c3wfTuneLine}{RGB}{184,92,16}
-\definecolor{c3wfTest}{RGB}{237,224,250}
-\definecolor{c3wfTestLine}{RGB}{100,50,160}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  raw/.style ={draw=c3wfRawLine,  fill=c3wfRaw,  rounded corners, align=center,
-               minimum height=0.9cm, minimum width=2.1cm,
-               font=\small\bfseries, text=c3wfRawLine},
-  pre/.style ={draw=c3wfPrepLine, fill=c3wfPrep, rounded corners, align=center,
-               minimum height=0.9cm, minimum width=2.7cm,
-               font=\small\bfseries, text=c3wfPrepLine},
-  trn/.style ={draw=c3wfTrainLine,fill=c3wfTrain,rounded corners, align=center,
-               minimum height=0.9cm, minimum width=2.3cm,
-               font=\small\bfseries, text=c3wfTrainLine},
-  tun/.style ={draw=c3wfTuneLine, fill=c3wfTune, rounded corners, align=center,
-               minimum height=0.9cm, minimum width=2.1cm,
-               font=\small\bfseries, text=c3wfTuneLine},
-  tst/.style ={draw=c3wfTestLine, fill=c3wfTest, rounded corners, align=center,
-               minimum height=0.9cm, minimum width=2.1cm,
-               font=\small\bfseries, text=c3wfTestLine},
-  arrow/.style={-Latex, thick, black!55}
-]
-%% ── Top row ──────────────────────────────────────────────────────────
-\node[raw] (raw)   at (1.1,  3.2) {Raw data};
-\node[raw] (split) at (3.8,  3.2) {Split first};
-\node[pre] (prep)  at (7.2,  3.2) {Fit preprocessing\\on train only};
-%% ── Bottom row ───────────────────────────────────────────────────────
-\node[trn] (train) at (3.8,  0.9) {Train candidate\\models};
-\node[tun] (tune)  at (7.2,  0.9) {Tune on\\validation};
-\node[tst] (test)  at (10.3, 0.9) {Report once\\on test};
-%% ── Arrows ───────────────────────────────────────────────────────────
-\draw[arrow] (raw)   -- (split);
-\draw[arrow] (split) -- (prep);
-\draw[arrow] (split) -- (train);
-\draw[arrow] (prep)  -- (tune);
-\draw[arrow] (train) -- (tune);
-\draw[arrow] (tune)  -- (test);
-%% ── Annotation: sits to the right of the prep→tune arrow ─────────────
-\node[anchor=west, align=left, font=\footnotesize, black!55]
-  at (7.9, 2.05)
-  {apply the same\\transform to\\val and test};
-\end{tikzpicture}%
-}
-\caption{A correct evaluation workflow is procedural, not only conceptual. The split comes before the learned preprocessing, and the test set is touched only after the model-selection decisions are finished.}
+\begin{tikzpicture}[ml diagram]
+\node[ml box,minimum width=1.3cm] (split) at (0,0) {split};
+\node[ml key box,minimum width=2.15cm] (fit) at (2.8,0) {fit on training};
+\node[ml box,minimum width=1.8cm] (select) at (5.6,0) {select\\\footnotesize validation};
+\node[ml box,minimum width=1.8cm] (test) at (8.4,0) {evaluate\\\footnotesize test};
+\draw[ml reference] (7.0,-1.55) -- (7.0,0.75);
+\draw[ml arrow] (split) -- (fit);
+\draw[ml arrow] (fit) -- (select);
+\draw[ml arrow] (select) -- node[above,ml label,fill=white,inner sep=1pt] {freeze} (test);
+\draw[ml feedback] (select.south) -- (5.6,-1.2) -- (2.8,-1.2) -- (fit.south);
+\node[ml label,fill=white,inner sep=2pt] at (4.2,-1.2) {development repeats};
+\end{tikzpicture}
+\captionof{figure}{Repeated fitting and selection remain inside development. A complete frozen procedure crosses the boundary into test evaluation. Learned transformations and the action policy belong to that procedure.}
 \label{fig:evaluation-workflow}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-\textbf{Protected test set.} The test set is for one final report, not for development. Once test results influence model choice, the test set stops being an external check.
+A final predictor may be refitted on combined training and validation data after selection. Specify that refitting rule before testing, and refit its learned transformations too. Calibration and stopping rules must retain the separation their methods require; a calibration fit should use appropriate held-out or out-of-fold scores. Test data remain excluded. The reported test score then assesses the refitted procedure, which can differ from the candidate originally compared on validation.
 
-This logic can be expressed as simple pseudocode:
+In the course-support task, a threshold that produces no more than five flags on one validation cohort may exceed five on the next. A hard capacity limit requires a policy that enforces the limit on each new batch, such as ranking and reviewing at most five eligible cases with a specified tie rule. Select the scoring method and policy on development data, and evaluate them together. Recall still concerns the future deadline event, not who benefits from a check-in.
 
-\begin{codeexample}[caption={A disciplined evaluation workflow}]
-train_data, validation_data, test_data = split_data(raw_data)
+\subsection{Why the Validation Winner Looks Too Good}
 
-preprocessor = fit_preprocessor(train_data)
-train_ready = preprocessor.transform(train_data)
-validation_ready = preprocessor.transform(validation_data)
-test_ready = preprocessor.transform(test_data)
+Suppose $M$ candidates are fixed before examining validation outcomes. Conditional on their training fits, let candidate $j$ have population risk $R_j$ and an unbiased validation estimate $\hat R_j$. Choose $J\in\arg\min_j\hat R_j$, with a specified tie rule. Then
+\[
+\mathbb E[\hat R_J]
+=\mathbb E[\min_j\hat R_j]
+\le\min_j R_j
+\le\mathbb E[R_J].
+\]
+The first inequality follows because the minimum is no greater than any particular estimate. The second follows because every selected candidate has risk at least $\min_j R_j$. Estimates may be correlated; this argument does not require their independence. The selected validation score is optimistic on average under these assumptions \citep{cawley2010}.
 
-model_candidates = train_many_models(train_ready)
-chosen_model = select_using_validation(model_candidates, validation_ready)
-final_score = evaluate_once(chosen_model, test_ready)
-print(final_score)
-\end{codeexample}
+For a small calculation, imagine two candidates whose true risks are both $0.20$. Each estimate independently equals $0.15$ or $0.25$ with equal probability. The smaller estimate is $0.15$ in three of the four equally likely outcomes and $0.25$ in the fourth. Thus
+\[
+\mathbb E[\min(\hat R_1,\hat R_2)]
+=\tfrac34(0.15)+\tfrac14(0.25)=0.175.
+\]
+Selection appears to improve risk by $0.025$ although both candidates still have true risk $0.20$. These numbers illustrate the selection mechanism; they are not an empirical model of a particular task.
 
-Cross-validation is a useful extension when data is limited. Instead of relying on one validation split, the training data is partitioned into several folds (several train-validation partitions), and the validation role is rotated across them. A final untouched test set remains valuable when possible. The next subsections take this from sketch to procedure.
+An independent test sample estimates $R_J$ after the winner is chosen. If test outcomes then change the feature set, threshold, model, or reported comparison, they have entered development. Fresh protected evidence is needed for an ordinary independent evaluation of the revised choice.
 
-\subsection{The Decision Policy Is Part of Model Selection}
+Evaluating a frozen system with several metrics specified in advance does not itself fit the system to the test sample. Nor does rereading an unchanged result alter it. The problem is feedback that changes the choice or the claim based on favorable test outcomes. Prespecified multiple comparisons still require an appropriate uncertainty analysis.
 
-Thresholds, calibration methods, regularization strengths, stopping points, and even model families are not innocent details bolted on after the score. They are part of model selection. If the final test results guide those choices, the test set stops being external evidence and becomes another development tool.
+\subsection{Searching a Fixed Collection of Candidates}
 
-The core logic is short. Training data teaches the model parameters. Validation data chooses among serious alternatives: which threshold or ranking cutoff is usable, whether calibration is needed, and which tuned settings make the decision policy work best. The test data is touched once, after those choices are frozen, to check whether the chosen policy still looks defensible on new cases.
+Hoeffding also shows how a finite search changes the evidence. Assume $M$ predictors are fixed independently of a validation sample of $n$ independent cases drawn from the population defining their risks $R_j$, and their losses lie in $[0,1]$. Applying the bound to each predictor and using the union bound gives
+\[
+\Pr\!\left(\max_{1\le j\le M}|\hat R_j-R_j|\ge\epsilon\right)
+\le 2M e^{-2n\epsilon^2}.
+\]
+With probability at least $1-\delta$, all candidate estimates are within
+\[
+\epsilon_{n,M}=\sqrt{\frac{\log(2M/\delta)}{2n}}
+\]
+of their risks. On that event, the chosen candidate satisfies
+\[
+R_J\le\hat R_J+\epsilon_{n,M}
+\le\hat R_{j^*}+\epsilon_{n,M}
+\le R_{j^*}+2\epsilon_{n,M},
+\]
+where $j^*\in\arg\min_j R_j$. Searching more candidates increases the simultaneous uncertainty allowance. This statement does not require candidate errors to be independent. It does require the collection to be independent of the validation sample; adaptively inventing new candidates after inspecting its outcomes is a different setting.
 
-\begin{example}[Threshold Choice Is Part of Model Selection]
-Suppose a student-support team considers thresholds $0.40$, $0.55$, and $0.70$ on the validation set. Under the team's weekly review constraint, threshold $0.40$ catches more true positives but creates too many flags. Threshold $0.70$ keeps the queue small but misses too many students in need. Threshold $0.55$ gives the best recall while staying within review capacity, so it becomes the chosen policy. If the team then checks the test set, dislikes the result, and moves the threshold again, the test set has quietly become part of development. The number is still computed correctly, but it is no longer external evidence.
-\end{example}
+\section{Cross-Validation and Nested Selection}
 
-\subsection{Cross-Validation When Data Is Limited}
+A single validation split uses only part of the available development data for fitting and may produce an unstable comparison. Cross-validation rotates the held-out role across several folds. It changes how development evidence is used; it does not turn selected validation scores into independent final evidence.
 
-With abundant data, one protected validation split is usually enough to choose among candidate settings. With limited data, a single split can be too noisy. Cross-validation repairs that weakness by rotating the validation role across several folds of the development data.
+\subsection{What a Fold Estimates}
 
-The idea is simple. Partition the development data into several folds. Hold one fold out as validation, train on the rest, record the decision-relevant metric, and rotate. Average the fold-level validation results and choose the setting that behaves best on average.
+In ordinary $K$-fold cross-validation, partition development data into disjoint folds $\mathcal D_1,\ldots,\mathcal D_K$. For a fixed setting $\lambda$, let $\hat f_\lambda^{(-k)}$ be fitted on all development observations except fold $k$. Every learned transformation must also be fitted without that fold. The per-case cross-validation estimate is
+\[
+\hat R_{\mathrm{CV}}(\lambda)
+=\frac1N\sum_{k=1}^K\sum_{(x_i,y_i)\in\mathcal D_k}
+\ell(y_i,\hat f_\lambda^{(-k)}(x_i)),
+\qquad N=\sum_k|\mathcal D_k|.
+\]
+This weights fold means by fold size. An unweighted mean of fold scores gives each fold equal importance. The two averages are guaranteed to agree when fold sizes are equal, but can differ otherwise. For folds of sizes $30,30,40$ with mean losses $0.20,0.30,0.10$, the per-case estimate is
+\[
+\frac{30(0.20)+30(0.30)+40(0.10)}{100}=0.19,
+\]
+whereas the unweighted fold mean is $0.20$.
 
-The important point is conceptual, not procedural. Cross-validation is not a replacement for external evidence. It is a stronger way to use the development data when one validation split would be unstable. If a final test set is available, it should still stay outside the cross-validation loop.
+For nonadditive metrics such as F1, averaging fold scores and computing one score from pooled out-of-fold predictions need not agree. Specify the aggregation rule and its intended interpretation. Averaging student-level scores rather than row-level losses also changes which population receives equal weight.
 
-\begin{codeexample}[caption={Selection discipline when the decision policy is part of the model choice}]
-development_data, test_data = split_once(raw_data)
+Cross-validation fits several predictors, each on less data than the final full-development fit. Its score therefore concerns that training-and-validation procedure and training size, rather than exactly the risk of one final fitted predictor. Fold results are also dependent because training samples overlap. Their standard deviation describes observed variation, but dividing it by $\sqrt K$ does not automatically provide a valid standard error \citep{bengio2004cv}.
 
-candidate_settings = propose_settings()
-best_setting = None
-best_value = float("-inf")
+\subsection{The Outer Fold Protects Evaluation}
 
-for setting in candidate_settings:
-    fold_values = []
-    for train_fold, validation_fold in make_folds(development_data):
-        model = fit_model(train_fold, setting)
-        scores = model.predict_scores(validation_fold)
-        value = evaluate_policy(scores, validation_fold.labels, setting)
-        fold_values.append(value)
-    mean_value = average(fold_values)
-    if mean_value > best_value:
-        best_value = mean_value
-        best_setting = setting
+If cross-validation chooses $\lambda$, the winning cross-validation score has participated in selection. A separate test sample can evaluate the final choice. When data are limited and no separate test is reserved, \emph{nested cross-validation} separates the roles within each outer split \citep{cawley2010}.
 
-final_model = fit_model(development_data, best_setting)
-final_value = evaluate_policy(
-    final_model.predict_scores(test_data),
-    test_data.labels,
-    best_setting
-)
-print(final_value)
-\end{codeexample}
+In ordinary nested $K$-fold cross-validation, set aside each outer fold $k$. On the remaining outer-training data, use inner folds to choose settings, transformations, and policies. Fit the chosen procedure using only the outer-training data, then evaluate on the outer fold. Repeat across outer folds. In notation, if $T$ denotes the complete inner selection and fitting procedure, the outer predictor is
+\[
+\tilde f^{(-k)}=T(\mathcal D_{\mathrm{dev}}\setminus\mathcal D_k),
+\]
+and its outer estimate is
+\[
+\hat R_{\mathrm{nested}}
+=\frac1N\sum_{k=1}^K\sum_{(x_i,y_i)\in\mathcal D_k}
+\ell(y_i,\tilde f^{(-k)}(x_i)).
+\]
+The held-out labels in fold $k$ do not choose its predictor. Different outer folds may choose different settings; the estimate assesses the selection procedure, not a single globally fixed setting. Outer folds still share development observations, so their results are not independent replications.
 
-In this skeleton, \texttt{setting} may bundle more than one kind of choice: regularization strength, tree depth, threshold, ranking cutoff, or calibration rule. The deeper lesson is that the decision policy is not outside the experiment. It is part of what is being selected.
-
-\subsection{Hyperparameter Search Without Test Leakage}
-
-A \emph{hyperparameter} is a setting chosen by the experimenter rather than learned by the basic fitting rule. Examples include the number of neighbors in k-nearest neighbors, the depth of a tree, the strength of regularization, the learning rate of an optimizer, and the threshold that turns scores into action. These choices are often necessary. The mistake is not searching over them. The mistake is letting the final test result guide the search.
-
-Once this is clear, the workflow becomes straightforward. Search over alternatives on training and validation data, or inside cross-validation on the development set. Freeze one configuration. Then evaluate once on the test set. The test set should answer ``did this chosen system survive new data?'' rather than ``which of these many systems should we keep?''
-
-Metric choice, threshold choice, calibration, and selection protocol belong to one judgment chain. Protected splits, leakage discipline, and baseline practice---the rest of this chapter---are what keep that chain honest.
-
-This chapter establishes minimal experimental discipline for one credible result. Chapter~\ref{ch:experiments-claims} returns to the same logic at larger scale with repeated runs, ablations, slice analysis, and stronger empirical claims.
-
-\section{How Experiments Lie: Leakage}
-
-Data leakage occurs when information from outside the legitimate training process reaches the model or the experiment design. It is dangerous because it tends to produce excellent-looking results for the wrong reason. The cleanest way to think about leakage is as a broken boundary: information that should have stayed outside development was allowed back in.
-
-Common forms of leakage become clear once the boundary is clear: normalizing or scaling the full dataset before the train-test split; selecting features using all examples before separating the test set; using duplicate or near-duplicate examples across training and test data; letting future information enter a prediction task that should use only past information; or tuning repeatedly on the test set until the score looks good.
-
-The fourth item---\emph{temporal leakage}---earns a brief forward reference. Chapter~\ref{ch:reliability} returns to it under concept drift and deployment shift, where the same logic that forbids training on future labels also explains why time-ordered evaluation splits matter whenever the deployment environment evolves.
-
-Leakage is not a small classroom mistake. Bernett et al.\ present it as a recurring threat to validity in machine learning for biology and argue that guarding against it is central to trustworthy evaluation and reproducibility \citep{bernett2024}. Their setting is biological ML, but the lesson is general.
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c3lkNeutBg}{RGB}{235,242,253}
-\definecolor{c3lkNeutLine}{RGB}{56,103,170}
-\definecolor{c3lkWrongBg}{RGB}{254,216,216}
-\definecolor{c3lkWrongLine}{RGB}{180,40,40}
-\definecolor{c3lkRightBg}{RGB}{210,238,220}
-\definecolor{c3lkRightLine}{RGB}{26,112,64}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  neut/.style ={draw=c3lkNeutLine,  fill=c3lkNeutBg,  rounded corners, align=center,
-                minimum height=0.85cm, minimum width=1.9cm, font=\small},
-  wrong/.style={draw=c3lkWrongLine, fill=c3lkWrongBg, rounded corners, align=center,
-                minimum height=0.85cm, minimum width=2.6cm,
-                font=\small\bfseries, text=c3lkWrongLine},
-  right/.style={draw=c3lkRightLine, fill=c3lkRightBg, rounded corners, align=center,
-                minimum height=0.85cm, minimum width=2.3cm,
-                font=\small\bfseries, text=c3lkRightLine},
-  arrow/.style={-Latex, thick, black!55},
-  leak/.style ={-Latex, thick, dashed, c3lkWrongLine}
-]
-%% ── Wrong pipeline ─────────────────────────────────────────────
-\node[font=\small\bfseries, c3lkWrongLine] at (0.95, 7.84) {Wrong pipeline};
-\node[neut]  (w1) at (0.95, 6.44) {raw data};
-\node[wrong] (w2) at (4.2,  6.44) {scale or select\\using all data};
-\node[neut]  (w3) at (8.0,  6.44) {split and\\evaluate};
-\draw[arrow] (w1) -- (w2);
-\draw[arrow] (w2) -- (w3);
-%% leakage arrow: dashed red, from split back to scale (below the boxes)
-\draw[leak] ([yshift=-0.77cm]w3.south) -- ([yshift=-0.77cm]w2.south)
-    node[midway, below=2pt, font=\small\bfseries, c3lkWrongLine]
-    {test info leaks backward};
-\draw[thin, dashed, c3lkWrongLine] (w3.south) -- ++(0,-0.77);
-\draw[thin, dashed, c3lkWrongLine] (w2.south) -- ++(0,-0.77);
+\begin{tikzpicture}[ml diagram]
+\node[ml box,minimum width=4.2cm,minimum height=2.25cm] (outertrain) at (0,0) {};
+\node[ml label] at (0,0.78) {outer training data};
+\node[ml key box,minimum width=3.45cm] (inner) at (0,-0.12) {inner folds select settings};
+\node[ml box,minimum width=2.8cm] (outertest) at (5.25,0) {outer held-out fold\\\footnotesize evaluate once chosen};
+\draw[ml arrow] (outertrain.east) -- node[above,ml label] {fit + freeze} (outertest.west);
+\node[ml label] at (2.15,-1.6) {repeat with each outer fold held out};
+\end{tikzpicture}
+\captionof{figure}{One outer split in nested cross-validation. All inner selection stays inside its training portion. Outer results evaluate the complete procedure; changing that procedure in response to those results introduces another selection step.}
+\label{fig:nested-cross-validation}
+\end{minipage}\par\addvspace{\intextsep}
 
-%% ── Right pipeline ─────────────────────────────────────────────
-\node[font=\small\bfseries, c3lkRightLine] at (0.95, 1.8) {Right pipeline};
-\node[neut]  (r1) at (0.95, 0.8) {raw data};
-\node[right] (r2) at (3.7,  0.8) {split first};
-\node[right] (r3) at (7.6,  0.8) {fit on train,\\apply to val/test};
-\draw[arrow] (r1) -- (r2);
-\draw[arrow] (r2) -- (r3);
-%% ok annotation — sits below the "fit on train" box
-\node[c3lkRightLine, font=\small\bfseries] at (7.6, -0.3)
-  {evaluation stays external};
-\draw[->, thin, c3lkRightLine] (7.6, -0.03) -- (r3.south);
-\end{tikzpicture}%
-}
-\caption{Leakage is usually procedural. The wrong pipeline lets information from validation or test examples influence preprocessing or feature design. The right pipeline keeps those steps inside the training boundary.}
+After estimating the procedure, selection and fitting can be run on all development data to produce a final predictor. The outer estimate is not an exact unbiased measurement of that particular full-data fit. If outer results are used to redesign the procedure or choose among many procedures, they too become development evidence.
+
+\section{Matching Data Boundaries to the Claim}
+
+A split can be disjoint by row and still expose information that would not be available for a new prediction. \emph{Leakage} occurs when fitting, selection, or evaluation uses information outside the intended task and evidence boundaries. It can arise through learned transformations, target-related features, repeated cases, or development feedback. Bernett et al.\ discuss these threats in biological machine learning and give guiding questions for preventing them \citep{bernett2024}.
+
+\subsection{Learned Transformations Belong Inside the Fit}
+
+Means, scales, imputation values, and selected features are learned quantities. Estimating them on all observations before splitting makes training depend on held-out information. A fixed unit conversion, by contrast, need not learn anything from the sample.
+
+Suppose training values are $2,4$ and a held-out value is $12$. The training mean is $3$, while the pooled mean is $6$. Centering the training value $2$ gives $-1$ using the training mean and $-4$ using the pooled mean. The latter training representation already depends on the held-out case. Applying the training mean to the held-out value gives $12-3=9$.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram]
+\node[ml label,anchor=east] at (-0.3,1.25) {leaked};
+\node[ml label,anchor=east] at (-0.3,-0.6) {protected};
+\node[ml box] (all) at (1.0,1.25) {all data};
+\node[ml box,dashed] (early) at (4.0,1.25) {fit transform};
+\node[ml box] (late) at (7.05,1.25) {split + evaluate};
+\draw[ml arrow] (all) -- (early);
+\draw[ml arrow] (early) -- (late);
+\node[ml label] at (4.0,0.56) {held-out data influence training};
+\node[ml box] (raw) at (1.0,-0.6) {split first};
+\node[ml key box] (train) at (4.0,-0.6) {fit on training};
+\node[ml box] (apply) at (7.05,-0.6) {apply to held-out};
+\draw[ml arrow] (raw) -- (train);
+\draw[ml arrow] (train) -- (apply);
+\end{tikzpicture}
+\captionof{figure}{The protected order preserves the claim about a procedure fitted without held-out observations. In cross-validation, each fold needs its own training-fitted transformation.}
 \label{fig:leakage-pipelines}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-\begin{codeexample}[caption={Leakage in one line of pseudocode}]
-# Wrong: statistics use all examples, including future test cases.
-scaled_all = scale(raw_data)
-train_data, test_data = split_data(scaled_all)
+This violation does not guarantee that a score increases; its effect depends on the transformation and model. It changes the procedure being assessed. If access to an entire unlabeled prediction batch is deliberately part of a \emph{transductive} task, batch-dependent transformations may be permitted. That task and access must be declared. They cannot silently support a claim about prediction for independent arriving cases.
 
-# Right: split first, then learn the scaling rule from train only.
-train_data, test_data = split_data(raw_data)
-scaler = fit_scaler(train_data)
-train_data = scaler.transform(train_data)
-test_data = scaler.transform(test_data)
-\end{codeexample}
+\subsection{Groups, Duplicates, and Prediction Time}
 
-\begin{warningbox}
-Leakage does not merely add noise. It can destroy the meaning of the experiment. A leaked benchmark score is not a weaker scientific claim; often it is no scientific claim at all.
-\end{warningbox}
+For prediction on unseen students, keep every record from one student in the same split. Otherwise a model may exploit student-specific patterns already observed during training. Duplicate or near-duplicate cases require the same care when the claim concerns new underlying cases. A group split protects separation by the chosen group; it does not establish generalization to new semesters or institutions.
 
-\section{Baseline Ladder and Sanity Checks}
+For future prediction on known students, earlier records may legitimately be available. Use a chronological design that recreates this access. Training examples and their labels must be available at the fitting date; evaluation inputs may use only information available at their prediction cutoff. Every training input must also respect its own prediction cutoff. An example whose input occurs before the fitting date but whose target becomes known afterward cannot train a model that supposedly existed on that date.
 
-A clean pipeline is necessary but not sufficient. The result still needs an honest comparison point. Before trusting a sophisticated model, ask how well simple serious baselines perform. Always predicting the majority class, using a simple weighted linear model, or fitting a small decision tree can reveal whether the task is easy, imbalanced, or poorly specified. A random predictor belongs in a different category: it is a sanity check that catches a broken pipeline, not a serious rung in the ladder. The ladder is not a ritual of humility. It makes sure the final claim is about real added value rather than about avoiding an obvious comparison.
+In the running task, a semester's end-of-week-2 inputs produce targets observable by the end of week 4 for cases whose applicable deadlines have passed. An approved extension beyond that horizon requires later observation or an unresolved outcome under the labeling guide. To evaluate an early-warning procedure for a later semester, fit and select it using eligible earlier semesters, then freeze it before that later semester's prediction cutoff. Reconstruct the later inputs at week 2 and observe its outcomes afterward. Course rules and deadline extensions must follow the same labeling guide.
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{2.46cm}p{7.78cm}}
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{3.65cm}L{6.55cm}@{}}
 \toprule
-Baseline rung & What it tells you \\
+Intended new case & Evidence boundary \\
 \midrule
-Majority class or constant prediction & Whether the headline score is beating trivial class imbalance or central tendency \\
-Simple weighted model & Whether the task already has a strong low-complexity solution \\
-Small tree, simple word-count model, or nearest-neighbor copy rule & Whether modest nonlinear structure or simple representation tricks already explain most of the gain \\
-Only then a complex model & Whether additional complexity is buying something real rather than hiding weak experimental design \\
+Unseen student in a comparable cohort & Hold out whole students; state which courses and cohorts are represented \\
+Returning student in a future semester & Train on information already available; hold out the later semester \\
+Student at a new institution & Hold out that institution; document differences in inputs and label rules \\
 \bottomrule
 \end{tabular}
-\caption{A baseline ladder keeps evaluation honest. If a sophisticated model is not clearly above a simple rung, the experiment is not yet ready for a strong claim.}
+\captionof{table}{Different split units support different generalization claims. Group and time restrictions can be combined when deployment requires both.}
+\label{tab:evaluation-population-boundaries}
+\end{minipage}\par\addvspace{\intextsep}
+
+Time windows can overlap even when their starting dates differ. If training targets include events from the evaluation horizon, separating rows by their start date alone is insufficient. Exclude overlapping records or leave a gap chosen from the feature and label windows. A time-respecting cross-validation scheme trains on earlier eligible data and validates on later data; it does not rotate future observations into the training portion for an earlier prediction. For temporal nested evaluation, both outer and inner splits must respect this order; their training sets replace the ordinary complement-fold sets above.
+
+Class stratification can help ensure that ordinary validation folds contain both labels, but it must not break a required group or temporal boundary. Likewise, artificially balancing the test sample changes its class prevalence. The reported metric then concerns that altered sample unless an appropriate population weighting is used.
+
+\section{Baselines, Sanity Checks, and the Supported Claim}
+
+A protected estimate still needs a meaningful comparison. A baseline establishes what a simpler or already available procedure achieves under the same task, information cutoff, and evaluation protocol. Relevant baselines depend on the question; no universal ladder requires every complex model to beat every simple model on every metric.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{3.25cm}L{6.95cm}@{}}
+\toprule
+Comparison & What it establishes \\
+\midrule
+Constant or majority-class rule & Performance available without input-dependent prediction; the appropriate constant depends on the loss \\
+Simple fitted model, such as a linear model or small tree & Whether modest structure already explains the predictive gain \\
+Current practice or existing policy & Whether the proposed procedure improves the relevant decision under comparable costs and capacity \\
+Complex alternative & Whether added flexibility is useful under the stated accuracy, resource, and reliability requirements \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Baselines answer different comparison questions. Fit their learned quantities on training data and give them a reasonable development effort.}
 \label{tab:baseline-ladder}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-Baselines are more than practical convenience. They are part of the philosophy of evidence. They show whether the new method actually improves on something simple, expose hidden issues such as class imbalance or weak labels, and anchor interpretation. A score of $85\%$ may be excellent or trivial depending on the baseline.
+For a target with prevalence $0.10$, always predicting negative achieves population accuracy $0.90$ but recall zero. A probability forecast constantly equal to $0.10$ is a different baseline: it can be appropriate for probability loss even though a $0.5$ threshold also predicts every case negative. Fit the prevalence estimate on development data rather than using test labels to construct the baseline.
 
-The same habit shows up in good course design and good benchmark practice. Starter baselines, public datasets, and example solutions do not make the work trivial. They make the claim legible.
+For adviser review, compare policies at the same capacity of at most five cases. A policy that reviews twenty cases and catches more deadline events has not demonstrated superior performance at the available capacity. A model can also merit consideration because it achieves comparable predictive performance with lower cost or easier oversight. State the requirement that makes the comparison useful.
 
-Two sanity checks should become automatic. First, run a \emph{shuffled-label check}: randomly reassign the labels and confirm that performance collapses toward a non-informative baseline. If it does not, the pipeline is broken. Second, inspect \emph{split stability}: if validation performance swings wildly under small changes in the train-validation split, the setup is too fragile for a strong conclusion.
+Uniform random selection of five eligible cases is also a meaningful capacity-matched reference. With $M$ positive labels among $N\ge5$ eligible cases, it selects $5M/N$ positives in expectation, as derived in Chapter~\ref{ch:framing-learning-problems}. Specify the random policy and distinguish its sampling variation from the performance of a fitted ranking.
 
-\begin{warningbox}
-The shuffled-label sanity check runs as follows. Split first. Randomly permute only the training labels so they no longer correspond to the training inputs. Retrain the model from scratch. Evaluate on the unchanged validation set. Compare against the metric-specific null baseline, and repeat if variance is high. If the model still achieves non-trivial performance, the pipeline is broken: it is learning from data artifacts (leaky features, duplicate rows, or preprocessing that encodes the target) rather than genuine signal. A properly constructed pipeline should fall back to the weak baseline implied by the metric and class balance, not retain meaningful predictive power.
-\end{warningbox}
+\subsection{The Null Reference Depends on the Metric}
 
-\begin{advancednote}
-\textbf{The Bonferroni cost of peeking at the test set.} If you check the test set $k$ times---with $k$ candidate models, $k$ hyperparameter settings, or $k$ adjacent variants---the probability that at least one beats the baseline by chance under the null grows as $1 - (1-\alpha)^k \approx k\alpha$ for small $\alpha k$. This is the Bonferroni / \v{S}id\'ak inflation. A Type-I error rate of $\alpha = 0.05$ becomes effectively $0.40$ at $k = 10$ peeks and $\approx 0.99$ at $k = 100$. The operational consequence: the headline number from ``we tried 20 architectures and picked the best one'' has been quietly inflated, and the honest claim requires either a Bonferroni-corrected threshold ($\alpha' = \alpha/k$), a fresh held-out set, or pre-registration of the model selection rule. \emph{This is the formal reason ``the test set is the test set''---peeking destroys the operational meaning of $\alpha$.}
-\end{advancednote}
+A randomized reference predictor that assigns positive labels with probability $q$, independently of the target, has expected accuracy
+\[
+\Pr(\hat Y=Y)=\pi q+(1-\pi)(1-q),
+\]
+where $\pi=\Pr(Y=1)$. At $\pi=0.30$, this is $0.70$ for $q=0$, $0.58$ for $q=0.30$, and $0.50$ for $q=0.50$. There is no universal chance accuracy of $0.50$ for an imbalanced binary task.
 
-\section{When Good Numbers Still Support Weak Claims}
+A \emph{shuffled-label check} probes whether a procedure still appears predictive when its training correspondence is broken. Split first, permute training labels, refit the learned components from scratch, and evaluate on unchanged validation data. Compare repeated results with an appropriate null reference. High accuracy alone may simply reflect class imbalance. Performance persistently beyond plausible null behavior motivates investigation of contamination, reused fitted components, or selection effects; it does not identify the cause by itself.
 
-By now the reader has seen that no single number settles evaluation. It helps to make that lesson explicit through a small gallery of common metric traps. A correct metric can still be the wrong summary if it leaves the operational question untouched.
+Passing this check does not prove the absence of leakage. Some leaked features may cease to be useful after shuffling, and a diagnostic can miss a fault. A formal permutation test also requires an exchangeability assumption appropriate to the null; unrestricted row permutations can be unsuitable for grouped or temporal observations.
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.13cm}>{\raggedright\arraybackslash}p{2.54cm}>{\raggedright\arraybackslash}p{5.57cm}@{}}
-\toprule
-Headline metric & Why it looks reassuring & What it can still hide \\
-\midrule
-High accuracy & Most predictions are correct overall & Class imbalance may make the system useless on the rare class that matters most \\
-Strong ROC or ranking score & The model orders cases well in aggregate & The chosen operating point may still produce too many false alarms or too few true positives for the actual review budget \\
-Lower loss or better log loss & Average prediction quality improved & The action threshold, calibration in the high-risk region, or severe-error slice may still be unacceptable \\
-\bottomrule
-\end{tabular}
-\caption{A metric can be locally correct and still globally misleading if it does not match the deployment question.}
-\label{tab:evaluation-metric-failure-gallery}
-\end{table}
+Another diagnostic is split stability. If results vary sharply across defensible development splits, inspect their sample sizes, group composition, and error patterns. Variation across arbitrary splits is not automatically an uncertainty interval, and trying many splits until one looks favorable is itself selection.
 
-\begin{example}[High Accuracy, No Useful Screening]
-A screening model on a heavily imbalanced dataset may report very high accuracy by predicting the majority class almost all the time. The metric is not numerically wrong. It is answering the wrong practical question.
-\end{example}
+\subsection{A Result Has a Population and a Scope}
 
-\begin{example}[Strong Ranking, Weak Top-of-Queue Policy]
-A triage model can achieve a strong ranking score overall yet still place too few urgent cases in the top twenty reviewed items, especially when prevalence is low or the score distribution is compressed near the operational cutoff. The aggregate ranking summary is not enough. Top-of-queue behavior is the real test.
-\end{example}
+Choose the primary metric, comparison, and relevant groups before the final test results are known. Evaluate the complete prediction and action procedure. Report the sample structure and the limits of the estimate alongside the score.
 
-\begin{example}[Better Loss, Worse Operational Region]
-A probability model may reduce average log loss while becoming slightly worse calibrated in exactly the score range that triggers human escalation. If decisions are made in that region, the lower loss does not imply a better system.
-\end{example}
+Chapter~\ref{ch:prediction-loss-decision} showed why lower average loss need not improve an action threshold or a limited review queue. Evaluation adds a second requirement: the observed improvement must come from observations that did not choose the system. A strong aggregate score can still conceal errors in an important group or a population absent from the sample.
 
-The lesson is not that metrics are untrustworthy. Every metric answers a narrower question than students first assume. Good evaluation asks not only ``what is the score?'' but also ``what behavior is this score summarizing, and what important behavior is still outside it?''
-
-\textbf{Claim failure gallery.} Whenever a headline number looks persuasive, name one failure mode it cannot rule out. If no such failure mode comes to mind, the evaluation is still shallowly understood.
-
-\section{Chapter Artifact: A Minimal Evaluation Plan}
-
-By the end of this chapter, the reader should be able to write a short evaluation plan before reporting any result. The goal is not paperwork. The goal is to state the claim explicitly enough that weak evidence and procedural mistakes become visible early. This is where decision context, threshold as policy, leakage control, and the baseline ladder come together as one reusable document. Chapter~\ref{ch:prediction-loss-decision} said what good behavior would look like; this chapter says what workflow and evidence would justify believing that behavior is real.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{3.2cm}p{7.03cm}}
-\toprule
-Plan field & What must be written down \\
-\midrule
-Seven-question focus & Questions 1, 5, and 6 directly: what decision matters, what baseline counts, and what evidence supports the claim. The plan also fixes the threshold or ranking policy that later systems work must implement responsibly \\
-Decision context & What real decision or policy the evaluation is meant to support \\
-Primary metric & The main quantity that expresses success for that decision \\
-Supporting metrics & Additional metrics needed to expose tradeoffs such as imbalance or calibration \\
-Threshold or ranking policy & How scores become actions under real capacity or cost constraints \\
-Calibration check & How confidence quality will be inspected if probabilities matter downstream \\
-Split protocol & How training, validation, and test roles are separated \\
-Leakage controls & What preprocessing or feature steps must stay inside the training boundary \\
-Baseline ladder & Which simpler baselines the system must beat before a strong claim is made \\
-Claim statement & The exact sentence the final result is supposed to justify \\
-\bottomrule
-\end{tabular}
-\caption{If this plan cannot be written, the evaluation claim is usually still underdesigned.}
-\label{tab:evaluation-plan}
-\end{table}
-
-\begin{example}[Filling in the Plan: Student Support]
-For the student-support framing from Chapter~\ref{ch:framing-learning-problems}, a concrete evaluation plan might read:
-
-\textbf{Decision context:} Flag students at risk of missing one of the first two major deadlines or failing to submit early core work for proactive advising outreach by week~4 of each semester.
-\textbf{Primary metric:} Recall at the top 15\% of the ranked list (the advising team's weekly capacity).
-\textbf{Supporting metrics:} Precision at the same budget to monitor false-alarm fatigue; calibration of predicted risk scores in the flagged region.
-\textbf{Threshold or ranking policy:} Rank all students by predicted week-4 risk; advisors contact the top 15\% at week~4.
-\textbf{Calibration check:} Compare predicted risk with the observed frequency of the proxy event within each predicted-risk decile on validation data.
-\textbf{Split protocol:} Train on semesters 1--4, validate on semester~5, test on semester~6. No student appears in more than one split.
-\textbf{Leakage controls:} Proxy-event labels are constructed only from the early deadline and submission records that define the target. Feature engineering uses only information available at week~4 (no later grades, no later-semester behaviors, and no support flags created after outreach begins).
-\textbf{Candidate model:} Logistic regression on all available week-4 features.
-\textbf{Baseline ladder:} (1) majority class, (2) logistic regression on GPA alone.
-\textbf{Claim statement:} ``The all-features logistic model identifies students at risk of the early-support proxy event with higher recall than GPA-only screening when the advising team reviews the top 15\% of the ranked list, on a held-out semester.''
-\end{example}
-
-\textbf{Evaluation plan.} Before reporting a score, write down the decision context, primary and supporting metrics, threshold or ranking policy, calibration check, split protocol, leakage controls, baseline ladder, and final claim sentence.
-
-\section{Common Mistakes in Evaluation}
-
-Several evaluation mistakes recur often enough to name directly. The first is optimizing one quantity and quietly reporting another, as if an improvement in training loss settled the deployment question. The second is letting the test set become a teacher: once test results influence model choice, the final number stops functioning as external evidence. The third is reporting one clean metric and letting it hide tradeoffs in calibration, rare-case performance, or operational thresholding. Finally, weak baselines and uninspected leakage can make an apparently strong result much easier to achieve than the report suggests.
-
-\section{Looking Ahead}
-
-This chapter made evaluation discipline explicit: generalization, protected evidence, leakage control, baselines, and claim design. With the claim now protected, the next question is modeling economy. What is the simplest serious model that deserves to make that claim?
-
-\section*{Chapter Summary}
-
-This chapter shifts the focus from judging model behavior to judging the evidence for that judgment. Training fit is not enough; the real standard is generalization. That is why train, validation, and test roles must remain protected and why leakage, weak baselines, and repeated test-set tuning are so damaging. Sanity checks and simple baselines are part of interpretation, not optional extras. The chapter ends with a minimal evaluation plan that makes the claim, the split protocol, the leakage controls, and the comparison standard explicit before any result is presented. Evaluation is already part of the model: every protocol choice---which split, which baseline, which metric, which slice---narrows what the model is allowed to claim.
+For the student task, an honest conclusion might state that a frozen policy, using week-2 information, selected more future deadline events than a specified baseline at the same review capacity on a held-out later semester. That conclusion remains about the measured deadline proxy and the represented cohort. Whether outreach improves student outcomes requires separate evidence about the intervention.
 
 \begin{studyquestions}
-\item Why is generalization a better judgment question than training loss alone?
-\item How does a validation set differ from a test set in purpose?
-\item Why must learned preprocessing stay inside the training boundary?
-\item Why is a weak baseline a threat to interpretation rather than only to competitiveness?
-\item Why can one strong-looking metric still support a weak claim?
-\item Why is an evaluation plan more than paperwork?
+\item What population and meaning of ``new case'' does a generalization claim specify?
+\item Why can a small training--test gap accompany a poor predictor?
+\item Which assumptions let test accuracy concentrate around population accuracy?
+\item Why does selection make the winning validation score optimistic?
+\item What does nested cross-validation evaluate, and what does it leave uncertain?
+\item How do prediction time, group identity, and label availability constrain a split?
 \end{studyquestions}
 
-\begin{exercises}
-\item \exercisetag{Design}{Intermediate}Design a train-validation-test workflow for a small tabular dataset. State clearly which choices may use the validation set and which choices must not use the test set.
-\item \exercisetag{Diagnosis}{Advanced}A researcher scales all input features using the mean and variance of the entire dataset before creating train and test splits. Explain why this is leakage and what it conceals about the test result.
-\item \exercisetag{Concept}{Core}Give one example of a weak baseline and one example of a serious baseline for the same task. Explain what each one would and would not tell you.
-\item \exercisetag{Design}{Intermediate}Propose two sanity checks for a model-development workflow in a domain of your choice, and explain what failure on each check would mean.
-\item \exercisetag{Diagnosis}{Intermediate}Use a public task such as sports-shot prediction or news topic classification and state one sensible primary metric, one possible secondary metric, and one failure mode the headline metric cannot rule out.
-\item \exercisetag{Design}{Intermediate}Write a one-page evaluation plan using Table~\ref{tab:evaluation-plan} for either spam filtering, course support, or another application of your choice. If you are carrying one case through the book, write this for the same case as your framing memo and metric-and-action worksheet so the three documents can be read together.
-\item \exercisetag{Implementation}{Core}Build a leakage canary you can rerun on any new pipeline. On a small public tabular dataset (e.g., \texttt{sklearn.datasets.load\_breast\_cancer}), write a function \verb|shuffled_label_score(X, y, model)| that randomly permutes \verb|y| inside each cross-validation fold, fits the model, and returns the mean validation accuracy. Run it 20 times and plot the histogram of returned scores. Verify that the distribution is centered near the chance rate (here $\approx 0.63$ since the classes are imbalanced) rather than near the unshuffled accuracy; explain in two sentences what a non-chance result would have indicated about your evaluation harness.
+\begin{exercises}[The tags indicate the kind of work and difficulty.]
+\item \exercisetag{Concept}{Core}A model has training loss $0.40$ and test loss $0.41$; a constant baseline has test loss $0.35$. Explain why the small gap does not establish useful prediction. Give another possible reason for a large gap besides overfitting.
+\item \exercisetag{Calculation}{Core}At a fixed input, the conditional target mean is $2$. Two equally likely development samples produce predictions $0$ and $2$. Fresh target noise has variance $0.25$ and is independent of development. Compute squared bias, fitted-prediction variance, and expected squared error.
+\item \exercisetag{Calculation}{Core}For a frozen classifier with independent test cases, compute Hoeffding half-widths for $n=200$ and $n=800$ at $\delta=0.05$. How many cases suffice for a half-width of $0.02$ under this bound?
+\item \exercisetag{Diagnosis}{Intermediate}Explain why the same Hoeffding formula cannot directly be applied to average unbounded log loss, F1, or 100 copies of ten independent cases. State what quantity could legitimately be bounded in one of these settings.
+\item \exercisetag{Calculation}{Intermediate}Three fixed candidates have true risk $0.30$. Their validation estimates independently equal $0.26$ or $0.34$ with equal probability. Compute the expected smallest estimate and compare it with the true risk of the selected candidate.
+\item \exercisetag{Calculation}{Intermediate}For $n=1{,}000$, $M=20$, and $\delta=0.05$, compute the simultaneous Hoeffding allowance $\epsilon_{n,M}$. State the bound on selected risk relative to the best candidate and the assumptions needed.
+\item \exercisetag{Calculation}{Core}Development folds have sizes $20,30,50$ and mean losses $0.10,0.20,0.40$. Compute the per-case cross-validation mean and the unweighted fold mean. Explain their different weighting.
+\item \exercisetag{Diagnosis}{Intermediate}A researcher chooses a regularization strength using five-fold cross-validation and reports its winning score as final evidence. Describe a separate-test design and a nested design that separate selection from evaluation. Explain why the five fold scores are dependent.
+\item \exercisetag{Calculation}{Core}Training values are $1,5$, and a held-out value is $15$. Compute the training and pooled means, and center all three values by each. Which transformation evaluates a procedure fitted without the held-out observation?
+\item \exercisetag{Design}{Intermediate}Specify separate evaluation protocols for unseen students, returning students next semester, and students at a new institution. Use the week-2 cutoff and weeks-3--4 deadline target. State when every training label becomes available.
+\item \exercisetag{Calculation}{Core}For prevalence $\pi=0.20$, compute the accuracy of independent randomized predictions with $q=0$, $q=0.20$, and $q=0.50$. A shuffled-label check obtains accuracy $0.80$. Explain why this alone does not establish leakage.
+\item \exercisetag{Design}{Intermediate}Compare an early-warning model with a constant forecast and a simple fitted baseline under a five-review capacity. Specify development choices, the protected test population, the reported metrics, and one intervention claim the comparison cannot establish.
 \end{exercises}
 
-\begin{challengeexercises}
-\item \exercisetag{Diagnosis}{Advanced}A team tunes ten different model families by checking their performance on the test set and reports the best one. Explain precisely why this invalidates the final claim even if the reported score is numerically correct for that one run.
-\item \exercisetag{Diagnosis}{Advanced}A pipeline beats a strong baseline by a small margin, but the shuffled-label check still reports high performance. Diagnose what kinds of bug or contamination could create that result.
-\item \exercisetag{Design}{Advanced}A course-support team trains on one semester and evaluates on a random split from the same semester. Explain why that may still exaggerate generalization and propose a better split protocol.
-\item \exercisetag{Design}{Advanced}Write the strongest honest claim for a model that wins on the main metric, loses on a critical slice, and was compared under unequal tuning effort.
+\par\noindent\begin{minipage}{\linewidth}
+\begin{challengeexercises}[State your assumptions and justify the evidence and choices in your answer.]
+\item \exercisetag{Proof}{Advanced}Let $M$ fixed candidates all have risk $r$. Each estimate independently equals $r-a$ or $r+a$ with equal probability, where $0<a<\min(r,1-r)$. Show that the expected minimum is $r-a+2a\,2^{-M}$. Interpret its limit as $M$ grows.
+\item \exercisetag{Proof}{Advanced}For fixed bounded-loss candidates, derive the simultaneous Hoeffding bound by a union bound and prove the selected-risk inequality $R_J\le\min_j R_j+2\epsilon_{n,M}$ on the simultaneous-accuracy event. Explain why independence between candidate estimates is unnecessary.
+\item \exercisetag{Diagnosis}{Advanced}A team uses student-grouped outer folds but mixes semesters inside every fold. It repeatedly revises the feature set after viewing outer results. Identify which boundaries are protected, which claim about future semesters is unsupported, and what evidence a revised procedure needs.
+\item \exercisetag{Design}{Advanced}A model beats a baseline overall, loses on a critical group, and received much more tuning effort. Write a bounded conclusion and propose a fair comparison that could change it. Identify what information is needed about the prediction cutoff, group sample size, and action capacity.
 \end{challengeexercises}
+\end{minipage}
+\clearpage
+\begingroup\pagestyle{empty}\cleardoublepage\endgroup
+\endgroup

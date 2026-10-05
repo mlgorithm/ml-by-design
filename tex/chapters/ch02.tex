@@ -1,438 +1,385 @@
+\begingroup
+\raggedbottom
+\clubpenalty=10000
+\widowpenalty=10000
 \chapter{Prediction, Loss, and Decision Rules}
 \label{ch:prediction-loss-decision}
 
-Five emails. That is the budget the course-support team has this week to reach students at risk of falling behind in an introductory programming course. Their model produces a risk score for every enrolled student. Which five names go in the queue?
+A numerical estimate can miss by a little or a lot. A classifier can raise a false alarm or miss a positive case. A probability forecast can assign excessive confidence to an event that does not occur. A loss function assigns a numerical penalty to a prediction and its observed target; an evaluation metric summarizes behavior on a collection of cases. A decision rule then uses the prediction to choose an action.
 
-Choosing those five is a different problem from training the model. The score has to be turned into a ranking, the ranking has to be cut at five, and the cut has to defend itself against the kind of mistake the team can least afford---missing a student who needed the message, or wasting a slot on one who did not. A model is useful only relative to four things: the quantity used to judge it, the loss used to train it, the rule that turns its scores into actions, and the standard by which those scores count as confidence.
+These roles are related but distinct. The same loss can be used for fitting and for evaluation on new observations. A threshold can change the decisions without changing the fitted model. A ranking can be useful even when its numerical scores are poor probability estimates. Understanding these distinctions requires specifying which output is being assessed and what information the decision can use.
 
-This chapter separates those pieces. It distinguishes the number optimized during learning from the number reported after training, then shows how thresholds, rankings, and abstention rules turn scores into actions. It closes by asking whether those scores can be trusted as probabilities. By the end, the reader should be able to write a short metric-and-action plan that matches the real decision rather than reporting a convenient score.
+\section{Measuring Predictive Performance}
 
-This chapter turns framed tasks into judged behavior. The core move is to separate four things: the penalty minimized during training, the behavior reported after training, the rule that turns scores into actions, and the confidence interpretation that makes that rule defensible.
+Return to the student--course case in Chapter~\ref{ch:framing-learning-problems}. At the end of week 2, a model estimates whether at least one of two specified assignment deadlines in weeks 3--4 will be missed. An adviser can review at most five cases before deciding whether to offer a check-in. This is a limit on review, not a requirement to contact every selected student.
 
-\textbf{Losses are for learning; metrics are for claims.} Training needs smooth, stable penalties to optimize. Reporting needs quantities that match the decision, the review budget, and the action rule that someone will eventually have to defend.
+The measured target is the deadline event. High recall means selecting a large fraction of students who later have that event; it does not establish who needs help or who would benefit from outreach. A useful evaluation also examines false alarms, the review load, and the quality of the probability estimates. Choosing a metric is a choice about which aspect of behavior to summarize.
 
-\section{Opening Question: What Would Count as Good Here?}
-
-Return to the course-support setting from Chapter 1. Suppose the same organization wants an early-warning score for an introductory programming course. The score estimates whether a student is at risk of the Chapter 1 proxy event: missing one of the first two major deadlines or failing to submit early core work. Staff can contact at most five students this week.
-
-That constraint changes the meaning of ``good.'' A useful system is not one with a low average training penalty. It is one whose scores place the most relevant cases near the top, whose probabilities are trustworthy enough to support action, and whose decision rule respects the support team's capacity. Later chapters will widen this institutional setting into message routing, retrieval, grounded answering, and escalation. For now, one scalar risk score is enough to surface the judgment problem cleanly.
-
-This opening question shapes the rest of the chapter. First we need to know what behavior matters. Only then do training losses make sense. The rest of the chapter unpacks that sequence: report the right behavior, choose the right action rule, and finally decide whether the score is trustworthy enough to automate.
-
-Different systems use different action rules. A thresholded system acts on every case above a cutoff. A budgeted system acts only on the highest-scoring $k$ cases. An abstaining system defers uncertain cases to human review rather than forcing an automatic action. Ranked retrieval tasks add another quantity, reciprocal rank, which asks how soon the first relevant item appears.
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c2pipeBg}{RGB}{220,233,251}
-\definecolor{c2checkBg}{RGB}{254,242,214}
-\definecolor{c2claimBg}{RGB}{210,238,220}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  x=1cm, y=1cm, font=\small,
-  pipebox/.style={draw=blue!40, rounded corners=3pt, align=center,
-                  minimum width=2.6cm, minimum height=0.9cm,
-                  fill=c2pipeBg, line width=0.8pt},
-  checkbox/.style={draw=orange!50!black, rounded corners=3pt, align=center,
-                   minimum width=2.6cm, minimum height=0.9cm,
-                   fill=c2checkBg, line width=0.8pt},
-  claimbox/.style={draw=green!40!black, rounded corners=3pt, align=center,
-                   minimum width=2.6cm, minimum height=0.9cm,
-                   fill=c2claimBg, line width=0.8pt},
-  arrow/.style={-Latex, thick, gray!60}
-]
-%% ── Top row: main analysis pipeline ─────────────────────────────────────
-\node[pipebox]  (loss)    at (-3.6, 0) {training loss};
-\node[pipebox]  (score)   at (0,    0) {model score};
-\node[pipebox]  (metric)  at (3.6,  0) {reported measure};
-\node[pipebox]  (policy)  at (7.2,  0) {decision rule};
-%% ── Bottom row: quality checks and output ────────────────────────────────
-\node[checkbox] (cal)     at (3.6, -2.2) {confidence check};
-\node[checkbox] (abstain) at (7.2, -2.2) {abstain or review};
-\node[claimbox] (claim)   at (10.8,-2.2) {operational signal};
-%% ── Row-1 horizontal arrows ──────────────────────────────────────────────
-\draw[arrow] (loss)   -- (score);
-\draw[arrow] (score)  -- (metric);
-\draw[arrow] (metric) -- (policy);
-%% ── Vertical drop arrows ─────────────────────────────────────────────────
-\draw[arrow] (metric) -- (cal);
-\draw[arrow] (policy) -- (abstain);
-%% ── Abstain → claim: straight right ─────────────────────────────────────
-\draw[arrow] (abstain) -- (claim);
-%% ── Confidence check → operational signal: right along bottom ────────────
-\draw[arrow] (cal.east) -- (abstain.west);
-\end{tikzpicture}%
-}
-\caption{Chapter 2 is a judgment chain. A score does not become an operational signal until the chapter has answered how it will be judged, how it becomes a decision, and whether its probabilities can be trusted.}
+\begin{tikzpicture}[ml diagram]
+\node[ml box,minimum width=2cm] (loss) at (0,0) {fit using loss};
+\node[ml key box,minimum width=2cm] (score) at (3.1,0) {model score};
+\node[ml box,minimum width=2cm] (act) at (6.5,0) {decision rule};
+\draw[ml arrow] (loss) -- (score);
+\draw[ml arrow] (score) -- (act);
+\node[ml label,align=center] at (3.1,-1.0) {ranking + calibration\\evaluate predictions};
+\node[ml label,align=center] at (6.5,-1.0) {cost + capacity\\evaluate decisions};
+\draw[draw=mlLine] (score.south) -- (3.1,-0.45);
+\draw[draw=mlLine] (act.south) -- (6.5,-0.45);
+\end{tikzpicture}
+\captionof{figure}{A loss guides fitting, prediction metrics assess the output, and a policy chooses an action. Predictive performance and decision consequences require separate evidence.}
 \label{fig:chapter2-chain-of-trust}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-Keep the chapter's workflow in mind: separate the metric from the loss, choose the action rule that matches the decision, and only then check whether the probabilities are trustworthy enough to support that rule. The worksheet later in the chapter is the written version of this sequence.
+\subsection{Binary Classification Metrics}
 
-\section{Reported Metric Before Training Loss}
+Let $y_i\in\{0,1\}$ be the measured label and $\hat y_i\in\{0,1\}$ the predicted label for case $i$. The \emph{confusion matrix} counts their agreements and disagreements: true positives (TP), false positives (FP), false negatives (FN), and true negatives (TN). ``True'' here means agreement with the recorded target, whose validity still depends on the measurement and label rule.
 
-The first judgment question is not ``what loss do we minimize?'' It is ``what behavior matters enough to report?'' Some problems demand keeping false alarms low. Others demand catching as many rare positive cases as possible. Others still require ordering cases well near the top, using probabilities honestly, or making good decisions under a limited intervention budget.
-
-\begin{definition}[Evaluation Metric]
-An evaluation metric is a summary statistic used to judge model behavior on a dataset after training. It should express what success means for the real task, not what is convenient for optimization. This book uses \emph{evaluation metric} and \emph{reported metric} interchangeably: both refer to the quantity shown to stakeholders after training, as distinct from the training loss used during optimization.
-\end{definition}
-
-For a yes-or-no classification problem, most threshold-based metrics begin with the same bookkeeping device: the confusion matrix. It counts true positives (real positive cases the system caught), false negatives (real positive cases missed), false positives (false alarms), and true negatives (correct rejections).
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c2tpBg}{RGB}{210,238,220}
-\definecolor{c2fnBg}{RGB}{254,216,216}
-\definecolor{c2fpBg}{RGB}{254,242,214}
-\definecolor{c2tnBg}{RGB}{236,244,237}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small]
-%%
-%% Column x-boundaries:  0 | 2.2 | 6.0 | 9.8
-%%   row-label column     0   –  2.2  (center x = 1.1)
-%%   predicted positive  2.2  –  6.0  (center x = 4.1)
-%%   predicted negative  6.0  –  9.8  (center x = 7.9)
-%%
-%% Row y-boundaries:  0 | 1.3 | 2.6 | 3.6 | 4.6
-%%   actual-negative   0.0  – 1.3  (center y = 0.65)
-%%   actual-positive   1.3  – 2.6  (center y = 1.95)
-%%   sub-header        2.6  – 3.6  (center y = 3.10)
-%%   main header       3.6  – 4.6  (center y = 4.10)
-%%
-%% ── Fills ─────────────────────────────────────────────────────────────────
-\fill[gray!10]  (0,0)    rectangle (2.2,4.6);   % row-label column
-\fill[gray!10]  (2.2,3.6) rectangle (9.8,4.6);  % main header
-\fill[gray!7]   (2.2,2.6) rectangle (9.8,3.6);  % sub-header row
-\fill[c2tpBg]   (2.2,1.3) rectangle (6.0,2.6);  % TP cell
-\fill[c2fnBg]   (6.0,1.3) rectangle (9.8,2.6);  % FN cell
-\fill[c2fpBg]   (2.2,0)   rectangle (6.0,1.3);  % FP cell
-\fill[c2tnBg]   (6.0,0)   rectangle (9.8,1.3);  % TN cell
-%% ── Grid lines ────────────────────────────────────────────────────────────
-\draw[gray!42, line width=0.75pt] (0,0) rectangle (9.8,4.6);  % outer border
-\draw[gray!42, line width=0.75pt] (2.2,0) -- (2.2,4.6);       % label | data
-\draw[gray!42, line width=0.75pt] (6.0,0) -- (6.0,3.6);       % pred-col divider
-\draw[gray!42, line width=0.75pt] (0,3.6) -- (9.8,3.6);       % main header base
-\draw[gray!42, line width=0.75pt] (0,2.6) -- (9.8,2.6);       % sub-header base
-\draw[gray!42, line width=0.75pt] (0,1.3) -- (9.8,1.3);       % data row divider
-%% ── Main header ───────────────────────────────────────────────────────────
-\node[font=\small\bfseries] at (6.0, 4.1) {Predicted label};
-%% ── Column sub-headers (each centered in its column) ─────────────────────
-\node[font=\small\bfseries] at (4.1, 3.1) {Positive};
-\node[font=\small\bfseries] at (7.9, 3.1) {Negative};
-%% ── Row labels ────────────────────────────────────────────────────────────
-\node[rotate=90, font=\small\bfseries] at (0.7, 1.3) {Actual label};
-\node[font=\small] at (1.7, 1.95) {Positive};
-\node[font=\small] at (1.7, 0.65) {Negative};
-%% ── Data cells ────────────────────────────────────────────────────────────
-\node[align=center, text=green!42!black]  at (4.1, 1.95)
-    {\textbf{TP}\\[2pt]\footnotesize caught true case};
-\node[align=center, text=red!55!black]    at (7.9, 1.95)
-    {\textbf{FN}\\[2pt]\footnotesize missed true case};
-\node[align=center, text=orange!65!black] at (4.1, 0.65)
-    {\textbf{FP}\\[2pt]\footnotesize false alarm};
-\node[align=center, text=gray!55!black]   at (7.9, 0.65)
-    {\textbf{TN}\\[2pt]\footnotesize correct rejection};
-\end{tikzpicture}%
-}
-\caption{The confusion matrix is the bookkeeping layer between predicted scores and thresholded claims. Once a decision rule turns scores into positive or negative decisions, these counts determine what the metric rewards.}
+\begin{tikzpicture}[ml diagram]
+\fill[mlWash] (0,1.25) rectangle (3.1,2.5);
+\fill[mlWash] (3.1,0) rectangle (6.2,1.25);
+\draw[draw=mlLine] (0,0) rectangle (6.2,2.5);
+\draw[draw=mlLine] (3.1,0) -- (3.1,2.5);
+\draw[draw=mlLine] (0,1.25) -- (6.2,1.25);
+\node[ml label] at (1.55,2.85) {predicted positive};
+\node[ml label] at (4.65,2.85) {predicted negative};
+\node[ml label,anchor=east] at (-0.2,1.875) {label positive};
+\node[ml label,anchor=east] at (-0.2,0.625) {label negative};
+\node[align=center] at (1.55,1.875) {\textbf{TP}\\\footnotesize true case found};
+\node[align=center] at (4.65,1.875) {\textbf{FN}\\\footnotesize true case missed};
+\node[align=center] at (1.55,0.625) {\textbf{FP}\\\footnotesize false alarm};
+\node[align=center] at (4.65,0.625) {\textbf{TN}\\\footnotesize correct rejection};
+\end{tikzpicture}
+\captionof{figure}{Rows are measured labels and columns are predicted labels. The positive class must be specified before interpreting the counts.}
 \label{fig:confusion-matrix}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-From these counts we obtain common metrics:
-\[
-\text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN},
-\]
+For $N=TP+FP+FN+TN>0$, common metrics are
 \begin{align*}
-\text{Precision} &= \frac{TP}{TP + FP}, \\[4pt]
-\text{Recall} &= \frac{TP}{TP + FN},
+\operatorname{Accuracy} &= \frac{TP+TN}{N}, &
+\operatorname{Precision} &= \frac{TP}{TP+FP},\\[4pt]
+\operatorname{Recall} &= \frac{TP}{TP+FN}, &
+\operatorname{FPR} &= \frac{FP}{FP+TN}.
 \end{align*}
+Precision is the fraction of positive predictions whose labels are positive. Recall, also called sensitivity or true positive rate, is the fraction of positive labels selected. The false-positive rate (FPR) is the fraction of negative labels incorrectly selected. Precision and FPR have different denominators: low FPR need not imply high precision when positives are rare.
+
+The F1 score is the harmonic mean of precision and recall when both are defined and their sum is positive. An equivalent count-based expression is
 \[
-\text{F1} = \frac{2 \cdot \text{Precision}\cdot \text{Recall}}
-{\text{Precision} + \text{Recall}}.
+F_1=\frac{2TP}{2TP+FP+FN}.
 \]
+This expression can be zero even when precision is undefined because there are no positive predictions. Any metric with a zero denominator needs an explicit reporting convention; absence of positive cases is not evidence of perfect recall. F1 ignores true negatives and does not encode an application's error costs or review capacity.
 
-Accuracy measures overall correctness, but it hides serious failures when one class dominates or when false positives and false negatives carry very different costs. Precision asks: when the system says positive, how often is it right? Recall asks: of the truly positive cases, how many did the system catch? F1 combines the two into one number, but that combination is only sensible when both concerns matter in roughly balanced ways.
+For example, among $950$ negative and $50$ positive labels, predicting every case negative gives accuracy $950/1000=95\%$, recall $0$, and undefined precision. Accuracy correctly reports overall agreement but does not show that the model misses every positive case. The base rate and the confusion counts are needed to interpret it.
 
-This chapter starts with binary classification metrics. Later sections extend the logic to multiclass confusion matrices and to macro- versus micro-averaged summaries.
+\subsection{Multiclass and Averaged Metrics}
 
-\begin{example}[Spam Filtering and Precision]
-Spam filtering is precision-sensitive. False positives hurt because legitimate messages get hidden or delayed. At email-service scale, even a small false-positive rate affects many users \citep{gmail2023}. That is why spam systems are rarely judged by accuracy alone.
-\end{example}
+In single-label multiclass classification, each case has one label and receives one predicted label from the same set of $K$ classes. A confusion matrix has one row and one column per class. Precision and recall for class $j$ treat that class as positive and all others as negative.
 
-\begin{example}[Medical Screening and Recall]
-The metric emphasis flips when false negatives are costly. The CDC notes that rapid influenza diagnostic tests often have sensitivities around 50--70\% and specificities around 90--95\%. Here sensitivity is how often true cases are caught, and specificity is how often true negatives are correctly rejected: $\mathrm{TN}/(\mathrm{TN}+\mathrm{FP})$ \citep{cdc_ridt}. The false positive rate $\mathrm{FP}/(\mathrm{FP}+\mathrm{TN})$ is therefore $1-\text{specificity}$. A stricter threshold reduces false alarms but misses more real cases.
-\end{example}
-
-\begin{example}[Why Accuracy Can Fail Under Imbalance]
-Imagine a screening dataset with $950$ negative cases and $50$ positive cases. A useless classifier that always predicts ``negative'' achieves
+Consider a message router with three classes. Rows are measured labels and columns are predictions:
 \[
-\text{Accuracy} = \frac{950}{1000} = 95\%.
+\begin{array}{c|ccc}
+ & \text{deadline} & \text{grading} & \text{technical}\\ \hline
+\text{deadline} & 8 & 1 & 1\\
+\text{grading} & 2 & 24 & 4\\
+\text{technical} & 1 & 3 & 6
+\end{array}
 \]
-That number sounds strong until we check recall. The classifier never predicts positive, so
+The class recalls are $8/10=0.80$, $24/30=0.80$, and $6/10=0.60$. Their \emph{macro average} gives each class equal weight:
 \[
-TP=0,\quad FN=50,\quad \text{Recall}=0.
+\operatorname{MacroRecall}=\frac{0.80+0.80+0.60}{3}\approx0.73.
 \]
-The model looks accurate only because the majority class dominates. This skew, called class imbalance, makes accuracy unreliable as a default metric.
-\end{example}
+The \emph{micro average} pools the class counts before forming the ratio. Here it is $38/50=0.76$. When every case has exactly one prediction and every class is included, micro precision, recall, and F1 all equal accuracy: each incorrect prediction contributes one false positive and one false negative to the pooled counts. This identity generally fails for multilabel tasks or when only some classes are included.
 
-\section{Training Loss as the Quantity Optimized During Learning}
+Macro averaging represents equal weight across classes; micro averaging represents equal weight across cases. Neither resolves unequal error consequences. Report the per-class results when an average could conceal a class that matters, and state how classes with no observed or predicted cases are handled.
 
-Once the reported behavior is clear, training losses make more sense. A learning algorithm needs a rule for preferring one prediction over another during optimization---that is, while adjusting the model to reduce error on the training data. The loss function plays that role. This is the chapter's first separation: the number that teaches the model is not automatically the number that justifies the system.
+\section{What a Loss Encourages}
 
-\begin{definition}[Loss Function]
-A loss function $\ell(y,\hat{y})$ measures how bad a prediction $\hat{y}$ is when the desired output is $y$. Smaller values are better, and a value of zero usually represents a perfect prediction.
-\end{definition}
-
-For a dataset of $n$ training examples, a standard training objective is the average loss:
+A loss $\ell(y,\hat y)$ assigns a penalty to an output $\hat y$ when the observed target is $y$. For training observations $\mathcal D=\{(x_i,y_i)\}_{i=1}^n$, the average loss is
 \[
-\mathcal{L}_{\text{train}}(\theta) = \frac{1}{n} \sum_{i=1}^{n} \ell \bigl(y_i, f_\theta(x_i)\bigr).
+\hat R_{\mathcal D}(\theta)=\frac1n\sum_{i=1}^n
+\ell\bigl(y_i,f_\theta(x_i)\bigr).
 \]
-This quantity is called the \emph{empirical risk}: the average observed loss on the training sample.
+This \emph{empirical risk} describes the observed sample. The corresponding population risk,
+\[
+R(f)=E\bigl[\ell(Y,f(X))\bigr],
+\]
+is the expected loss for a specified population. Expectations are averages over possible observations, rather than just the cases already recorded. Learning uses the empirical objective to choose a predictor; it does not directly observe the population risk.
 
-\begin{definition}[Empirical Risk]
-Empirical risk is the average loss measured on the observed training sample. The word ``empirical'' marks that it is computed from available data, not from the full unknown distribution of future examples.
-\end{definition}
+A small training loss alone establishes neither generalization nor useful decisions. Conversely, usefulness does not require a training loss near zero: uncertain outcomes can make even the best probability forecast incur positive expected loss. Model restrictions, regularization, and imperfect fitting also affect what a training procedure achieves.
 
-The wording matters. Empirical risk lives on the sample we have, not on the world we care about. That is why a low training loss is necessary but not sufficient.
-
-If the summation notation looks dense, read the formula for empirical risk as: compute the loss on every training example, add the losses together, and divide by the number of examples.
-
-In the next table, \emph{log loss} is a probability-based penalty that grows when the model is confidently wrong.
-
-\begin{table}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
 \small
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{1.61cm}>{\raggedright\arraybackslash}p{2.1cm}>{\raggedright\arraybackslash}p{2.17cm}>{\raggedright\arraybackslash}p{4.27cm}@{}}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{2.05cm}L{3.44cm}L{4.59cm}}
 \toprule
-Task & Training objective & Reporting metric & Why not identical? \\
+Output used & Possible fitting loss & Possible evaluation\\
 \midrule
-Spam filtering & Log loss on spam probabilities & Precision, recall, and false-positive behavior & Training needs a smooth probability loss; deployment cares about protecting inboxes without hiding wanted mail \\
-Screening or triage & Probability loss or extra penalty for missed cases & Recall or sensitivity plus false-positive burden & The real question is often ``how many true cases are caught?'' rather than ``what is the average training loss?'' \\
-Probabil\-ity forecasts & Probability loss rewarding honest confidence & Calibration and predicted-versus-observed plots & The model is used for its probabilities, so honest confidence matters more than one thresholded label \\
-Ranking or retrieval & A training loss over item scores & Success among the top $k$ outputs or user success rate & The loss is chosen for optimization, but the user experiences only the ordered outputs \\
+Numeric estimate & Squared or absolute error & Held-out MSE or MAE; errors in meaningful units\\
+Probability forecast & Log loss or squared probability error & Held-out loss, reliability diagram, and relevant group checks\\
+Binary decision & Probability loss for the underlying score & Confusion counts and costs at the chosen policy\\
+Ranked list & Loss over candidate scores & Precision and recall at a stated list length\\
 \bottomrule
 \end{tabular}
-\caption{Losses are for learning. Metrics are for claims. A good metric-and-action worksheet should explain why the optimized quantity and the reported quantity are not identical.}
+\captionof{table}{Fitting and evaluation have different roles, even when they use the same mathematical loss. The chosen output and action determine which additional summaries are informative.}
 \label{tab:loss-vs-metric}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-Once it is clear what behavior matters, we can ask which training signal best teaches it.
+\subsection{Squared and Absolute Error}
 
-\subsection{Regression Losses}
+For real-valued targets, squared loss is $(y-\hat y)^2$ and absolute loss is $|y-\hat y|$. Their empirical averages are mean squared error (MSE) and mean absolute error (MAE). MSE has squared target units; MAE has the original units. Root mean squared error restores the units but retains squared error's emphasis on large residuals.
 
-When the target is numeric, two common losses are mean squared error and mean absolute error:
-\[
-\text{MSE} = \frac{1}{n}\sum_{i=1}^{n}(y_i - \hat{y}_i)^2,
-\qquad
-\text{MAE} = \frac{1}{n}\sum_{i=1}^{n}|y_i - \hat{y}_i|.
-\]
+Squaring makes large errors more influential relative to small ones. It does not follow that squared loss always gives a larger numerical penalty: for $|y-\hat y|<1$ in the chosen units, the square is smaller than the absolute value. The loss expresses which pattern of errors fitting should prefer.
 
-Mean squared error punishes large mistakes more aggressively because the error is squared. Mean absolute error treats error linearly. Neither is universally better. The choice should reflect which kinds of misses the application can tolerate.
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=1.7cm,y=0.9cm]
+\draw[ml axis] (-2.35,0) -- (2.4,0);
+\draw[ml axis] (0,0) -- (0,4.3);
+\foreach \x in {-2,-1,1,2}
+  \draw[draw=mlMuted] (\x,0.07) -- (\x,-0.07) node[below=3pt,ml label] {$\x$};
+\draw[ml curve,domain=-2:2,samples=60] plot (\x,{\x*\x});
+\draw[ml reference] (-2,2) -- (0,0) -- (2,2);
+\node[ml label,anchor=west] at (2.04,4) {$e^2$};
+\node[ml label,anchor=west] at (2.04,2) {$|e|$};
+\node[ml label,anchor=south] at (0,4.4) {per-example loss};
+\node[ml label] at (0,-0.65) {prediction error $e$};
+\end{tikzpicture}
+\captionof{figure}{Squared loss $e^2$ (solid) and absolute loss $|e|$ (dashed). Their averages are MSE and MAE. Squaring gives large residuals greater influence.}
+\label{fig:mse-vs-mae}
+\end{minipage}\par\addvspace{\intextsep}
 
-If a model had to predict one constant for every example, squared error would pull that constant toward the average target while absolute error would pull it toward the median. Read this as a modeling judgment: squared loss reacts strongly to outliers; absolute loss resists them.
-
-The previous claim becomes sharp when the model must predict a single constant for every example.
-
+\par\medskip\noindent\begin{minipage}{\linewidth}
 \begin{theorem}[Best Constant Predictor]
-Let $y_1,\ldots,y_n$ be observed target values, and suppose the prediction is restricted to a single constant $c$.
+For observed real targets $y_1,\ldots,y_n$, with $n\geq1$, restrict the prediction to a constant $c$.
 \begin{enumerate}[leftmargin=*,label=\arabic*.]
-\item The value of $c$ that minimizes $\frac{1}{n}\sum_{i=1}^{n}(y_i-c)^2$ is the sample mean $\bar{y}=\frac{1}{n}\sum_{i=1}^{n} y_i$.
-\item The value of $c$ that minimizes $\frac{1}{n}\sum_{i=1}^{n}|y_i-c|$ is any sample median: when the targets are sorted, any middle observed value for odd $n$, or any value between the two middle order statistics for even $n$.
+\item The unique minimizer of $n^{-1}\sum_i(y_i-c)^2$ is the sample mean $\bar y=n^{-1}\sum_i y_i$.
+\item The minimizers of $n^{-1}\sum_i|y_i-c|$ are the sample medians: the middle order statistic for odd $n$, or any value between the two middle order statistics for even $n$.
 \end{enumerate}
 \end{theorem}
 
-\begin{advancednote}
-\begin{proof}[Proof Sketch]
-For squared error, expand $(y_i-c) = (y_i-\bar{y}) + (\bar{y}-c)$. After summing, the cross-term vanishes and
+\begin{proof}
+Expanding around $\bar y$ gives
 \[
-\sum_{i=1}^{n}(y_i-c)^2 = \sum_{i=1}^{n}(y_i-\bar{y})^2 + n(\bar{y}-c)^2,
+\sum_i(y_i-c)^2=\sum_i(y_i-\bar y)^2+n(c-\bar y)^2,
 \]
-so the minimum occurs at $c=\bar{y}$. For absolute error, if $c$ sits to the left of the median interval, more than half of the sorted targets lie to its right, so nudging $c$ right shrinks more distances than it lengthens. The symmetric argument applies on the other side. When $n$ is even, this leaves a flat interval between the two middle order statistics on which the total absolute deviation is constant. That is why any median minimizes total absolute deviation.
+because $\sum_i(y_i-\bar y)=0$. Only the second term depends on $c$, so its unique minimum is at $c=\bar y$.
+
+For absolute error, let $a$, $b$, and $e$ count targets strictly below, strictly above, and equal to $c$. The left and right slopes of the total loss are $a-b-e$ and $a-b+e$. A minimum of this convex function occurs when the left slope is nonpositive and the right slope is nonnegative. Equivalently, at least half the targets lie at or below $c$ and at least half lie at or above it. These are exactly the median values described above.
 \end{proof}
-\end{advancednote}
+\end{minipage}\par\medskip
 
-This theorem explains why squared error reacts strongly to outliers while absolute error resists them. The two losses are not just different penalties; they prefer different notions of ``center.''
-
-\begin{figure}[t]
-\centering
-\definecolor{c2maeBl}{RGB}{56,103,170}
-\definecolor{c2mseOr}{RGB}{184,92,16}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1.4cm, y=1.0cm, font=\small]
-%% ── Light grid ───────────────────────────────────────────────────────────
-\foreach \x in {-2,-1,1,2}
-    \draw[gray!20, line width=0.4pt] (\x,-0.1) -- (\x,2.8);
-\foreach \y in {0.5,1.0,1.5,2.0,2.5}
-    \draw[gray!20, line width=0.4pt] (-2.8,\y) -- (2.8,\y);
-%% ── Axes ─────────────────────────────────────────────────────────────────
-\draw[->, gray!60, thick] (-2.9,0) -- (2.95,0) node[right] {prediction error};
-\draw[->, gray!60, thick] (0,-0.15) -- (0,2.95) node[above] {penalty};
-%% ── Fill between curves (shows MSE excess over MAE) ──────────────────────
-\fill[c2mseOr, opacity=0.10]
-    plot[smooth] coordinates {(-2.6,1.30)(-2.0,1.00)(-1.0,0.50)(0,0)(1.0,0.50)(2.0,1.00)(2.6,1.30)}
-    -- plot[smooth] coordinates {(2.6,2.37)(2.0,1.40)(1.0,0.35)(0,0)(-1.0,0.35)(-2.0,1.40)(-2.6,2.37)}
-    -- cycle;
-%% ── MAE curve (linear, blue) ─────────────────────────────────────────────
-\draw[c2maeBl, line width=1.4pt]
-    plot[smooth] coordinates
-    {(-2.6,1.30) (-2.0,1.00) (-1.0,0.50) (0,0) (1.0,0.50) (2.0,1.00) (2.6,1.30)};
-%% ── MSE curve (quadratic, orange) ────────────────────────────────────────
-\draw[c2mseOr, line width=1.4pt]
-    plot[smooth] coordinates
-    {(-2.6,2.37) (-2.0,1.40) (-1.0,0.35) (0,0) (1.0,0.35) (2.0,1.40) (2.6,2.37)};
-%% ── Legend labels: placed to the right of curve endpoints ────────────────
-\node[c2maeBl, anchor=west, font=\small\bfseries] at (2.68,1.30) {MAE};
-\node[c2mseOr, anchor=west, font=\small\bfseries] at (2.68,2.37) {MSE};
-\end{tikzpicture}%
-}
-\caption{MAE grows linearly with the error size, while MSE punishes larger misses much more aggressively. That shape difference explains much of the practical tradeoff.}
-\label{fig:mse-vs-mae}
-\end{figure}
-
-\begin{example}[House Price Prediction]
-For house prices, an error of \$200{,}000 is often more serious than two errors of \$100{,}000. Squared error reflects that intuition by punishing the larger miss more aggressively. For waiting times or delivery delays, a linear penalty is often easier to justify.
-\end{example}
-
-\subsection{Classification Losses}
-
-This subsection moves in three steps: why a smooth loss matters for optimization, what log loss computes, and what behavior log loss rewards.
-
-In classification, the output is a class label or a probability distribution over classes. The conceptually simplest loss for a yes-or-no task is zero-one loss:
+The same distinction holds for conditional prediction. If $E[Y^2\mid X=x]<\infty$, then
 \[
-\ell(y,\hat{y}) =
-\begin{cases}
-0 & \text{if } y=\hat{y},\\
-1 & \text{if } y\neq \hat{y}.
-\end{cases}
+E[(Y-c)^2\mid X=x]
+=\operatorname{Var}(Y\mid X=x)+(c-E[Y\mid X=x])^2.
 \]
-This definition is simple, but training algorithms rarely optimize it directly. Most algorithms work best with losses that change smoothly as the prediction changes.
+Thus the conditional mean minimizes expected squared error. With finite conditional first absolute moment, any conditional median minimizes expected absolute error. These statements describe the unrestricted optimum; a limited model family may not represent that function.
 
-Because zero-one loss changes abruptly, binary classifiers are usually trained with cross-entropy, or log loss: a smooth penalty that grows when the model assigns low probability to the true label. For a classifier that predicts probability $p$ for the positive class, the loss on one example is
+For targets $(1,2,3,20)$, squared error chooses $6.5$, while absolute error permits any constant in $[2,3]$. The value $20$ has a much stronger effect on the mean. Resistance to an extreme value is useful when that value should have limited influence; it is not a reason to discard a genuine outcome that the task must predict.
+
+\subsection{Class Labels and Probability Forecasts}
+
+Zero-one loss is $\ell(y,\hat y)=\mathbf1\{y\ne\hat y\}$, where $\mathbf1$ is one when the condition is true and zero otherwise. Its empirical average is the classification error rate, one minus accuracy. It assesses a label, not the full probability forecast behind that label.
+
+For a binary probability forecast $q\in(0,1)$, \emph{log loss}, also called binary cross-entropy, is
 \[
-\ell(y,p) = -\bigl(y \log p + (1-y)\log(1-p)\bigr).
+\ell(y,q)=-y\log q-(1-y)\log(1-q).
 \]
-The loss is small when the model gives high probability to the correct class and large when it is confident and wrong. In words: log loss punishes confident mistakes severely and rewards honest probabilities.
+\begin{samepage}
+All logarithms here are natural. A positive label incurs $-\log q$; a negative label incurs $-\log(1-q)$. The penalty diverges when a forecast approaches certainty in the wrong outcome. At an endpoint, assigning probability zero to an outcome that occurs incurs infinite loss; a certain correct forecast has loss zero, using the limiting convention.
+\end{samepage}
 
-There is a deeper reason this loss matters. It rewards honest probability forecasts, not merely correct labels. The proper-scoring-rule literature makes that precise \citep{gneiting2007}.
-
-The theorem and proof below formalize ``log loss rewards honest probabilities.'' A first-pass reader can take the headline---``minimizing expected log loss in a Bernoulli problem returns the true probability''---and skip the calculus; the proof is here for readers who want to see why honesty is the strict minimum, not just a minimum.
+Log loss provides a differentiable objective as a function of $q$ in the interior, although smoothness in model parameters also depends on the model. Absolute error and other nonsmooth objectives can also be optimized. A more fundamental reason for using log loss is its preference for correct probability forecasts \citep{gneiting2007}.
 
 \begin{theorem}[Log Loss Is Strictly Proper for a Bernoulli Event]
-Let $Y \sim \mathrm{Bernoulli}(p^\star)$ with $p^\star \in (0,1)$, and let $q \in (0,1)$ be a forecast for $P(Y=1)$. The expected log loss
+Let $Y\sim\operatorname{Bernoulli}(p^\star)$ with $0<p^\star<1$. The expected log loss for forecast $0<q<1$,
 \[
-L(q) = -p^\star \log q - (1-p^\star)\log(1-q)
+L(q)=-p^\star\log q-(1-p^\star)\log(1-q),
 \]
 is uniquely minimized at $q=p^\star$.
 \end{theorem}
 
-\begin{advancednote}
-\begin{proof}[Proof Sketch]
-Differentiate:
+\begin{proof}
+The derivatives are
 \[
-L'(q)= -\frac{p^\star}{q} + \frac{1-p^\star}{1-q}
-= \frac{q-p^\star}{q(1-q)}.
+L'(q)=\frac{q-p^\star}{q(1-q)},\qquad
+L''(q)=\frac{p^\star}{q^2}+\frac{1-p^\star}{(1-q)^2}>0.
 \]
-The only stationary point is therefore $q=p^\star$. A second derivative check gives
-\[
-L''(q)=\frac{p^\star}{q^2}+\frac{1-p^\star}{(1-q)^2}>0,
-\]
-so $L(q)$ is strictly convex on $(0,1)$ and the stationary point is the unique minimizer.
+The derivative vanishes at $p^\star$, and strict convexity makes it the unique minimum. If the true probability is zero or one, the minimum instead occurs at that endpoint when boundary forecasts are permitted.
 \end{proof}
-\end{advancednote}
 
-If $p^\star=0$ or $p^\star=1$, the minimizing forecast lies on the boundary at $q=0$ or $q=1$. The theorem above covers the interior case, where the minimizer and the derivative calculation both live inside $(0,1)$.
+Strict propriety is a statement about expected loss. It does not guarantee that a finite trained model learns the true conditional probabilities. Model restrictions, data selection, optimization, and sampling variation still matter. An uncertain event also gives positive loss even at the optimum: for $p^\star=0.5$, the minimum expected log loss is $\log2\approx0.693$.
 
-In plain language: when downstream decisions consume probabilities, log loss rewards honest probability reports rather than merely correct labels.
+Table~\ref{tab:log-loss-comparison} illustrates another distinction. Both models classify all four cases correctly at threshold $0.5$, but their mean log losses are approximately $0.664$ and $0.015$. On these observed labels, the more confident forecasts incur less loss. Four successes do not establish calibration or prove that confidence is justified on future cases.
 
-The Brier score shares this idea. Both are strictly proper scoring rules, so the forecaster does best in expectation by reporting the true probability rather than a distorted one \citep{gneiting2007}.
-
-If $y=1$, then $\ell=-\log p$; if $y=0$, then $\ell=-\log(1-p)$. As the model becomes more confident in the wrong class, the penalty grows fast because $\log z \to -\infty$ as $z \to 0^+$. For a concrete anchor, predicting $p=0.99$ for a negative case gives $\ell=-\log(0.01)\approx 4.61$, while an uncertain $p=0.5$ gives only $\ell\approx 0.69$.
-
-\begin{figure}[t]
-\centering
-\definecolor{c2cautBg}{RGB}{220,233,251}
-\definecolor{c2confBg}{RGB}{210,238,220}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=5cm, font=\small]
-%% ── Light grid ───────────────────────────────────────────────────────────
-\foreach \y in {0.2,0.4,0.6,0.8}
-    \draw[gray!18, line width=0.4pt] (0,\y) -- (4.6,\y);
-%% ── Axes ─────────────────────────────────────────────────────────────────
-\draw[->, gray!55, thick] (0,0) -- (4.7,0) node[right] {model};
-\draw[->, gray!55, thick] (0,0) -- (0,0.95) node[above] {average log loss};
-%% ── Bars ─────────────────────────────────────────────────────────────────
-\filldraw[fill=c2cautBg, draw=blue!40, line width=0.8pt]
-    (0.8,0) rectangle (1.8,0.66);
-\filldraw[fill=c2confBg, draw=green!40!black, line width=0.8pt]
-    (2.8,0) rectangle (3.8,0.02);
-%% ── Bar value labels ─────────────────────────────────────────────────────
-\node[above, font=\small\bfseries, blue!60!black]  at (1.3,0.66) {0.66};
-\node[above, font=\small\bfseries, green!45!black] at (3.3,0.02) {0.02};
-%% ── Axis tick labels ─────────────────────────────────────────────────────
-\node[align=center, font=\small\bfseries, blue!55!black]  at (1.3,-0.085) {cautious};
-\node[align=center, font=\small\bfseries, green!45!black] at (3.3,-0.085) {confident};
-%% ── Annotation (right side, clear of the 0.67 label) ────────────────────
-\node[align=left, text width=3.2cm, font=\footnotesize, gray!60!black,
-      anchor=west]
-    at (5.0,0.55) {both models classify\\all four examples\\correctly};
-\end{tikzpicture}%
-}
-\caption{Accuracy can hide major differences in confidence. A cautious model and a confident model may both be perfectly accurate while having very different log loss.}
-\label{fig:same-accuracy-different-logloss}
-\end{figure}
-
-\begin{table}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
 \small
 \setlength{\tabcolsep}{5pt}
-\begin{tabular}{>{\centering}p{1.38cm}>{\centering}p{1.4cm}>{\centering}p{2.35cm}>{\centering}p{2.35cm}>{\centering\arraybackslash}p{1.52cm}}
+\begin{tabular}{>{\centering}p{1.38cm}>{\centering}p{1.4cm}>{\centering}p{2.35cm}>{\centering\arraybackslash}p{2.35cm}}
 \toprule
-Example & True label & Cautious $p(y{=}1{\mid}x)$ & Confident $p(y{=}1{\mid}x)$ & Correct? \\
+Example & True label & Cautious $\hat p$ & Confident $\hat p$ \\
 \midrule
-1 & 1 & 0.51 & 0.99 & both correct \\
-2 & 1 & 0.52 & 0.98 & both correct \\
-3 & 0 & 0.49 & 0.02 & both correct \\
-4 & 0 & 0.48 & 0.01 & both correct \\
+1 & 1 & 0.51 & 0.99 \\
+2 & 1 & 0.52 & 0.98 \\
+3 & 0 & 0.49 & 0.02 \\
+4 & 0 & 0.48 & 0.01 \\
 \bottomrule
 \end{tabular}
-\caption{The final labels are identical, but the probabilistic quality is not. Log loss rewards the model that is confidently correct, not merely barely correct.}
+\captionof{table}{Illustrative probability forecasts. At threshold $0.5$, both models make the same correct labels; log loss also assesses the assigned probabilities.}
 \label{tab:log-loss-comparison}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-\begin{example}[Why Confidence Matters at Scale]
-Google reports that Gmail's AI-powered defenses block billions of unwanted messages per day and stop more than 99.9\% of spam, phishing, and malware from reaching inboxes \citep{gmail2023}. At that scale, confidence matters because downstream systems consume those probabilities for ranking, quarantine decisions, and human-review queues.
-\end{example}
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=1cm,y=4.3cm]
+\draw[ml axis] (0,0) -- (5.0,0);
+\draw[ml axis] (0,0) -- (0,0.82);
+\draw[draw=mlLine] (0,0.4) -- (4.75,0.4);
+\node[ml label,anchor=east] at (-0.1,0.4) {$0.4$};
+\filldraw[fill=mlWash,draw=mlMuted] (0.85,0) rectangle (1.95,0.66);
+\filldraw[fill=mlAccent!12,draw=mlAccent] (3.05,0) rectangle (4.15,0.02);
+\node[above=4pt] at (1.4,0.66) {$0.66$};
+\node[above=4pt] at (3.6,0.02) {$0.02$};
+\node[ml label] at (1.4,-0.09) {cautious};
+\node[ml label] at (3.6,-0.09) {confident};
+\node[ml label,anchor=south] at (0,0.84) {mean log loss};
+\node[ml key box,align=center] at (7.15,0.43) {same accuracy\\\footnotesize all four labels correct};
+\end{tikzpicture}
+\captionof{figure}{Rounded mean log losses for Table~\ref{tab:log-loss-comparison}. Equal accuracy does not imply equal loss; this small example does not establish future calibration.}
+\label{fig:same-accuracy-different-logloss}
+\end{minipage}\par\addvspace{\intextsep}
 
-\textbf{Counterexample first.} Before trusting one headline metric, try to construct two models that tie on it but differ in decision value. If you can build such a pair, the metric is not sufficient on its own.
+\subsection{Class Weighting Changes the Probability Objective}
 
-When classes are imbalanced, the majority class can dominate the average loss. One remedy is to weight the loss: multiply the per-example loss by a factor that is larger for minority-class examples. If the positive class appears in only 5\% of training examples, an inverse-frequency weight would be $w_+ = 20$. Class-weighted cross-entropy is the standard form:
+One can assign different fitting weights to the two labels. With positive weights $w_1,w_0$, weighted log loss is
 \[
-\mathcal{L} = -\frac{1}{n}\sum_{i=1}^{n} w_{y_i}\bigl[y_i\log p_i + (1-y_i)\log(1-p_i)\bigr],
+\ell_w(y,q)=-w_1y\log q-w_0(1-y)\log(1-q).
 \]
-where $w_1 > w_0$ reflects the higher cost of ignoring the rarer class. This training-time choice complements the deployment-time threshold and cost-matrix choices in Section~\ref{sec:from-score-to-action}. Loss weighting and threshold tuning are two different levers; teams often use both.
+For an event with true probability $p$, minimizing its expected weighted loss gives
+\[
+q^*=\frac{w_1p}{w_1p+w_0(1-p)}.
+\]
+This follows by setting the derivative $-w_1p/q+w_0(1-p)/(1-q)$ to zero. Unequal weights generally produce a forecast different from $p$. Multiplying both weights by the same positive constant leaves the optimum unchanged.
 
-\begin{warningbox}
-Reporting only the optimized training loss can hide the behavior that matters for the real decision. A system can lower its loss while leaving the practically important metric unchanged---or worse.
-\end{warningbox}
+Weighting may express a choice about class influence or fitting priorities, but class rarity does not by itself make unweighted probability loss inappropriate. Error costs and rarity are different considerations. Weighted forecasts should not automatically be read as probabilities for the original population. Changing a fitting weight and changing a decision threshold are different operations.
 
-\section{From Score to Action: Threshold, Ranking, and Abstention}
+\section{Probability Quality and Calibration}
+
+Let $P=\hat p(X)$ denote the model's probability forecast for a random case with binary target $Y$. Population calibration means
+\[
+E[Y\mid P]=P.
+\]
+Among cases assigned a particular forecast, their positive frequency matches that forecast in the population. It is a statement about groups defined by the score, not a guarantee of correctness for each case or each subgroup. Guo et al.\ found substantial miscalibration in the neural networks they studied, despite strong classification accuracy \citep{guo2017}.
+
+Calibration also does not guarantee informative ranking. Suppose two equally common, observable groups have event probabilities $0.1$ and $0.9$. Reporting $0.5$ for everyone is calibrated when the groups are pooled, because the overall event rate is $0.5$, but it cannot distinguish the groups. Reporting $0.1$ and $0.9$ respectively is also calibrated and retains useful information. Neither forecast guarantees whether an individual event occurs.
+
+\subsection{Squared Probability Error}
+
+The binary Brier score is the average squared probability error:
+\[
+\operatorname{Brier}=\frac1n\sum_{i=1}^n(q_i-y_i)^2.
+\]
+It is another strictly proper loss \citep{gneiting2007}. For $Y\sim\operatorname{Bernoulli}(p^\star)$,
+\[
+E[(q-Y)^2]=p^\star(1-p^\star)+(q-p^\star)^2.
+\]
+The first term is the event's variance; the second is the excess loss due to the forecast. The unique optimum is $q=p^\star$, including the endpoints.
+
+In the two-group example, forecasting $0.5$ everywhere has expected Brier score $0.25$, whereas forecasting each group's probability has expected score $0.09$. Both forecasts are calibrated, so Brier score measures more than calibration. It assesses overall probability quality, including whether the forecasts distinguish cases with different risks. A lower average held-out loss can still conceal errors within a small group or near the action threshold.
+
+\subsection{Reliability Diagrams and Binned Gaps}
+
+A reliability diagram groups forecasts into bins and compares each bin's mean forecast with its observed positive frequency. For forecasts $(0.71,0.74,0.75,0.78,0.79)$ and labels $(1,1,0,1,0)$, those quantities are $0.754$ and $3/5=0.60$. The observed frequency falls below the forecast mean, but five cases cannot establish systematic overconfidence.
+
+For nonempty bins $B_1,\ldots,B_M$, let $n_m=|B_m|$, $\bar q_m$ be the mean forecast, and $\bar y_m$ the mean label. A common binary calibration summary is
+\[
+\operatorname{ECE}=\sum_{m=1}^M\frac{n_m}{n}
+\left|\bar q_m-\bar y_m\right|,
+\]
+called expected calibration error. Here the bins partition all $n$ cases; empty bins contribute zero and have no mean to plot. This version assesses positive-event probabilities. Multiclass confidence-based ECE can assess a different quantity, such as the probability that the highest-scoring class is correct.
+
+Empirical ECE fluctuates with observed labels even for a calibrated process. Coarse bins can cancel opposite errors; very fine bins can amplify sampling noise. State the binning rule and counts, and inspect relevant groups and probability ranges. A small ECE is not a certificate that every decision uses a correct probability.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=4.8cm,y=4.8cm]
+\draw[ml axis] (0,0) -- (1.06,0);
+\draw[ml axis] (0,0) -- (0,1.06);
+\foreach \v in {0,0.5,1}{
+  \node[ml label,below=3pt] at (\v,0) {$\v$};
+  \node[ml label,left=3pt] at (0,\v) {$\v$};
+}
+\draw[ml reference] (0,0) -- (1,1);
+\foreach \x/\y in {0.14/0.08,0.34/0.24,0.54/0.56,0.74/0.62,0.94/0.76}{
+  \draw[draw=mlLine,line width=1pt] (\x,\x) -- (\x,\y);
+  \fill[mlAccent] (\x,\y) circle (2.5pt);
+}
+\node[ml label,align=center] at (0.26,0.86) {perfect\\calibration};
+\node[ml label] at (0.5,-0.17) {mean predicted probability};
+\node[ml label,rotate=90] at (-0.2,0.5) {observed positive frequency};
+\end{tikzpicture}
+\captionof{figure}{An illustrative reliability diagram. Dots compare mean forecasts and observed frequencies; vertical segments show gaps from the calibration diagonal. Bin counts and sampling uncertainty are needed to assess empirical evidence.}
+\label{fig:reliability-diagram}
+\end{minipage}\par\addvspace{\intextsep}
+
+A calibration method can transform model scores using labeled development data. It must be evaluated on cases that did not choose that transformation. Strictly increasing transformations preserve ranking, as shown in Chapter~\ref{ch:framing-learning-problems}, while changing probability values. Some calibration methods can create ties or change ordering. Calibration on one population may also fail after the population or measurement process changes.
+
+\subsection{Prevalence and Precision}
+
+Let $\hat Y$ be the predicted label for a random case. Define $\pi=P(Y=1)$ as the positive base rate, $r=P(\hat Y=1\mid Y=1)$ as the true positive rate, and $f=P(\hat Y=1\mid Y=0)$ as the false-positive rate for a specified decision rule. Bayes' rule gives population precision:
+\[
+P(Y=1\mid\hat Y=1)=
+\frac{\pi r}{\pi r+(1-\pi)f},
+\]
+provided the probability of a positive prediction is nonzero. This is a population conditional probability; a precision computed on a finite sample estimates it and can fluctuate.
+
+For $r=0.80$ and $f=0.05$, prevalence $0.10$ gives precision $0.64$. At prevalence $0.01$, the same two rates give precision about $0.139$. Over $N$ cases, the expected selected count is
+\[
+E[\text{selected count}]=N\bigl[\pi r+(1-\pi)f\bigr].
+\]
+Queue size generally changes too. Table~\ref{tab:base-rate-precision} shows expected counts for $N=10{,}000$; its precision column uses the population formula, not the expectation of a finite-sample ratio.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}L{1.65cm}L{2.02cm}L{2.02cm}L{2.02cm}L{2.16cm}@{}}
+\toprule
+Prevalence & Expected TP & Expected FP & Expected selected & Population precision\\
+\midrule
+$0.10$ & $800$ & $450$ & $1{,}250$ & $0.64$\\
+$0.01$ & $80$ & $495$ & $575$ & $\approx0.139$\\
+\bottomrule
+\end{tabular}
+\captionof{table}{An illustrative change in prevalence with TPR $0.80$, FPR $0.05$, and population size $10{,}000$ held fixed. Both precision and expected review load change.}
+\label{tab:base-rate-precision}
+\end{minipage}\par\addvspace{\intextsep}
+
+Holding $r$ and $f$ fixed is an assumption, not a prediction about every deployment change. It is appropriate, for example, when the class proportions change while the class-conditional score distributions and the threshold stay the same. Probabilities calibrated to the earlier prevalence can also become miscalibrated. Changes in measurements or in the relationships between inputs and targets can alter the rates as well.
+
+\section{From Score to Action}
 \label{sec:from-score-to-action}
 
-Many models produce scores or probabilities, not final actions. A decision still has to follow. The action might apply a threshold, a top-$k$ ranking (take the highest $k$ scores), or an abstention rule (withhold automatic action on uncertain cases and route them to human review). This is the chapter's second separation: even a well-chosen metric is incomplete until the score is attached to an operational policy.
+A policy can threshold a score, select a ranked subset under a budget, or defer some decisions for review. These actions use different information and answer different questions. A positive prediction, an invitation, and an eventual beneficial outcome must not be treated as interchangeable.
 
-Before continuing to calibration and validation discipline, make sure you can explain the difference between a threshold policy, a ranked-list policy, and an abstention policy on the same set of scores. These are different action rules, not different names for accuracy.
+\subsection{Thresholds and Operating Points}
 
-\textbf{Threshold as policy.} A threshold is not a cleanup detail after training. It encodes a decision about missed cases, false alarms, review capacity, and intervention cost.
+For a score $s(x)$ and threshold $\tau$, use the rule
+\[
+\hat y_\tau(x)=\mathbf1\{s(x)\geq\tau\}.
+\]
+The tie convention is part of the policy. On a fixed dataset, raising the threshold can only remove positive predictions. Recall and FPR therefore cannot increase, when their denominators are nonzero. Precision can rise or fall depending on which labels are removed.
 
-\subsection{Threshold Tradeoffs}
-
-Suppose a spam detector assigns the following probabilities to eight messages.
-
-\begin{table}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
 \begin{tabular}{>{\centering}p{1.4cm}>{\centering}p{1.4cm}>{\centering}p{2.6cm}>{\centering\arraybackslash}p{3.7cm}}
 \toprule
-Message & True label & Predicted spam probability & Positive at $0.3$ / $0.5$ / $0.7$ \\
+Message & Label & Predicted spam probability & Positive at $0.3$ / $0.5$ / $0.7$ \\
 \midrule
 1 & 1 & 0.95 & yes / yes / yes \\
 2 & 1 & 0.81 & yes / yes / yes \\
@@ -444,151 +391,68 @@ Message & True label & Predicted spam probability & Positive at $0.3$ / $0.5$ / 
 8 & 0 & 0.07 & no / no / no \\
 \bottomrule
 \end{tabular}
-\caption{A tiny thresholding example for binary classification metrics.}
+\captionof{table}{Eight illustrative spam forecasts and their later observed labels. The same scores support several threshold policies.}
 \label{tab:threshold-example}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-At threshold $0.3$, Messages 1 through 6 are predicted positive. The confusion counts are
+The eight cases in Table~\ref{tab:threshold-example} give:
 \[
-TP=4,\quad FP=2,\quad FN=0,\quad TN=2,
+\begin{array}{c|rrrr|ccc}
+\tau&TP&FP&FN&TN&\text{Precision}&\text{Recall}&F_1\\ \hline
+0.3&4&2&0&2&2/3&1&4/5\\
+0.5&3&1&1&3&3/4&3/4&3/4\\
+0.7&2&0&2&4&1&1/2&2/3
+\end{array}
 \]
-so the metrics become
-\[
-\text{Accuracy}=\frac{4+2}{8}=0.75,
-\qquad
-\text{Precision}=\frac{4}{4+2}\approx 0.67,
-\]
-\[
-\text{Recall}=\frac{4}{4+0}=1.00,
-\qquad
-\text{F1}\approx 0.80.
-\]
+All three policies have accuracy $6/8=0.75$, but they make different errors. Equal accuracy does not determine their consequences. The labels are used here for retrospective evaluation, not as inputs to the decision.
 
-At threshold $0.5$, Messages 1 through 4 are predicted positive:
-\[
-TP=3,\quad FP=1,\quad FN=1,\quad TN=3,
-\]
-which gives
-\begin{align*}
-\text{Accuracy} &= 0.75, & \text{Precision} &= 0.75, \\
-\text{Recall} &= 0.75, & \text{F1} &= 0.75.
-\end{align*}
-
-At threshold $0.7$, only Messages 1 and 2 remain positive:
-\[
-TP=2,\quad FP=0,\quad FN=2,\quad TN=4,
-\]
-so
-\begin{align*}
-\text{Accuracy} &= 0.75, & \text{Precision} &= 1.00, \\
-\text{Recall} &= 0.50, & \text{F1} &\approx 0.67.
-\end{align*}
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c2precBl}{RGB}{56,103,170}
-\definecolor{c2recOr}{RGB}{184,92,16}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=3.0cm, y=2.2cm, font=\small]
-%% ── Light grid ───────────────────────────────────────────────────────────
-\foreach \y in {0.25,0.50,0.75,1.00}
-    \draw[gray!18, line width=0.4pt] (0.28,\y) -- (1.75,\y);
-%% ── Axes ─────────────────────────────────────────────────────────────────
-\draw[->, gray!55, thick] (0.22,0) -- (1.92,0) node[right] {threshold};
-\draw[->, gray!55, thick] (0.30,0) -- (0.30,1.18) node[above] {metric value};
-%% ── Tick marks ───────────────────────────────────────────────────────────
-\foreach \x/\lbl in {0.3/0.3, 1.0/0.5, 1.7/0.7}
-    \draw[gray!50] (\x,0.025) -- (\x,-0.025) node[below=3pt, font=\footnotesize] {\lbl};
-%% ── Precision curve (blue, rising) ──────────────────────────────────────
-\draw[c2precBl, line width=1.4pt]
-    plot[smooth] coordinates {(0.3,0.67) (1.0,0.75) (1.7,1.00)};
-\filldraw[c2precBl] (0.3,0.67) circle (2.2pt);
-\filldraw[c2precBl] (1.0,0.75) circle (2.2pt);
-\filldraw[c2precBl] (1.7,1.00) circle (2.2pt);
-%% ── Recall curve (orange, falling) ──────────────────────────────────────
-\draw[c2recOr, line width=1.4pt]
-    plot[smooth] coordinates {(0.3,1.00) (1.0,0.75) (1.7,0.50)};
-\filldraw[c2recOr] (0.3,1.00) circle (2.2pt);
-\filldraw[c2recOr] (1.0,0.75) circle (2.2pt);
-\filldraw[c2recOr] (1.7,0.50) circle (2.2pt);
-%% ── Legend labels: right of last data point to avoid curve overlap ────────
-\node[c2precBl, anchor=west, font=\small\bfseries] at (1.74,1.00) {precision};
-\node[c2recOr,  anchor=west, font=\small\bfseries] at (1.74,0.50) {recall};
-\end{tikzpicture}%
+\begin{tikzpicture}[ml diagram,x=12cm,y=3.2cm]
+\draw[ml axis] (0.26,0) -- (0.78,0);
+\draw[ml axis] (0.26,0) -- (0.26,1.12);
+\foreach \y in {0.5,1}{
+  \draw[draw=mlLine] (0.26,\y) -- (0.72,\y);
+  \node[ml label,anchor=east] at (0.25,\y) {$\y$};
 }
-\caption{The threshold sweep makes the tradeoff visible: stricter thresholds usually raise precision and lower recall. The underlying model stays the same. Only the policy changes.}
+\foreach \x in {0.3,0.5,0.7}
+  \draw[draw=mlMuted] (\x,0.015) -- (\x,-0.015) node[below=3pt,ml label] {$\x$};
+\draw[ml curve] (0.3,0.666667) -- (0.5,0.75) -- (0.7,1);
+\draw[ml reference] (0.3,1) -- (0.5,0.75) -- (0.7,0.5);
+\foreach \x/\y in {0.3/1,0.5/0.75,0.7/0.5}
+  \draw[draw=mlMuted,fill=white] (\x,\y) circle (3pt);
+\foreach \x/\y in {0.3/0.666667,0.5/0.75,0.7/1}
+  \fill[mlAccent] (\x,\y) circle (2.4pt);
+\node[ml label,anchor=west] at (0.715,1) {precision};
+\node[ml label,anchor=west] at (0.715,0.5) {recall};
+\node[ml label] at (0.5,-0.2) {decision threshold};
+\end{tikzpicture}
+\captionof{figure}{Three operating points for the same predictor. Solid dots show precision; open dots and a dashed line show recall. Connecting segments guide the eye; a finite sample changes at score cutoffs, and precision need not increase monotonically in general.}
 \label{fig:threshold-sweep}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-Metric choice and threshold choice cannot be separated. Accuracy stayed the same across all three thresholds, but the operating behavior changed substantially.
+A threshold at or below the smallest score selects every case; one strictly above the largest score selects none. If both classes occur, selecting all gives recall and FPR equal to one, with precision equal to prevalence. Selecting none gives recall and FPR zero and undefined precision. A threshold of one still selects a score exactly equal to one under the stated rule.
 
-The arithmetic is simple enough to reproduce in basic Python.
+\subsection{ROC, Precision--Recall, and AUC}
 
-\begin{codeexample}[caption={A pure-Python threshold sweep}]
-scores = [0.95, 0.81, 0.64, 0.58, 0.41, 0.35, 0.18, 0.07]
-labels = [1,    1,    1,    0,    1,    0,    0,    0]
+A receiver operating characteristic (ROC) curve plots recall against FPR across thresholds. A precision--recall curve plots precision against recall. They describe families of operating points rather than one chosen policy. A finite sample changes only when thresholds cross scores, and interpolation conventions matter for reported areas.
 
-def metrics_at_threshold(scores, labels, threshold):
-    tp = fp = fn = tn = 0
+ROC coordinates normalize positives and negatives separately. Under a prevalence change with fixed class-conditional score distributions, the curve remains unchanged while precision changes. They do not become better merely because more negatives are added while the class-conditional score distributions stay fixed. However, in a low-prevalence population, even a small FPR can produce many false positives relative to the true positives. The precision--recall view makes that burden visible through precision.
 
-    for score, label in zip(scores, labels):
-        prediction = 1 if score >= threshold else 0
-        if prediction == 1 and label == 1:
-            tp += 1
-        elif prediction == 1 and label == 0:
-            fp += 1
-        elif prediction == 0 and label == 1:
-            fn += 1
-        else:
-            tn += 1
+With the usual half-credit convention for equal scores, ROC area under the curve (AUC) has the ranking interpretation \citep{cortes2004auc}
+\[
+\operatorname{AUC}=P\bigl(s(X^+)>s(X^-)\bigr)
++\tfrac12P\bigl(s(X^+)=s(X^-)\bigr),
+\]
+where $X^+$ and $X^-$ are independently drawn from the positive and negative populations. It measures pairwise ordering, not the numerical accuracy of probability forecasts. AUC does not average numerical score thresholds uniformly or include error costs. A model with high AUC can still perform poorly at the review budget or probability threshold that matters. Report the chosen operating point and its counts alongside curve summaries.
 
-    accuracy = (tp + tn) / len(labels)
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
-    f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
-    return tp, fp, fn, tn, accuracy, precision, recall, f1
+\subsection{Decision Costs and the Probability Threshold}
 
-for threshold in [0.3, 0.5, 0.7]:
-    tp, fp, fn, tn, accuracy, precision, recall, f1 = metrics_at_threshold(
-        scores, labels, threshold
-    )
-    print(
-        threshold,
-        (tp, fp, fn, tn),
-        round(accuracy, 2),
-        round(precision, 2),
-        round(recall, 2),
-        round(f1, 2),
-    )
-\end{codeexample}
+Suppose a positive action has cost $C_{FP}>0$ when $Y=0$, a negative action has cost $C_{FN}>0$ when $Y=1$, and correct decisions cost zero. These are specified consequences in an illustrative decision problem, not quantities determined by a confusion matrix.
 
-This kind of tiny script belongs in the book because it exposes the mechanism. Labs can use libraries and larger datasets; the chapter code should make the evaluation arithmetic impossible to hide.
+For the eight-case example, costs $C_{FP}=1$ and $C_{FN}=6$ favor threshold $0.3$ among the three compared policies. Reversing the emphasis to $C_{FP}=5$ and $C_{FN}=1$ favors $0.7$. The scores are unchanged; the consequence model changes.
 
-\begin{sanitycheck}
-\textbf{Two extreme thresholds are free debugging.} Before reading any threshold-sweep table, force the threshold to $0$ and to $1$ and verify that the numbers are sensible. At threshold $0$, the predictor labels every example positive, so $\text{Recall} = 1$, $\text{TPR} = 1$, $\text{FPR} = 1$, $\text{Precision} = \text{base rate}$. At threshold $1$, the predictor labels every example negative, so $\text{Recall} = 0$, $\text{TPR} = 0$, $\text{FPR} = 0$, and Precision is undefined. If the threshold-sweep table does not produce these limits in its end rows, the metric arithmetic is wrong --- typically a swap between TP/FP or a mislabeled column. These two extreme rows cost nothing to print and catch most off-by-one bugs in a threshold sweep before any interpretive claim is made.
-\end{sanitycheck}
-
-\subsection{Cost Matrices and Threshold Selection}
-
-Threshold choice becomes much clearer once we stop asking which threshold has the nicest generic metric and start asking what the downstream action costs.
-
-Suppose the system is a medical triage screen where a false negative is much worse than a false positive, because a missed urgent case may delay treatment. Assign cost $6$ to each false negative and cost $1$ to each false positive. The total decision cost on the running eight-case example becomes:
-\begin{align*}
-\text{cost}_{0.3} &= 2(1)+0(6)=2, \\
-\text{cost}_{0.5} &= 1(1)+1(6)=7, \\
-\text{cost}_{0.7} &= 0(1)+2(6)=12.
-\end{align*}
-Under that policy, the lowest threshold wins because misses are expensive.
-
-Now reverse the deployment story. Suppose the system is a strict inbox-protection tool where quarantining wanted mail hurts much more than letting one nuisance message through. With a false positive costing $5$ and a false negative costing $1$,
-\begin{align*}
-\text{cost}_{0.3} &= 2(5)+0(1)=10, \\
-\text{cost}_{0.5} &= 1(5)+1(1)=6, \\
-\text{cost}_{0.7} &= 0(5)+2(1)=2.
-\end{align*}
-Now the highest threshold wins because false alarms are expensive.
-
-\begin{table}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
@@ -601,31 +465,32 @@ $0.5$ & $1$ & $1$ & $7$ & $6$ \\
 $0.7$ & $0$ & $2$ & $12$ & $2$ \\
 \bottomrule
 \end{tabular}
-\caption{The same score distribution can imply different thresholds once the action costs change. Threshold choice is therefore a policy choice, not a universal mathematical truth.}
+\captionof{table}{Total observed cost $C_{FP}FP+C_{FN}FN$ for the three illustrative policies. Each preferred threshold is best among these three, not necessarily among all possible policies.}
 \label{tab:threshold-cost-matrix}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-This is what ``threshold as policy'' means in practice. The score has not changed. The ranking has not changed. Only the consequence model changed, and that alone reversed the preferred threshold.
-
-Let $q=P(y=1\mid x)$ be a calibrated probability for a single case. Predicting positive carries expected cost $C_{FP}(1-q)$; predicting negative carries expected cost $C_{FN}q$. Choose positive when
+Let $p^\star(x)=P(Y=1\mid X=x)$ be the true conditional probability. The conditional expected costs are
 \[
-C_{FP}(1-q)\le C_{FN}q
-\quad\Rightarrow\quad
-q\ge \frac{C_{FP}}{C_{FP}+C_{FN}}.
+C(1\mid x)=C_{FP}(1-p^\star(x)),\qquad
+C(0\mid x)=C_{FN}p^\star(x).
 \]
-The reusable threshold rule for calibrated probabilities is therefore $t^*=\frac{C_{FP}}{C_{FP}+C_{FN}}$, and the threshold moves directly with the cost ratio.
+Choose positive when the first is no larger than the second:
+\[
+p^\star(x)\geq\frac{C_{FP}}{C_{FP}+C_{FN}}.
+\]
+This rule minimizes expected cost when the stated costs summarize the consequences, cases can be decided separately, and no capacity constraint couples their actions. Nonzero costs for correct decisions, case-dependent costs, and interactions between decisions require the corresponding cost model.
 
-This closed-form rule is exact only when the score is a calibrated posterior probability and the decision problem is fully summarized by false-positive and false-negative costs. Its value is that it makes those assumptions visible.
+A fitted probability is an estimate of $p^\star(x)$. Calibration alone, $E[Y\mid P]=P$, need not make it the true probability conditional on all available inputs. For a calibrated score, the same calculation is valid conditional on that score and gives the best rule among policies using only it under the stated costs. A policy using additional information may do better. Calibration averaged over everyone can also conceal errors within decision-relevant groups.
 
-\begin{decisionbox}
-Do not ask which threshold maximizes a generic metric until you have written down what false positives, false negatives, abstentions, and review load cost in the deployment workflow. If misses are costlier, emphasize recall; if false alarms are costlier, emphasize precision.
-\end{decisionbox}
+For $p^\star=0.2$, $C_{FP}=1$, and $C_{FN}=9$, the threshold is $0.1$. A positive action costs $0.8$ in expectation and a negative action costs $1.8$, so the positive action is preferred although the event is less likely than its complement. Expected log loss is still minimized by forecasting $0.2$. Probability estimation and cost-minimizing action answer different questions.
 
-\subsection{Ranking Under a Fixed Budget}
+\subsection{Ranking Under a Review Budget}
 
-Suppose a university builds a model that predicts the probability that a student will trigger the Chapter 1 proxy event in a programming course---missing one of the first two major deadlines or failing to submit early core work. The output is a probability, not a final judgment. Staff can contact at most five students this week.
+A top-$k$ policy selects the $k$ highest scores from a candidate set. If there are fewer than $k$ eligible cases, it selects those available; ties at the boundary require a stated rule that respects capacity. A threshold can select different numbers of cases in different cohorts, whereas a ranked policy can enforce a fixed maximum directly.
 
-\begin{table}[t]
+Table~\ref{tab:student-threshold-example} continues the week-2 deadline forecasts. The later labels evaluate prediction of the proxy event. They do not reveal the benefit of reviewing or contacting a student.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
 \begin{tabular}{>{\centering}p{1.4cm}>{\centering}p{1.7cm}>{\centering}p{2.3cm}>{\centering\arraybackslash}p{3.7cm}}
 \toprule
@@ -645,11 +510,11 @@ S11 & 0.14 & 0 & no / no / no \\
 S12 & 0.08 & 0 & no / no / no \\
 \bottomrule
 \end{tabular}
-\caption{A small threshold-setting example for student support. The staffing constraint forces the evaluation to include operational capacity, not only abstract metrics.}
+\captionof{table}{Illustrative held-out cases: forecasts use week-2 information, and the deadline labels are observed later. The staffing constraint permits at most five adviser reviews.}
 \label{tab:student-threshold-example}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-\begin{table}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
 \small
 \setlength{\tabcolsep}{5pt}
@@ -658,354 +523,101 @@ S12 & 0.08 & 0 & no / no / no \\
 Policy & Flagged & Precision & Recall & F1 & Within budget? \\
 \midrule
 $0.30$ & 9 & $6/9 \approx 0.67$ & $6/6 = 1.00$ & 0.80 & no \\
-$0.50$ & 6 & $4/6 \approx 0.67$ & $4/6 \approx 0.67$ & 0.67 & almost, but still too many \\
-$0.70$ & 3 & $3/3 = 1.00$ & $3/6 = 0.50$ & 0.67 & yes, but leaves capacity unused \\
+$0.50$ & 6 & $4/6 \approx 0.67$ & $4/6 \approx 0.67$ & 0.67 & no \\
+$0.70$ & 3 & $3/3 = 1.00$ & $3/6 = 0.50$ & 0.67 & yes; two slots unused \\
 Top 5 scores & 5 & $4/5 = 0.80$ & $4/6 \approx 0.67$ & 0.73 & yes, exactly \\
 \bottomrule
 \end{tabular}
-\caption{Threshold or ranking choice is partly a resource-allocation choice. The metric story changes once the operational budget is included.}
+\captionof{table}{Predictive metrics for the later deadline labels, with a maximum of five reviews. Using every slot is not itself evidence that the policy improves outcomes.}
 \label{tab:student-threshold-summary}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-This is a more realistic picture of threshold selection than ``pick the threshold with the highest score.'' A threshold of $0.30$ catches every at-risk student in this toy set, but flags nine when staff can contact only five. A threshold of $0.70$ is very precise but misses half the struggling students and leaves scarce capacity unused. The top-five ranking policy uses the support budget exactly and keeps four of the six at-risk students in scope.
+Threshold $0.30$ selects nine cases and exceeds capacity. Threshold $0.70$ selects three, all proxy-positive in this sample, but misses half the six positives. Top five selects four positives and one negative. Its precision is $4/5$, recall is $4/6$, and F1 is $8/11\approx0.73$.
 
-The operational conclusion is not that one threshold is mathematically correct. Policy choice must happen together with capacity planning. In a real system, the university might use the top five scores rather than a fixed threshold, or add a review step for students near the boundary. Ranking policies become natural when the intervention budget is fixed in advance.
+\par\medskip\noindent\begin{minipage}{\linewidth}
+The reason to rank by risk can be stated precisely. If $p_i$ is the conditional event probability for current case $i$ and $S$ is a selected subset, then
+\[
+E\left[\sum_{i\in S}Y_i\,\middle|\,\text{available evidence}\right]
+=\sum_{i\in S}p_i.
+\]
+Linearity does not require independent outcomes. Among subsets of exactly $k$ cases with equal review effort, the $k$ largest probabilities maximize the expected number of positive labels selected: replacing a selected lower probability with an unselected higher one increases the sum. Estimated scores approximate this rule only to the extent that they preserve the relevant ordering.
+\end{minipage}\par\medskip
 
-\subsection{Top-\texorpdfstring{$k$}{k} and Retrieval Metrics}
+Maximizing selected positive labels does not maximize intervention benefit. Students with high deadline risk may differ in whether a check-in changes that risk. With error costs, the expected saving from a positive rather than negative decision is $(C_{FP}+C_{FN})p_i-C_{FP}$; a rule allowed \emph{at most} $k$ actions need not use slots with negative expected savings. Unequal effort or benefits can also make a simple top-$k$ risk policy inappropriate.
 
-When the system acts on a short ranked list, the top of the list matters more than average behavior over the full candidate set. This is common in search, recommendation, document retrieval, limited-capacity triage, and review queues. Threshold metrics alone can miss the central question: how useful is the short list that users or staff will actually see?
+\subsection{Retrieval Metrics}
 
-Two common quantities are
+For a ranked list of length $k>0$ with binary relevance labels,
 \begin{align*}
-\text{Precision@}k &= \frac{\text{relevant items in the top }k}{k}, \\
-\text{Recall@}k &= \frac{\text{relevant items in the top }k}{\text{all relevant items}}.
+\operatorname{Precision@}k&=\frac{\text{relevant items among the first }k}{k},\\
+\operatorname{Recall@}k&=\frac{\text{relevant items among the first }k}{\text{all relevant items in the candidate collection}}.
 \end{align*}
-Precision@k asks how clean the exposed list is. Recall@k asks how much of the useful material the list managed to capture. When there is usually one best item---one authoritative policy passage, one best search result---the position of the \emph{first} relevant result matters too. Information-retrieval texts capture that idea with reciprocal rank, the inverse of the rank of the first relevant result, or its dataset average, mean reciprocal rank \citep{manning2008}.
+Recall requires a nonzero total and a defined collection; incomplete relevance judgments limit what the denominator means. These metrics summarize membership in the top $k$, not ordering within it \citep{manning2008}.
 
-\begin{example}[A Tiny Retrieval Ranking]
-Suppose a policy-search system returns five passages, the first relevant passage appears at rank $2$, and two of the top five are relevant. If the collection holds three relevant passages in total, then $\text{Precision@}5 = 2/5 = 0.40$ and $\text{Recall@}5 = 2/3 \approx 0.67$, while the reciprocal rank is $1/2 = 0.5$. The system did not put the best evidence first, but it surfaced useful material near the top.
-\end{example}
+Reciprocal rank is $1/r$ if the first relevant item appears at rank $r$, and zero if none appears in the evaluated list. Mean reciprocal rank averages this quantity over queries \citep{pottskhattab2023ir}. It is useful when the first relevant result matters, but it does not assess later relevant results or distinguish degrees of relevance.
 
-The practical lesson: thresholds answer ``act or not?'' while ranking metrics answer ``how good is the short list we expose?'' Retrieval systems and recommender lists are both top-of-list problems in this sense, even if their downstream actions differ.
+If two of the first five passages are relevant, the first at rank two, and the collection has three relevant passages, precision@5 is $2/5$, recall@5 is $2/3$, and reciprocal rank is $1/2$. A ranking policy and its evaluation must specify the candidate collection, relevance rule, and list length.
 
-\subsection{Abstention and Review}
+\subsection{Abstention and Human Review}
 
-Some systems should not force every score into an automatic yes-or-no action. A model may abstain on borderline cases and route them to a human reviewer. This makes sense when the cost of a wrong automatic action is high, or when the model's probabilities are not trustworthy enough for full automation. Chapter~\ref{ch:models-systems} returns to this in detail, but the judgment lesson already belongs here: sometimes the best policy is ``predict, but do not act automatically.''
+Abstention adds a third action: defer the automatic decision. It is different from a higher positive threshold, which simply assigns more cases to the negative action. A review policy needs a measure of review effort, the reviewer's possible errors, and a capacity limit. A high score is not by itself proof that the model detects unfamiliar cases or knows when it is wrong.
 
-\subsection{ROC and Precision-Recall Curves}
-
-Thresholds are often explored across a whole range rather than at one point. A receiver operating characteristic (ROC) curve plots true positive rate against false positive rate as the threshold changes. True positive rate is the same as recall; false positive rate is the fraction of negatives incorrectly flagged positive. A precision-recall (PR) curve plots precision against recall across thresholds. The ROC view helps when false positive rate is central. The PR view is more informative when positive cases are rare and precision matters directly.
-
-When positives are rare, ROC can look deceptively healthy because the large negative class dominates the denominator. PR shows the burden of false positives directly through precision.
-
-At Chapter 2 level, the main lesson is simple: these curves summarize \emph{families} of operating points, not a single operating point. Confusion matrices and ROC curves are standard tools in introductory AI and machine-learning courses, so our job is to interpret them in context rather than re-derive them from scratch.
-
-Threshold curves summarize possible operating points, but they leave a harder question open: does the score itself deserve to be read as numerical confidence? That is where calibration enters the evaluation story rather than sitting as an optional extra.
-
-\subsection{Multiclass Evaluation}
-
-With more than two classes, the bookkeeping table grows but the judgment logic stays the same. A multiclass confusion matrix has one row and one column per class. Per-class precision and recall are still defined one class at a time, treating that class as ``positive'' and all other classes as ``not that class.'' The new question is how to combine the per-class summaries into one report.
-
-\begin{example}[Macro Versus Micro in Course Message Routing]
-Suppose a course-support router predicts one of three labels for each incoming message: \texttt{deadline}, \texttt{grading}, or \texttt{technical}. On a held-out set, the system produces the confusion matrix below, where rows are true labels and columns are predicted labels:
+Consider an idealized reviewer who resolves the label perfectly at constant cost $C_R>0$. With true event probability $p$, compare
 \[
-\begin{array}{c|ccc}
- & \text{deadline} & \text{grading} & \text{technical} \\
-\hline
-\text{deadline} & 8 & 1 & 1 \\
-\text{grading} & 2 & 24 & 4 \\
-\text{technical} & 1 & 3 & 6
-\end{array}
+C(1)=C_{FP}(1-p),\qquad C(0)=C_{FN}p,\qquad C(R)=C_R.
 \]
-For the \texttt{deadline} class, precision is \(8/(8+2+1)=8/11\approx 0.73\) because 11 messages were predicted as \texttt{deadline}, and recall is \(8/10=0.80\) because 10 deadline messages truly existed. For \texttt{grading}, precision is \(24/28\approx 0.86\) and recall is \(24/30=0.80\). For \texttt{technical}, precision is \(6/11\approx 0.55\) and recall is \(6/10=0.60\).
+Choose the least costly action. For $C_{FP}=C_{FN}=1$ and $C_R=0.2$, negative decisions are preferred below $0.2$, review between $0.2$ and $0.8$, and positive decisions above $0.8$; endpoint ties can be resolved by a stated rule. With asymmetric costs, the useful review region need not be centered at $0.5$.
 
-Macro-averaged recall gives each class equal weight:
-\[
-\text{macro recall}=\frac{0.80+0.80+0.60}{3}\approx 0.73.
-\]
-Micro-averaged recall pools all classes before computing one global quantity. In single-label multiclass classification, that pooled quantity is the same as overall accuracy:
-\[
-\text{micro recall}=\frac{8+24+6}{50}=0.76.
-\]
-The gap matters. Micro averaging makes the system look reasonably strong overall because the large \texttt{grading} class dominates the total. Macro averaging exposes the weaker \texttt{technical} performance instead of letting it disappear inside the larger class.
-\end{example}
+The perfect-review calculation describes a label that review can resolve. For a future deadline event, an adviser may instead improve the forecast or change the outcome. Real review is also imperfect, so its expected cost must include residual errors or intervention effects. Limited capacity couples the choices across cases. These qualifications matter when using the three-action calculation to interpret a workflow.
 
-Use macro-averaged summaries when rare classes matter operationally and each class should count equally in the report. Use micro-averaged summaries when the deployed workload should determine the weighting. When class imbalance is nontrivial, report both.
+Selective prediction studies performance when a model can abstain \citep{geifman2017}. Report both \emph{coverage}, the fraction receiving an automatic decision, and error on those cases. Lower coverage does not guarantee lower error unless the selection rule actually identifies harder cases. Good performance on automatic cases also says little about the deferred cases or the total burden on reviewers.
 
-\section{Confidence Quality: Calibration}
+Prediction intervals and sets provide another kind of output. An interval such as $[31,58]$ minutes concerns a future delivery time, whereas an interval for its conditional mean concerns uncertainty in that mean; they answer different questions. Conformal methods can provide finite-sample \emph{marginal} coverage under exchangeability and an appropriate calibration procedure \citep{shafer2008}: a nominal $90\%$ prediction set targets coverage across new cases and the procedure's calibration randomness. This is not generally a $90\%$ conditional guarantee for every particular input or group. Coverage must be considered with interval width or set size to judge usefulness.
 
-Thresholds and rankings are only part of the story. When the probabilities themselves drive downstream decisions, the next judgment question is whether those probabilities mean what they appear to mean. A model can discriminate well enough to order cases correctly and still be unreliable as a source of numerical confidence.
+\section{Evaluating the Chosen Procedure}
 
-Calibration matters when a model's score is meant to behave like confidence. A model is well calibrated if events predicted with probability $0.8$ occur about $80\%$ of the time. In this book's worldview, calibration is not optional decoration. Thresholds, abstention rules, review queues, and risk-based interventions all behave better when the predicted probabilities can be read honestly.
+Training data fits the predictor. Development data supports choices of model, fitting settings, calibration transformation, threshold, and review policy. A protected final test evaluates the frozen procedure. Looking at test precision after each threshold change lets test outcomes influence the policy; honest arithmetic does not make the selected final result an independent assessment.
 
-A standard scalar summary is the Brier score, the mean squared difference between predicted probability and observed outcome:
-\[
-\text{Brier} = \frac{1}{n}\sum_{i=1}^{n}(p_i - y_i)^2.
-\]
-Lower is better. A reliability diagram, which plots predicted probability against observed frequency across bins, still shows where the probability errors live.
+\par\noindent\begin{minipage}{\linewidth}
+Specify the relevant population, label rule, policy, baseline, and metrics before interpreting the result. For the student example, compare policies at the same review capacity and report the deadline-proxy counts separately from any evidence about support outcomes. Useful checks include probability quality, performance on relevant groups, the number reviewed, and how often a policy abstains. A single number cannot establish all these claims. Chapter~\ref{ch:evaluation-discipline} develops sampling, leakage, and generalization in detail.
+\end{minipage}\par
 
-Accuracy tells us whether labels were often right. Calibration tells us whether confidence itself can be trusted.
-
-This is not a theoretical worry. Modern neural networks can achieve strong classification accuracy while remaining systematically overconfident \citep{guo2017}. A model that looks accurate at one threshold can still be unsafe to use as a probability estimator for intervention, triage, or automated action.
-
-\begin{example}[One Calibration Bin By Hand]
-Suppose five cases all receive predicted probabilities between \(0.70\) and \(0.80\):
-\[
-0.71,\ 0.74,\ 0.75,\ 0.78,\ 0.79
-\]
-with observed labels \(1,1,0,1,0\). The mean predicted probability is \(0.754\), but the observed frequency is \(3/5=0.60\). In this bin the model is overconfident: it acts as if roughly \(75\%\) of such cases should be positive, but only \(60\%\) were. A reliability diagram repeats this calculation across bins.
-\end{example}
-
-\textbf{Expected Calibration Error.} The single-bin gap above generalizes. Partition the predicted probabilities into $M$ bins. For each bin $B_m$, let $\bar p_m$ be the mean predicted probability, $\bar y_m$ the observed positive frequency, and $n_m$ the number of cases. The \emph{Expected Calibration Error} is the size-weighted average of the per-bin gaps:
-\[
-\mathrm{ECE} = \sum_{m=1}^{M} \frac{n_m}{n}\,\bigl|\bar p_m - \bar y_m\bigr|.
-\]
-A perfectly calibrated model has $\mathrm{ECE}=0$. The number of bins $M$ is a design choice: too few hides local miscalibration, too many makes per-bin estimates noisy. ECE is a coarse but widely reported summary; the reliability diagram remains the more diagnostic view.
-
-\begin{figure}[t]
-\centering
-\definecolor{c2overBg}{RGB}{254,237,215}
-\definecolor{c2wellBg}{RGB}{220,233,251}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=4.0cm, y=4.0cm, font=\small]
-%% ── Light grid ───────────────────────────────────────────────────────────
-\foreach \v in {0.2,0.4,0.6,0.8,1.0}
-    \draw[gray!18, line width=0.4pt] (0,\v) -- (1.0,\v);
-\foreach \v in {0.2,0.4,0.6,0.8,1.0}
-    \draw[gray!18, line width=0.4pt] (\v,0) -- (\v,1.0);
-%% ── Axes ─────────────────────────────────────────────────────────────────
-\draw[->, gray!55, thick] (0,0) -- (1.07,0)
-    node[right] {predicted probability};
-\draw[->, gray!55, thick] (0,0) -- (0,1.07)
-    node[above] {observed frequency};
-%% ── Axis ticks ───────────────────────────────────────────────────────────
-\foreach \v in {0.2,0.4,0.6,0.8,1.0} {
-    \draw[gray!45] (\v,0.008) -- (\v,-0.008) node[below=2pt, font=\footnotesize] {\v};
-    \draw[gray!45] (0.008,\v) -- (-0.008,\v) node[left=2pt,  font=\footnotesize] {\v};
-}
-%% ── Perfect-calibration diagonal ─────────────────────────────────────────
-\draw[gray!45, dashed, line width=0.9pt] (0,0) -- (1,1);
-%% ── Bars: orange=overconfident (obs < pred), blue=well-calibrated ────────
-%% Bin 1: center=0.14, obs=0.08 < 0.14  → overconfident (orange)
-\filldraw[fill=c2overBg, draw=orange!50!black, line width=0.7pt]
-    (0.08,0) rectangle (0.20,0.08);
-%% Bin 2: center=0.34, obs=0.24 < 0.34  → overconfident (orange)
-\filldraw[fill=c2overBg, draw=orange!50!black, line width=0.7pt]
-    (0.28,0) rectangle (0.40,0.24);
-%% Bin 3: center=0.54, obs=0.56 > 0.54  → near-diagonal (blue)
-\filldraw[fill=c2wellBg, draw=blue!40, line width=0.7pt]
-    (0.48,0) rectangle (0.60,0.56);
-%% Bin 4: center=0.74, obs=0.62 < 0.74  → overconfident (orange)
-\filldraw[fill=c2overBg, draw=orange!50!black, line width=0.7pt]
-    (0.68,0) rectangle (0.80,0.62);
-%% Bin 5: center=0.94, obs=0.76 < 0.94  → overconfident (orange)
-\filldraw[fill=c2overBg, draw=orange!50!black, line width=0.7pt]
-    (0.88,0) rectangle (1.00,0.76);
-%% ── Observed-frequency dots ──────────────────────────────────────────────
-\filldraw[gray!65] (0.14,0.08) circle (1.8pt);
-\filldraw[gray!65] (0.34,0.24) circle (1.8pt);
-\filldraw[gray!65] (0.54,0.56) circle (1.8pt);
-\filldraw[gray!65] (0.74,0.62) circle (1.8pt);
-\filldraw[gray!65] (0.94,0.76) circle (1.8pt);
-%% ── Legend ───────────────────────────────────────────────────────────────
-\node[align=center, font=\footnotesize, gray!60!black]
-    at (0.30,0.94) {perfect\\calibration};
-\end{tikzpicture}%
-}
-\caption{A reliability diagram compares predicted probability with observed frequency. The dashed diagonal is ideal. Bars below the line indicate overconfident predictions.}
-\label{fig:reliability-diagram}
-\end{figure}
-
-\begin{example}[Weather Forecasting and Calibration]
-The NOAA National Severe Storms Laboratory explains calibration the same way: a forecaster who predicts a 10\% chance of rain should see rain on about 10\% of those occasions \citep{noaa_reliability}. The point is broader than weather. If predicted probabilities do not match observed frequencies, the score is misleading even when some thresholded decision rule still looks acceptable.
-\end{example}
-
-\begin{example}[Ranking Versus Calibration]
-A model can rank cases well and still be poorly calibrated. Suppose Model A orders the riskiest students above the least risky perfectly, but when it says 0.9, only about 60\% of such cases are actually positive. Model B might swap one borderline pair (so it ranks slightly worse) yet match its 0.7 and 0.3 scores more closely to observed frequencies. Ranking quality and calibration quality are related, but they are not the same claim.
-\end{example}
-
-\subsection{Base-Rate Shift and Why Precision Moves}
-
-Students often treat precision as a fixed property of a model. It is not. Precision depends on the model's ranking quality \emph{and} on how common the positive cases are in the population where the model runs.
-
-Suppose a student-support model flags $20$ students and, under current semester conditions, $10$ of those flags are truly students who need intervention. Then
-\[
-\text{Precision} = \frac{10}{20} = 0.50.
-\]
-Now deploy the model in a calmer semester where truly at-risk students are less common but the score behavior is otherwise similar. The model still flags $20$ students, but only $5$ are truly positive:
-\[
-\text{Precision} = \frac{5}{20} = 0.25.
-\]
-Nothing in this toy example required the model to rank worse. The environment changed because the base rate, also called prevalence, changed.
-
-Let $\pi=P(y=1)$ be the base rate, $r=P(\hat y=1\mid y=1)$ the true positive rate, and $f=P(\hat y=1\mid y=0)$ the false positive rate. Among $N$ cases, the expected true positives are $N\pi r$ and the expected false positives are $N(1-\pi)f$, so
-\[
-\text{Precision}
-=\frac{N\pi r}{N\pi r+N(1-\pi)f}
-=\frac{\pi r}{\pi r+(1-\pi)f}.
-\]
-The key lens: even with $r$ and $f$ fixed, precision drops when prevalence $\pi$ drops.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{3.05cm}p{1.78cm}p{1.78cm}p{3.05cm}}
-\toprule
-Deployment setting & Students flagged & True positives among flagged & Precision \\
-\midrule
-Higher-prevalence semester & $20$ & $10$ & $10/20 = 0.50$ \\
-Lower-prevalence semester & $20$ & $5$ & $5/20 = 0.25$ \\
-\bottomrule
-\end{tabular}
-\caption{Precision moves when prevalence moves. A fixed threshold can therefore create very different review burden quality under different base rates.}
-\label{tab:base-rate-precision}
-\end{table}
-
-Threshold policies therefore cannot be chosen once and forgotten. If the positive class becomes rarer, the same threshold may produce the same queue size but a much less useful queue. Staff will experience the shift as lower review value even if offline ranking metrics look stable.
-
-The deployment lesson follows directly. Accuracy, recall, and ranking quality do not tell the whole operational story unless the team also asks what prevalence was assumed and whether that prevalence is likely to move.
-
-When precision changes unexpectedly after deployment, do not assume the model weights changed or that the system ``forgot'' the task. First ask whether the base rate changed: new semester, new market, new device mix, new patient population, or a different upstream triage policy.
-
-The companion code for this chapter includes a threshold-scan script that prints same-accuracy-but-different-log-loss examples, threshold-dependent metrics, and summaries that group predictions into probability bins. Calibration is easier to grasp when probabilities and outcomes sit side by side.
-
-\subsection{Uncertainty and Abstention}
-
-Calibration becomes operational when a system must decide not only \emph{what} to predict, but also \emph{whether} to act automatically. Scores of $0.51$ and $0.99$ may fall on the same side of a threshold, but they should not create the same confidence in the decision. If the model's probabilities are poorly calibrated, a review policy built on those scores will be misleading too.
-
-Three ideas need to stay separate. \emph{Discrimination} asks whether higher-risk cases tend to receive higher scores than lower-risk cases. \emph{Calibration} asks whether a stated probability behaves like an honest probability. \emph{Abstention} asks whether the system should defer some cases rather than force an automatic decision. A model can rank cases well enough for prioritization yet remain too overconfident for full automation.
-
-This distinction matters in practice. A hospital triage model can rank patients by risk usefully even if its raw probabilities need post-hoc calibration. A student-support model can correctly flag the riskiest cases yet still need a human review queue for cases near the intervention boundary. Selective prediction formalizes the idea: the system is allowed to say ``I am not confident enough to decide automatically,'' which improves reliability when abstention is cheaper than a wrong action \citep{geifman2017}.
-
-The judgment lesson is direct. Do not ask only whether the model is accurate enough. Ask which scores are trustworthy enough for automatic action, which should trigger review, and whether the uncertainty signal tracks real risk.
-
-\begin{advancednote}
-A modern way to express uncertainty is to output a prediction set or interval rather than a single label. Conformal prediction gives a general recipe for building such sets with finite-sample coverage guarantees under an exchangeability assumption \citep{shafer2008}. The lesson for this book is conceptual rather than technical: in some applications, the honest prediction is not one label but a small set of plausible labels, or a decision to abstain until more evidence arrives.
-\end{advancednote}
-
-\subsection*{A Confidence Story That Runs Through the Book}
-
-Calibration, abstention, and prediction intervals are three checkpoints on a single thread that continues past this chapter. Each one asks a slightly different version of the same operational question: \emph{how confident should a downstream decision be in this particular score?} Calibration asks whether a stated probability behaves like an honest probability on average. Abstention asks whether the system should act automatically on this case at all. Prediction intervals and prediction sets ask whether the model can express its answer as a \emph{range of plausible outcomes} rather than a single number.
-
-The distinction between a point prediction and an interval matters pedagogically. A regression model reporting ``expected delivery time is $42$ minutes'' gives operators no way to tell a confident estimate from a rough guess. The same model reporting ``expected delivery time is $42$ minutes, with a $90\%$ interval from $31$ to $58$ minutes'' invites a different class of decisions: whether to promise a time window, whether to ask a human dispatcher for review, whether to queue a fallback courier. For classification, the analogous move is a prediction set---``the label is likely one of \{A, B\}, with about $90\%$ coverage''---rather than a single top-1 guess.
-
-A rule of thumb for uncertainty-aware decision policies: decide in advance what the team will \emph{do differently} at low versus high confidence. If the downstream action is identical at $0.55$ and $0.95$, calibration work and interval work cannot improve outcomes; invest elsewhere. If the actions differ---automatic approval versus human review, automatic dispatch versus manual scheduling---confidence quality is on the critical path.
-
-The same thread runs through later chapters. Chapter~\ref{ch:probabilistic-models} shows how Bayesian linear regression and Gaussian processes produce predictive distributions rather than point estimates, so a regression answer naturally carries an interval. Chapter~\ref{ch:reliability} returns to uncertainty under the banner of reliability engineering (Section~\ref{sec:uq-reliability}): how to combine calibration, selective prediction, and conformal intervals into a deployment policy that is safe to trust. The chapter-level takeaway here is narrower: when a point prediction is reported without any confidence signal, the decision policy that consumes it is implicitly assuming the number is trustworthy everywhere. Often it is not, and the operational cost of that assumption stays invisible until a case near the boundary goes wrong.
-
-\section{Forwarding: Split Discipline Belongs With Generalization}
-
-The protocol details of train/validation/test discipline---how to set up cross-validation, when to use stratified splits, what counts as data leakage in the split itself---belong with the broader generalization story. Chapter~\ref{ch:evaluation-discipline} develops the full evaluation protocol; this chapter has named the metric, the loss, and the decision rule that the protocol will measure.
-
-\textbf{Selection protocol.} Before reporting a score, write down which data role chooses the model family, tuned settings, threshold, ranking cutoff, and calibration method. If the test set helped choose any of them, the reported score is no longer an external check. The full workflow---protected splits, cross-validation, hyperparameter search without test leakage---is developed in Chapter~\ref{ch:evaluation-discipline}.
-
-\section{When a Good Metric Still Hides the Wrong Behavior}
-
-Some evaluation failures are not mathematical errors but mismatches between the reported metric and the decision that actually matters. The quickest way to see the pattern is to walk through a few recurring cases where a respectable number conceals weak operational behavior.
-
-\paragraph{Case one: high accuracy under class imbalance.} A student-support model predicts at-risk status on a cohort where only $5\%$ of students are truly at risk. A model that predicts ``not at risk'' for every student achieves $95\%$ accuracy. That looks strong at first glance, but the model has never flagged a student in need. Accuracy rewards agreement with the label distribution. When the distribution is heavily skewed, agreement with the majority is cheap. Reporting accuracy alone on imbalanced problems invites exactly this confusion. The right questions are: how many true positive cases did the system surface, and at what review cost?
-
-\begin{failurebox}
-High accuracy on an imbalanced dataset is often a sign that the model has learned to ignore the minority class entirely. Always report per-class recall alongside accuracy when prevalence is low.
-\end{failurebox}
-
-\paragraph{Case two: good ROC-AUC with poor precision at the deployment budget.} Suppose a classifier achieves ROC-AUC of $0.88$. That suggests a well-discriminating model. Now suppose the operations team can review at most $30$ flagged cases per week. The score cutoff needed to capture $80\%$ of true positives would flag $120$ cases per week, far above capacity. Keeping only the top $30$ scores instead drops recall sharply and misses many truly important cases. ROC-AUC summarizes performance across all possible thresholds; it says nothing about which threshold is usable under capacity constraints. A good ROC curve does not guarantee operational usefulness at any specific threshold.
-
-\begin{failurebox}
-\textbf{The ROC-AUC trap.} ROC-AUC is a popularity score, not an operational guarantee. It averages performance across every possible threshold and weights all of them equally, including thresholds the deployment will never use. Two models can have identical AUC and behave completely differently at the threshold the team actually picks. When prevalence is low, the precision--recall curve carries more information than the ROC curve --- precision can be poor at every operationally feasible recall while AUC still looks impressive, because most of the AUC's area is contributed by the easy-to-classify majority of negatives. ``Our AUC went up'' should never be the report sentence on its own. Pair it with precision, recall, and queue size at the threshold the workflow can actually serve.
-\end{failurebox}
-
-When reporting ROC-AUC, also report precision, recall, and queue size at the threshold the team would actually use. The gap between ``aggregate discriminative quality'' and ``operational precision at the deployment budget'' is where many model evaluations mislead.
-
-\paragraph{Case three: low training loss with bad calibration at the action threshold.} A model achieves very low cross-entropy loss on the training set and moderate cross-entropy on the validation set. The loss curve looks like textbook training success. But the reliability diagram shows that cases scored between $0.6$ and $0.8$ have an observed positive rate near $0.35$, not $0.7$. The model confidently overestimates risk in exactly the range where most of its actionable flags fall. Downstream, the intervention team treats a $0.65$-scored case with the same urgency as a $0.95$-scored case, even though the observed risk is very different. Cross-entropy can be low while probability estimates remain poorly calibrated in the decision-relevant range. Low loss is not the same as useful probabilities.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{2.77cm}p{2.94cm}p{4.24cm}}
-\toprule
-Metric reported & What it hides & What to check instead \\
-\midrule
-Accuracy & Per-class recall on minority class & Recall, precision, and F1 broken out by class \\
-ROC-AUC & Precision at the deployment threshold & Precision-recall curve at the review-budget cutoff \\
-Training loss & Probability calibration in the action range & Reliability diagram binned around the operating threshold \\
-\bottomrule
-\end{tabular}
-\caption{A metric gallery of misleading but common reporting choices. Each metric is genuine but incomplete when used alone in high-stakes or imbalanced settings.}
-\label{tab:metric-failure-gallery}
-\end{table}
-
-The shared lesson: evaluation claims are always implicitly relative to a context---the class distribution, the review capacity, the decision-relevant probability range. A metric that ignores context can look good while concealing a serious operational problem. The right habit is to ask not only ``what is the number?'' but also ``what could this number be hiding?''
-
-\section{Chapter Artifact: A Metric and Action Worksheet}
-
-By the end of Chapter 2, the reader should be able to write down not only which number to report but how that number will become an action and which held-out role is allowed to choose the policy details. The goal is to make metric choice, threshold policy, calibration expectations, and selection discipline explicit before the workflow quietly hardens around a vague score. This worksheet is the Chapter 2 counterpart to Chapter 1's framing memo: Chapter 1 states the problem; Chapter 2 states how success will be judged and operationalized.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{3.2cm}p{7.03cm}}
-\toprule
-Worksheet field & What must be written down \\
-\midrule
-Decision context & What real action or review workflow the prediction supports \\
-Primary metric & The main quantity that captures success for that decision \\
-Supporting metrics & Additional quantities needed to expose tradeoffs such as imbalance or calibration \\
-Action type & Thresholded decision, top-$k$ ranking, probability forecast, or abstain-to-review workflow \\
-Threshold or ranking policy & Exactly how scores become action under real cost or capacity constraints \\
-Selection protocol & Which held-out role chooses tuned settings, threshold, ranking cutoff, or calibration method, and when the test set is touched \\
-Calibration need & Whether the score must behave like an honest probability downstream \\
-Abstention or review rule & Which cases should be deferred rather than forced into automatic action \\
-\bottomrule
-\end{tabular}
-\caption{A metric-and-action worksheet forces the reader to specify not only what number matters, but what downstream policy the number is supposed to support.}
-\label{tab:metric-action-worksheet}
-\end{table}
-
-\textbf{Metric and action worksheet.} Before reporting a model output, write down the decision context, primary metric, supporting metrics, threshold or ranking policy, selection protocol, calibration need, and abstention rule. If the action rule or the held-out selection rule is still fuzzy, the score is not yet ready to defend.
-
-Fill the worksheet progressively. After the metric section, fill in the primary and supporting metrics. After the threshold and ranking sections, fill in the action policy. After calibration, fill in the confidence requirement. The final table should not be the first time the reader thinks about these fields.
-
-\section{Looking Ahead}
-
-This chapter made predictive judgment explicit: metrics, losses, thresholds, rankings, calibration, and abstention. With the metric, action rule, and confidence interpretation in place, the remaining question is whether the evidence for those choices can survive protected evaluation on new data.
-
-\section*{Chapter Summary}
-
-Chapter 2 defines what good predictive behavior means once a task has been framed. It separates the loss used to teach a model from the metrics used to justify it, then shows how thresholds, top-of-list policies, and abstention rules turn scores into operational decisions under real cost and capacity constraints. It argues that calibration matters whenever a score is meant to behave like a probability rather than only a ranking signal. The chapter's endpoint is a metric-and-action worksheet that makes the decision context, primary and supporting metrics, action rule, and confidence requirements explicit before a result is reported.
-
+\begin{samepage}
 \begin{studyquestions}
-\item Why is ``what would count as a good prediction here?'' a better opening question than ``what loss should we minimize?'' 
-\item Why might a model be trained with cross-entropy but reported using precision and recall?
-\item Give one setting in which ranking quality matters more than a fixed threshold.
-\item Why might precision@k or recall@k be more informative than accuracy for search or recommendation?
-\item Why is calibration different from accuracy?
-\item Why is abstention different from simply choosing a stricter threshold?
-\item Why is repeated test-set peeking a problem even when every reported score was computed correctly?
+\item What does a confusion matrix measure, and which consequences does it leave unspecified?
+\item How can a fitting loss also serve as an evaluation metric?
+\item Why do squared and absolute loss prefer different predictions?
+\item What does strict propriety guarantee, and what does it leave unresolved about a trained model?
+\item How can a calibrated forecast fail to distinguish useful differences between cases?
+\item Under which assumptions is a probability threshold cost-minimizing?
+\item Why do risk ranking, review selection, and intervention benefit require different evidence?
 \end{studyquestions}
+\end{samepage}
 
-\begin{exercises}
-\item \exercisetag{Concept}{Core}For the course-support example, explain why a model with lower training loss may still be less useful than a model with better top-five ranking quality.
-\item \exercisetag{Concept}{Core}Draw a tiny four-example binary classification problem in which two models have the same accuracy but different log loss. Explain what the probability assignments say about the models.
-\item \exercisetag{Concept}{Core}Give a real-world example where mean absolute error would be more appropriate than mean squared error, and justify your answer.
-\item \exercisetag{Proof}{Advanced}Using the theorem on best constant predictors, explain why squared error prefers the mean while absolute error prefers a median. Then give one example where that difference would matter in practice.
-\item \exercisetag{Calculation}{Intermediate}Using Table~\ref{tab:threshold-example}, compute the confusion matrix at threshold $0.3$ and verify the precision, recall, and F1 values by hand.
-\item \exercisetag{Implementation}{Intermediate}Reproduce the threshold sweep from the chapter in plain Python without external libraries. For each threshold, print the confusion counts, accuracy, precision, recall, and F1 score.
-\item \exercisetag{Proof}{Advanced}Prove that log loss is strictly proper for a Bernoulli event. State the expected pointwise loss as a function of the forecast $q$ under true probability $p^\star \in (0, 1)$. Take the first derivative and show that the only stationary point in $(0, 1)$ is $q = p^\star$. Take the second derivative and show it is strictly positive everywhere in $(0, 1)$. Conclude that $q = p^\star$ is the unique minimizer. (Hint: this is the theorem in the chapter; the exercise is to write the algebra out yourself and identify exactly where strict convexity gets used.)
-\item \exercisetag{Implementation}{Intermediate}Compute ECE on a held-out probability vector. Given true labels $y_i \in \{0, 1\}$ and predicted probabilities $\hat p_i \in [0, 1]$, write \verb|ece(y, p, n_bins=10)| that partitions the predictions into $n\_bins$ equal-width bins, computes per-bin mean prediction $\bar p_b$ and per-bin empirical positive rate $\bar y_b$, and returns $\mathrm{ECE} = \sum_b (n_b / N)\,|\bar p_b - \bar y_b|$ where $n_b$ is the count in bin $b$. Test on synthetic data: 1000 examples where $y \sim \mathrm{Bernoulli}(p)$ and $p = \sigma(z)$ with $z \sim \mathcal{N}(0, 1)$ first when $\hat p = p$ (well-calibrated; expect ECE near $0$), then when $\hat p = \sigma(2z)$ (overconfident; expect noticeably larger ECE).
-\item \exercisetag{Calculation}{Intermediate}A ranked list of six candidate passages has relevance labels $[0,1,1,0,1,0]$ from rank $1$ to rank $6$, and there are four relevant passages in the collection overall. Compute precision@3, recall@3, and reciprocal rank.
-\item \exercisetag{Diagnosis}{Intermediate}Explain why the weather-forecasting example is a calibration question rather than a threshold question.
-\item \exercisetag{Concept}{Intermediate}A team compares three regularization strengths and two thresholds for the same classifier. Describe a protected workflow for choosing among the six settings, and explain where cross-validation could help if the dataset is small.
-\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:metric-action-worksheet} to sketch a one-page metric-and-action worksheet for either spam filtering, course support, or another application of your choice. If you are carrying forward a framing memo from Chapter 1, use the same case and state which parts of the original memo stay fixed while the decision rule becomes more explicit.
+\begin{exercises}[The tags indicate the kind of work and difficulty.]
+\item \exercisetag{Calculation}{Core}For $TP=80$, $FP=15$, $FN=20$, and $TN=85$, calculate accuracy, precision, recall, FPR, and F1. Explain each denominator.
+\item \exercisetag{Calculation}{Core}For targets $(1,2,3,20)$, calculate MSE and MAE for constant predictions $2.5$ and $6.5$. Relate the results to the best-constant theorem, including the nonuniqueness of the absolute-loss optimum.
+\item \exercisetag{Calculation}{Intermediate}Verify both mean log losses in Table~\ref{tab:log-loss-comparison}. Reverse all four labels and recalculate. Explain why confidence can help or hurt and why neither tiny sample establishes calibration.
+\item \exercisetag{Proof}{Intermediate}Expand $E[(q-Y)^2]$ for a Bernoulli event with probability $p^\star$. Identify the forecast-dependent term and show that squared probability error is strictly proper.
+\item \exercisetag{Calculation}{Intermediate}At true probability $p=0.20$, use weights $w_1=4$ and $w_0=1$ in weighted log loss. Find its preferred forecast. Explain why this value should not automatically be reported as the original event probability.
+\item \exercisetag{Calculation}{Intermediate}Using Table~\ref{tab:threshold-example}, verify the confusion counts and F1 values at thresholds $0.3$, $0.5$, and $0.7$. Compare total cost for $C_{FP}=2$ and $C_{FN}=3$. Find another threshold with lower observed cost. Explain why a policy chosen using these labels needs separate evaluation.
+\item \exercisetag{Calculation}{Intermediate}For forecasts $(0.1,0.2,0.7,0.8)$ and labels $(0,0,1,0)$, use bins $[0,0.5)$ and $[0.5,1]$. Calculate bin means, observed positive frequencies, ECE, and Brier score. Explain the limits of four cases for assessing calibration.
+\item \exercisetag{Calculation}{Intermediate}A population has prevalence $0.02$ and a policy has TPR $0.90$ and FPR $0.04$. Calculate population precision and expected review count among $5{,}000$ cases. Repeat at prevalence $0.20$ while keeping the two rates fixed.
+\item \exercisetag{Calculation}{Intermediate}From the multiclass matrix in this chapter, compute each class's precision and macro precision. Verify that pooled micro precision equals accuracy, and state the conditions for that identity.
+\item \exercisetag{Calculation}{Core}A six-item ranked list has relevance labels $(0,1,1,0,1,0)$, and the collection contains four relevant items. Compute precision@3, recall@3, and reciprocal rank. Explain which would change if ranks one and two were swapped.
+\item \exercisetag{Calculation}{Intermediate}An ideal perfect reviewer costs $0.2$ per case, and either automatic classification error costs one. For probabilities $(0.10,0.35,0.70,0.95)$, select the least costly action. Calculate automatic coverage and name two assumptions that a real review system would need to revisit.
+\item \exercisetag{Design}{Intermediate}For Table~\ref{tab:student-threshold-example}, specify a five-review policy using only scores and week-2 information. Include a tie rule, a same-capacity baseline, and a protected evaluation plan. Separate evidence for deadline prediction from evidence that outreach changes the outcome.
 \end{exercises}
 
-\begin{challengeexercises}
-\item \exercisetag{Calculation}{Advanced}Construct a tiny binary classification example with six data points for which two different thresholds produce the same accuracy but very different precision and recall. Show the confusion matrix for both thresholds.
-\item \exercisetag{Concept}{Advanced}Suppose a hospital has resources to review only the highest-risk 10\% of cases each day. Explain why ranking quality and calibration may matter more than raw accuracy in that setting.
-\item \exercisetag{Design}{Advanced}Extend the course-support example in Table~\ref{tab:student-threshold-example}. Propose a rule for handling the six students above threshold $0.5$ when staff can contact only five of them, and justify the rule using the chapter's evaluation vocabulary.
-\item \exercisetag{Concept}{Advanced}A model is well ranked overall but slightly miscalibrated near the review boundary. Explain when that is an acceptable limitation and when it becomes a deployment problem.
-\item \exercisetag{Concept}{Advanced}A team tunes thresholds by checking the test set after each change and keeps the best final operating point. Explain precisely why the final precision and recall are no longer external evidence, even if the confusion counts were computed honestly.
+\par\noindent\begin{minipage}{\linewidth}
+\begin{challengeexercises}[State your assumptions and justify the evidence and choices in your answer.]
+\item \exercisetag{Proof}{Advanced}For a perfect reviewer costing $C_R>0$ and automatic error costs $C_{FP},C_{FN}>0$, derive the probability region in which review is strictly cheaper than either automatic action. Find the condition on the three costs for this region to be nonempty.
+\item \exercisetag{Design}{Advanced}Two equally common groups have event probabilities $0.1$ and $0.9$. Compare a constant forecast $0.5$ with group-specific forecasts under calibration, expected Brier score, and equal-cost classification. Explain what information the second policy uses that the first discards.
+\item \exercisetag{Proof}{Advanced}For $N$ cases with known conditional event probabilities and equal review effort, prove that selecting the $k$ largest probabilities maximizes the expected selected-positive count. Explain why independence is unnecessary and why this theorem does not establish maximal intervention benefit.
+\item \exercisetag{Diagnosis}{Advanced}A team changes a threshold after inspecting each final-test result and reports its best precision. Explain how selection affects the claim, and design a workflow that keeps final-test outcomes outside policy development.
 \end{challengeexercises}
+\end{minipage}\par
+
+\clearpage
+{\pagestyle{empty}\cleardoublepage}
+\endgroup

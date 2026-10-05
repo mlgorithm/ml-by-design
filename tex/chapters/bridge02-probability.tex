@@ -1,33 +1,19 @@
 \chapter*{Mathematical Bridge II: Probability, Risk, and Learning Signals}
 \addcontentsline{toc}{chapter}{Mathematical Bridge II: Probability, Risk, and Learning Signals}
 
-A model outputs the number $0.83$. Is that a probability? A score? A confidence? Combining it with another such number---do you multiply, sum, or take the log? Each training chapter that follows assumes a settled vocabulary for reading numbers like that one: score, probability, decision rule, pointwise loss, dataset-level objective. This bridge supplies it.
+Probability describes uncertainty about outcomes; a loss assigns a consequence to a prediction. Their connection is an expected risk,
+\[
+R(f)=E[\ell(Y,f(X))].
+\]
+The distribution of $(X,Y)$ determines which cases contribute to this average. Conditional probability instead asks about an outcome after an observation is given. Both notions matter when a prediction supports a decision.
 
-By the end, the reader should be able to distinguish a score, a probability, a decision rule, a pointwise loss, and a dataset-level training objective; read conditional probability and expectation in plain language before touching formulas; explain why logarithms, exponentials, sigmoid-style transformations, and cross-entropy appear naturally in ML; treat empirical risk as the average training signal over a dataset rather than an abstract formula to memorize; and read gradients and the chain rule as credit-assignment tools for reducing training loss. The functional view of predictors and risks, along with the generative/discriminative contrast and priors and MAP as preview vocabulary, is second-pass material. It is useful for later chapters but not required before continuing.
+Learning uses an observed sample to approximate risk. The empirical average is not the population expectation, and selecting a predictor using that average introduces another source of uncertainty. Derivatives then describe how an objective changes as the parameters move; they do not establish whether the fitted predictor generalizes.
+
+This bridge develops probability, expectation, logarithms, loss, and gradients through small calculations. Later sections connect likelihood to generative models, latent variables, priors, and posterior inference. Follow the random quantity, the prediction, and the quantity being averaged at each step.
 
 \begin{prereqbridge}
-Use this chapter as just-in-time review. Read it now if probability or training-signal notation feels thin, or return when later chapters start leaning on loss, calibration, and gradients. The chapter assumes comfort with fractions, ratios, and the idea of an average. Familiarity with logarithms helps; we introduce them with worked examples. Calculus (derivatives) appears only in a few short derivations, especially the gradient section, and we explain it from scratch when it appears. Students who have already taken probability should still read the chapter. The AI-specific vocabulary---loss, empirical risk, gradient as credit signal---differs from the standard probability course framing.
+The chapter assumes algebra and introduces the probability and calculus notation it needs. Read it before the foundational chapters if this notation is unfamiliar, or consult individual sections when an equation in a later chapter needs explanation.
 \end{prereqbridge}
-
-\begin{practicalnote}
-\textbf{Core path.} On a first pass, focus on scores, probabilities, decisions, losses, empirical risk, and gradients as training signals. The functional viewpoint, the generative/discriminative contrast, priors, and MAP are orientation material---skim them until later chapters need them.
-\end{practicalnote}
-
-Most students meet probability and optimization in fragments. One course teaches conditional probability. Another introduces derivatives. Then a machine-learning lecture writes down log loss, empirical risk, and gradient descent as if the connection were obvious. This chapter slows that chain down.
-
-The goal is not to flood the reader with formalism. It is to make later training objectives readable. When a later chapter writes down a loss, a score, a calibration curve, or a gradient update, the student should be able to answer three questions immediately:
-
-\begin{itemize}[leftmargin=*]
-\item What uncertain quantity is being modeled?
-\item What mistake is being penalized?
-\item What signal tells the parameters how to move?
-\end{itemize}
-
-Separate five objects that students collapse together: the model score, the probability interpretation of that score, the decision rule that acts on it, the pointwise loss on one example, and the dataset-level objective minimized during training.
-
-\textbf{Loss as learning signal.} A loss is not the final judgment of the system. It is the message training uses to say ``this prediction behaved well'' or ``this prediction behaved badly.'' Interpret the message before optimizing it.
-
-Keep the chapter artifact in view from the start. As later sections separate score, probability, decision rule, pointwise loss, and dataset objective, the goal is to fill a \emph{learning-signal card}---not to memorize disconnected formulas.
 
 \section*{Opening Question: What Does A Score Like 0.8 Mean?}
 
@@ -95,7 +81,7 @@ The subscript \(Y \sim p\) reads ``\(Y\) drawn from the distribution \(p\).'' It
 \begin{itemize}[leftmargin=*]
 \item \emph{Loss over training data.} $\mathbb{E}_{(x,y) \sim \mathcal{D}}[\ell(y, f_\theta(x))]$: average pointwise loss when $(x,y)$ is drawn from the data distribution $\mathcal{D}$. The empirical version replaces the expectation by the sample average.
 \item \emph{Reward under a policy.} $\mathbb{E}_{\tau \sim \pi}[R(\tau)]$: average return when trajectories $\tau$ are generated by following a policy $\pi$ (Chapter~\ref{ch:reinforcementlearning}).
-\item \emph{Marginal likelihood.} $\mathbb{E}_{z \sim q}[\log p(x, z)]$: average log joint when a latent $z$ is drawn from a variational distribution $q$ (Chapter~\ref{ch:probabilistic-models}, Chapter~\ref{ch:generative-representations}).
+\item \emph{Expected log joint.} $\mathbb{E}_{z \sim q}[\log p(x, z)]$: average log joint when a latent $z$ is drawn from a distribution $q$. This term contributes to a variational lower bound; it is not the marginal log-likelihood $\log p(x)$ (Chapters~\ref{ch:probabilistic-models} and~\ref{ch:generative-representations}).
 \end{itemize}
 A change in subscript usually means a change in which world the average is taken under. Two expectations with the same integrand but different subscripts are not the same number, and disagreements between them are exactly what importance sampling, off-policy evaluation, and the ELBO derivation are about.
 
@@ -103,7 +89,7 @@ A change in subscript usually means a change in which world the average is taken
 
 Some functions are bowl-shaped (convex), others are dome-shaped (concave). The most useful single fact about expectations and concave functions appears repeatedly when we manipulate log-likelihoods.
 
-\textbf{Jensen's inequality (concave version).} For any concave function \(\varphi\) and any random variable \(X\),
+\textbf{Jensen's inequality (concave version).} For a concave function \(\varphi\) and a random variable \(X\) in its domain, with finite displayed expectations,
 \[
 \varphi\bigl(\mathbb{E}[X]\bigr) \;\ge\; \mathbb{E}\bigl[\varphi(X)\bigr].
 \]
@@ -111,9 +97,13 @@ For a convex function the inequality reverses. The function we use most is \(\va
 \[
 \log\bigl(\mathbb{E}[X]\bigr) \;\ge\; \mathbb{E}[\log X]
 \]
-whenever \(X > 0\). Geometric reading: the chord lies below the curve for concave functions, so averaging inputs and then applying the function beats applying the function and then averaging.
+whenever \(X > 0\) and the displayed expectations are finite. Geometric reading: the chord lies below the curve for concave functions, so averaging inputs and then applying the function beats applying the function and then averaging.
 
-\textbf{Where Jensen returns.} Chapter~\ref{ch:probabilistic-models} uses Jensen to show that the EM algorithm cannot make the log-likelihood worse. Chapter~\ref{ch:generative-representations} uses the same inequality to derive the evidence lower bound (ELBO) that VAE training maximizes: the bound is exactly the slack in Jensen's inequality applied to \(\log p(x) = \log \mathbb{E}_{z \sim q}[p(x \mid z) p(z) / q(z)]\). When a later chapter writes ``by Jensen,'' read the line above and it will not feel like sleight of hand.
+\textbf{Where Jensen returns.} Chapter~\ref{ch:probabilistic-models} uses a lower bound to show why exact EM does not decrease log-likelihood. Chapter~\ref{ch:generative-representations} develops the evidence lower bound (ELBO) for variational autoencoders:
+\[
+\mathcal F(q)=\mathbb E_q[\log p(x,z)-\log q(z)]\leq\log p(x).
+\]
+When $p(x)>0$ and the terms are well defined, the gap is $\mathrm{KL}(q(z)\|p(z\mid x))$. The bound equals the marginal log-likelihood when $q$ is the exact posterior; the bound and the gap are different quantities.
 
 \subsection*{Multivariate Gaussians, Without The Heavy Notation}
 
@@ -127,7 +117,7 @@ Three readings make the formula tractable:
 \begin{itemize}[leftmargin=*]
 \item \emph{Mean} \(\mu\) is the centre of the cloud.
 \item \emph{Covariance} \(\Sigma\) is a matrix of variances and covariances: diagonal entries give the spread along each coordinate; off-diagonal entries say which coordinates move together.
-\item \emph{Mahalanobis distance} \((x-\mu)^\top \Sigma^{-1}(x-\mu)\) generalizes ``how many standard deviations away'' to a coordinate system that respects covariance. The exponent is just \(-\tfrac{1}{2}\) times that distance.
+\item \emph{Squared Mahalanobis distance} \((x-\mu)^\top \Sigma^{-1}(x-\mu)\) measures squared standardized deviation while accounting for covariance. The exponent is \(-\tfrac{1}{2}\) times this quantity.
 \end{itemize}
 When \(\Sigma\) is diagonal, the density factorizes into a product of univariate Gaussians on each coordinate. The level sets of the density are ellipsoids; the shape and orientation are exactly the eigenstructure of \(\Sigma\).
 
@@ -246,7 +236,7 @@ The log makes the penalty grow sharply when the model is confidently wrong. A mo
 The right question is never ``which loss is standard?'' The better question is:
 
 \begin{quote}
-What kind of wrong behavior does this loss care about, and what kind does it still permit?
+What kind of wrong behavior does this loss penalize, and what kind does it still permit?
 \end{quote}
 
 Squared error reacts strongly to outliers. Absolute error is less sensitive. Log loss cares about confidence. A model that says \(0.99\) and is wrong is punished much more harshly than a model that says \(0.60\) and is wrong.
@@ -320,6 +310,8 @@ The operational reading is more important than the notation:
 
 This is the bridge from one mistake to a trainable objective.
 
+Lower training loss is evidence about the fitted objective on observed examples. It need not improve performance on future observations or the eventual decision; those require their own population and consequence model.
+
 \section*{Population Risk Versus Empirical Risk}
 
 Training computes one quantity. The quantity we actually care about is different.
@@ -353,7 +345,7 @@ A model is not only a parameter vector. It is also a function. Many students nev
 \[
 R[f_\lambda] \;\le\; (1-\lambda)\, R[f_0] + \lambda\, R[f_1].
 \]
-This is the formal reason model averaging and ensembling never hurt expected risk: averaging predictors on a convex loss can only reduce risk, never increase it. The same fact powers Bayesian model averaging and any time you find yourself blending two reasonable models on a calibration-aware loss. The functional view earns its name here---convexity is a property of the rule that scores whole predictors, not of any single parameter coordinate.
+This inequality compares the averaged predictor with the weighted average of the members' risks. It does not say that the ensemble beats its best member. For example, under squared loss at a target of zero, averaging predictions $0$ and $2$ gives loss $1$: below the average member loss $2$, but above the best member loss $0$. The argument requires convexity in the prediction being averaged; it does not automatically apply to thresholded classification accuracy.
 
 \subsection*{A Predictor Is A Function}
 
@@ -435,29 +427,30 @@ The mental model is simple:
 \item move against the direction that increases loss.
 \end{itemize}
 
-\begin{codeexample}
-theta = initial_parameters()
-for step in range(num_steps):
-    gradient = grad(training_loss, theta)
-    theta = theta - learning_rate * gradient
-\end{codeexample}
+For example, take $L(\theta)=(\theta-3)^2$,
+$L'(\theta)=2(\theta-3)$. Starting at $\theta_0=0$ with step size
+$\eta=0.1$ gives
+\[
+\theta_1=\theta_0-\eta L'(\theta_0)=0-0.1(-6)=0.6.
+\]
+The loss falls from $9$ to $(0.6-3)^2=5.76$. A step uses local
+slope information; its size determines how far that information is trusted.
 
-The pseudocode is short because the mechanism is short.
+The update subtracts a multiple of the gradient. This is a local proposal: for a differentiable loss, sufficiently small steps along a negative gradient reduce the loss unless the gradient is zero. A large step can overshoot, and a stationary point need not be a global minimum.
 
 In practice, gradients are almost never computed on the full dataset. The training set is split into small \emph{mini-batches}, and each update uses the gradient estimated from one batch. This variant, \emph{stochastic gradient descent} (SGD), is noisier per step but far cheaper, and the noise can even help escape poor local minima. The principle---step opposite to the gradient---stays the same.
 
-\begin{codeexample}[caption={From scratch: finite-difference gradient check}]
-def finite_difference_gradient(loss_fn, theta, h=1e-5):
-    """Numerical gradient of loss_fn at theta, one parameter at a time."""
-    grad = [0.0] * len(theta)
-    for i in range(len(theta)):
-        plus  = list(theta); plus[i]  += h
-        minus = list(theta); minus[i] -= h
-        grad[i] = (loss_fn(plus) - loss_fn(minus)) / (2 * h)
-    return grad
-\end{codeexample}
+The same slope can be checked using a central difference:
+\[
+\frac{\partial L}{\partial\theta_j}(\theta)
+\approx \frac{L(\theta+h e_j)-L(\theta-h e_j)}{2h},
+\]
+where $e_j$ changes only coordinate $j$. For $L(\theta)=(\theta-3)^2$
+at $\theta=1$, the quotient is $-4$ for any nonzero $h$ in exact
+arithmetic, matching $L'(1)=-4$. For a smooth nonquadratic loss the
+approximation generally has an error of order $h^2$.
 
-This is the single most useful tool for verifying that a hand-derived gradient is correct. Compute the analytic gradient on a tiny problem; compute the finite-difference gradient with the function above; compare. They should match to four or five significant figures for well-conditioned losses. If they do not, the analytic derivation is wrong, the loss has a bug, or the chosen $h$ is so small that floating-point rounding dominates the difference. Most ``training does not converge'' issues in a from-scratch implementation are silent gradient bugs that this five-line check would have caught.
+A central difference provides an independent check on a symbolic derivative. Its truncation error decreases with $h$, but rounding error becomes important if $h$ is too small. Agreement at several reasonable step sizes is more informative than choosing one extremely small step. At a nondifferentiable point, a finite difference need not agree with a chosen subgradient.
 
 \begin{example}[One Gradient Descent Step by Hand]
 Let the loss function be \(L(w) = (w - 3)^2\), a parabola with minimum at \(w = 3\). Start at \(w = 1\) with learning rate \(\eta = 0.4\).
@@ -490,11 +483,12 @@ The weight moved from \(1\) toward \(3\), the minimum. At \(w=1\), the gradient 
   % Points on the parabola
   \filldraw[fill=white, draw=black] (1, 4) circle (2pt)
       node[above right] {$(1,\,4)$};
-  \filldraw[fill=black] (2.6, 0.16) circle (2pt)
-      node[right, xshift=4pt, font=\footnotesize] {$(2.6,\,0.16)$};
+  \filldraw[fill=black] (2.6, 0.16) circle (2pt);
+  \draw[densely dotted, thin] (2.6,0.16) -- (3,1.8);
+  \node[font=\footnotesize] at (3,2) {$(2.6,\,0.16)$};
   \filldraw[fill=black] (3, 0) circle (2pt);
   % Arrow showing the step along the x-axis
-  \draw[->, thick] (1, -0.6) -- (2.55, -0.6)
+  \draw[->, thick] (1, -0.6) -- (2.6, -0.6)
         node[midway, below, font=\footnotesize] {step $= 1.6$};
 \end{tikzpicture}
 \end{center}
@@ -564,58 +558,14 @@ These ideas---generative models, priors, posteriors, MAP---return in full force 
 
 \textbf{Discriminative or generative?} When designing a system, ask: do I only need to classify, or do I also need to detect the unfamiliar, handle missing information, or generate new examples? The answer decides whether a discriminative model suffices or whether a generative perspective is needed.
 
-\section*{Chapter Artifact: Learning-Signal Card}
+\section{Probability, Loss, and Action}
 
-\begin{quote}
-\noindent\textbf{Learning-Signal Card}
-
-\medskip
-\begin{tabular}{p{2.6cm}p{5.4cm}}
-\toprule
-Field & What to write \\
-\midrule
-Model output & Score, probability, ranking signal, class label, or numeric prediction \\
-Pointwise loss & The penalty on one example and what behavior it rewards \\
-Dataset objective & The average or aggregate quantity minimized during training \\
-Reported metric & The number used to justify the final claim \\
-Decision rule & Threshold, ranking cutoff, abstention rule, or review policy \\
-Main mismatch risk & What the loss may optimize that the deployment goal does not actually want \\
-\bottomrule
-\end{tabular}
-\end{quote}
-
-This card should make it hard to say ``the model improved'' without saying what improved, under which loss, and in service of which decision.
-
-\section*{Common Mistakes}
-
-\begin{mistakebox}
-\item \textbf{Treating a score as a calibrated probability.} Check what the number means before interpreting it as a probability.
-\item \textbf{Treating lower training loss as deployment success.} The training objective can improve while the real task stays the same or gets worse.
-\item \textbf{Choosing a loss without asking what wrong behavior it permits.} Loss choice is part of task design, not a cosmetic detail.
-\item \textbf{Forgetting that a model is a function used on inputs.} The predictor lives on examples, not only as a parameter vector stored in memory.
-\item \textbf{Treating gradients as mysterious symbols instead of local direction information.} Gradients say how to move parameters to reduce loss.
-\end{mistakebox}
-
-\section*{Looking Ahead}
-
-The two bridge chapters were not meant as isolated mathematics review. Their job was to make later modeling language readable: representation in the first bridge; score, probability, decision rule, loss, and update signal in this one. Chapter 1 now begins the main argument of the book by asking what decision, proxy target, data source, and held-out evidence make a learning problem worth modeling at all.
-
-\begin{example}[Joint Artifact: Representation and Learning Signal Together]
-For a spam-filtering task, the two bridge artifacts work together. The \emph{representation card} (Bridge~I) names the features: word frequencies, sender score, and link count, each stored as a coordinate in $\mathbb{R}^{50}$. The \emph{learning-signal card} (Bridge~II) specifies the loss (log loss), the decision threshold ($\tau = 0.3$ because false negatives are costly), and the baseline (predict the majority class). The two cards define what the model sees and how it learns---before any algorithm is chosen.
-\end{example}
-
-\begin{chaptersummary}
-\item A score, a probability, a decision rule, a loss, and a dataset-level objective are different objects with different jobs.
-\item Conditional probability expresses uncertainty given observed evidence.
-\item Expectation is the language of average consequence.
-\item Logarithms and exponentials appear because they make probability-based modeling and optimization easier to express.
-\item A predictor is a function, and empirical risk is a rule that assigns one number to the whole predictor.
-\item Gradients and the chain rule turn a loss into a usable update signal.
-\item The chapter's main deliverable is a learning-signal card, written before claiming that a training objective and a deployment goal are aligned.
-\item Generative models learn $P(X \mid Y)$ and can detect outliers and generate data; discriminative models learn $P(Y \mid X)$ and focus on the decision boundary.
-\item MAP estimation connects regularization to Bayesian prior beliefs about parameter values.
-\item Probability is already part of the model: choosing a likelihood, a loss, or a decision threshold is a modeling commitment about what counts as evidence, not a downstream technicality.
-\end{chaptersummary}
+A probability forecast and a decision rule are different mathematical objects. If $p=P(Y=1\mid x)$, correct decisions have zero cost, and the two error costs are $C_{\mathrm{FP}}$ and $C_{\mathrm{FN}}$, the expected costs are
+\[
+R(1\mid x)=(1-p)C_{\mathrm{FP}},\qquad
+R(0\mid x)=pC_{\mathrm{FN}}.
+\]
+Choose action $1$ when $p>C_{\mathrm{FP}}/(C_{\mathrm{FP}}+C_{\mathrm{FN}})$, with either action allowed at equality. The same forecast can imply different actions when costs change. The calculation assumes that $p$ describes the relevant population and that these costs describe the decision.
 
 \begin{table}[h]
 \centering
@@ -651,8 +601,9 @@ Multivariate Gaussian density & Chapters~\ref{ch:probabilistic-models},~\ref{ch:
 \item \exercisetag{Calculation}{Core}Compute the expected value of an action that gives \(+4\) utility when a positive case is correctly caught and \(-2\) utility when a false alarm occurs, if the predicted probability of a true positive case is \(0.7\).
 \item \exercisetag{Calculation}{Core}Write down one pointwise squared-error loss and one pointwise log-loss expression, then explain in words what each one punishes.
 \item \exercisetag{Concept}{Core}Explain the difference between ``choose parameters'' and ``choose a predictor from a hypothesis class'' in one paragraph.
-\item \exercisetag{Concept}{Intermediate}Fill out a learning-signal card for spam filtering, student support, or binary image classification. If you plan to carry one running case through the book, keep the same case and add one sentence describing what downstream decision or review action the score should eventually support.
-\item \exercisetag{Implementation}{Intermediate}One SGD step on log loss by hand. For a logistic model on two features with weights $w = (0.0, 0.0)$, bias $b = 0$, and one training example $x = (1.0, 2.0)$ with label $y = 1$, compute (a) the predicted probability $p = \sigma(w^\top x + b)$, (b) the per-parameter gradient of the log loss $-\log p$ at this point (use the identity $\partial \log p / \partial w_j = (p - y)\, x_j$), and (c) the updated weights and bias after one SGD step with learning rate $\eta = 0.1$. Then verify your analytic gradient against the finite-difference gradient check.
+\item \exercisetag{Concept}{Intermediate}For a binary prediction task, specify a model score, its probability interpretation, a loss, and a decision rule. Explain which of these changes if the cost of a false negative increases while the observations and fitted model stay fixed.
+\item \exercisetag{Calculation}{Intermediate}For a logistic model with $w=(0,0)$, $b=0$, $x=(1,2)$, and $y=1$, compute $p=\sigma(w^\top x+b)$ and the gradient of binary log loss: $\partial\ell/\partial w_j=(p-y)x_j$, $\partial\ell/\partial b=p-y$. Find the weights and bias after one gradient step with $\eta=0.1$. Check one derivative with a central difference.
+
 \end{exercises}
 
 \begin{challengeexercises}

@@ -6,7 +6,7 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19341954.svg)](https://doi.org/10.5281/zenodo.19341954)
 [![Edition: v0.9 Public Draft](https://img.shields.io/badge/Edition-v0.9%20Public%20Draft-orange)](CHANGELOG.md)
 
-— [Read the PDF](ml-by-design.pdf) · [Latest release on Zenodo](https://doi.org/10.5281/zenodo.20232975) · [Adopt in your course](companion/instructor-guide.md) · [How to cite](#how-to-cite) · [Report errata](ERRATA.md) · [Changelog](CHANGELOG.md)
+— [Read the revised working PDF](output/pdf/ml-by-design-concepts.pdf) · [Latest release on Zenodo](https://doi.org/10.5281/zenodo.20232975) · [Adopt in your course](companion/instructor-guide.md) · [How to cite](#how-to-cite) · [Report errata](ERRATA.md) · [Changelog](CHANGELOG.md)
 
 **DOIs.** Latest release v0.9: [`10.5281/zenodo.20232975`](https://doi.org/10.5281/zenodo.20232975). Concept DOI (always resolves to latest): [`10.5281/zenodo.19341954`](https://doi.org/10.5281/zenodo.19341954). Cite the version DOI for reproducibility; use the concept DOI for general references.
 
@@ -14,7 +14,9 @@
 
 Real model-based AI work begins with a problem. What decision are we supporting? What evidence do we have? What claim are we making? And what would justify trusting the result? This book is organized around those questions. It is problem-driven rather than algorithm-driven — models, losses, architectures, and systems appear because they resolve modeling dilemmas, and each method enters through the decision, data, representation, evidence, and system constraints that make it useful.
 
-The book covers task formulation, predictive modeling, loss functions, decision rules, evaluation, baselines, linear models, trees, neural networks, representation learning, foundation-model workflows, modality-specific modeling, experiments, uncertainty, reliability, and deployment-minded AI systems — across six parts, nineteen chapters, two mathematical bridge chapters, and six part-synthesis chapters.
+The book covers task formulation, predictive modeling, loss functions, decision rules, evaluation, baselines, linear models, trees, neural networks, representation learning, foundation-model workflows, modality-specific modeling, experiments, uncertainty, reliability, and deployment-minded AI systems — across five parts, nineteen chapters, two mathematical bridge chapters, and five part syntheses.
+
+The October 2026 working revision explains ML through concepts, equations, derivations, diagrams, and worked calculations. No programming is required. Mathematical explanations, advanced material, and cautions are integrated into the chapter text; separate Looking Ahead and Chapter Summary sections have been removed. Exercises develop mathematical reasoning and interpretation. Chapter figures use a minimal shared style, with restrained color, readable labels, and geometric comparisons. Uncited numerical examples are illustrative; empirical findings are tied to their cited studies. This revision has not been released on Zenodo.
 
 ## Companion materials
 

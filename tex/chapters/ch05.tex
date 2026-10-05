@@ -1,1473 +1,756 @@
+\begingroup
+\raggedbottom
+\clubpenalty=10000
+\widowpenalty=10000
 \chapter{Optimization and Neural Networks}
 \label{ch:optimization-neural-networks}
 
-When does a feature need to be \emph{learned} rather than engineered? It is the question that decides whether neural networks are worth their cost. Trees, kernels, and engineered interactions can do quite a lot when the right features are visible upfront. They start to lose ground when the right features are not---when the useful intermediate signals are buried in pixels, waveforms, or token co-occurrences and no one can name them in advance. That is when letting part of the representation itself be learned from data starts to pay back the optimization, regularization, and evaluation discipline it demands.
+A neural network composes parameterized transformations. Its hidden layers produce intermediate coordinates that are adjusted together with the output rule. Nonlinear activations let those coordinates depend on the input in ways a single affine map cannot express. Derivatives explain how fitting changes the transformations; evaluation determines whether the resulting procedure predicts usefully.
 
-This chapter explains the learning process without mystifying it. It moves from learned feature pipelines to forward passes, losses, optimization, debugging, and generalization, and ends with a minimum credible neural training report. The goal is not only to show how neural networks work but to show what evidence makes a neural result worth trusting.
+For the student--course task, inputs are available at the end of week 2 and the target is missing at least one of two specified deadlines in weeks 3--4. An adviser can review at most five cases. The network estimates that deadline event; its output is neither a measurement of support need nor evidence that an invitation will help. Any comparison with logistic regression must respect the same information cutoff, label maturity, review capacity, and protected evaluation boundaries.
 
-\section{Opening Dilemma: When Engineered Structure Stops Being Enough}
+Neural networks offer one way to learn a representation. Trees also learn structure, and a linear output can use learned embeddings. The decision to fit a network should come from a plausible missing relationship and a development comparison, rather than the presence of many parameters. This chapter follows one small prediction through its loss and derivatives before examining the choices that affect optimization and generalization.
 
-Earlier modeling chapters established a core logic. Frame a task, design an evaluation plan, try a serious baseline, and inspect what structure that baseline is missing. Sometimes the answer is manageable with trees, engineered interactions, or geometry-based methods. Sometimes it is not.
+\section{Composition and Nonlinear Features}
 
-Images, language, and audio often contain structure that is hard to specify manually at the right level of abstraction. Even in smaller problems, the useful intermediate signals may not be obvious in advance. The main challenge in such cases is not just drawing the final decision boundary; it is discovering the space in which that boundary should be drawn.
+For a feedforward network, let $h^{(0)}=x$ and write hidden layers as
+\[
+z^{(l)}=W_lh^{(l-1)}+b_l,
+\qquad h^{(l)}=\rho_l(z^{(l)}).
+\]
+The activation acts coordinatewise in the examples here. An output transformation $g$ then maps the final score into a numeric prediction or probability estimate. The parameters $\theta$ include all fitted matrices and biases. A hidden coordinate is a numerical function of the input; its name or activation pattern does not automatically identify a human concept.
 
-That is when learned structure becomes the right move. The issue is not that deep learning is powerful. It is that the representation itself is part of what must be learned.
-
-Neural networks are not always the best choice. On small tabular datasets, a linear model or tree ensemble may be stronger, easier to debug, and easier to justify. The important shift is conceptual: neural networks earn their place when the main modeling problem is that the useful internal features are unknown.
-
-The practical workflow is short. Start with the strongest simple baseline. Decide what structure it is missing. Build the smallest network that could plausibly learn that structure. Train with a validation split while watching for optimization versus generalization failure. Report the result in a minimum credible training report.
-
-Chapter~\ref{ch:structure-beyond-linearity} asked which kind of structure to add next. This chapter asks what happens when the structure itself is not fully specified in advance and must be learned during training.
-
-\begin{decisionbox}
-\textbf{Core path through the chapter.} On a first serious pass, keep the spine narrow: the forward pass, the loss gradient, backpropagation on a tiny network, plain SGD with mini-batches, basic regularization, and the minimum credible training report. Adaptive optimizers with bias correction, He/Xavier initialization, the vanishing/exploding-gradient diagnosis, and the deeper regularization extensions matter because they explain when training stops working---they should not crowd out the first goal of seeing one network train end to end and producing a credible report on it.
-\end{decisionbox}
-
-\section{A Neural Network as a Learned Feature Pipeline}
-
-In earlier chapters, ``features'' meant attributes designed by the practitioner---one-hot encodings, polynomial terms, bag-of-words counts. From this chapter on, ``features'' also refers to the \emph{learned} intermediate representations a neural network discovers during training. Where the distinction matters, the chapter uses ``hand-designed features'' for the earlier sense and ``learned features'' or ``internal features'' for the new one.
-
-The conceptual heart of the chapter is simple:
-
-\begin{center}
-\emph{raw input $\rightarrow$ learned intermediate features $\rightarrow$ final score or probability}
-\end{center}
-
-A hidden layer is not extra decoration. It is a learned representation stage. The rest of the chapter explains how that pipeline is computed, corrected, stabilized, and judged.
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c6mlBg}{RGB}{220,233,251}
-\definecolor{c6mlLine}{RGB}{56,103,170}
-\definecolor{c6nnBg}{RGB}{210,238,220}
-\definecolor{c6nnLine}{RGB}{26,112,64}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  lmbox/.style={draw=c6mlLine, fill=c6mlBg, rounded corners,
-                align=center, minimum width=2.2cm, minimum height=0.9cm, text=c6mlLine},
-  nnbox/.style={draw=c6nnLine, fill=c6nnBg, rounded corners,
-                align=center, minimum width=2.2cm, minimum height=0.9cm, text=c6nnLine},
-  arr/.style={-Latex, thick, black!55}
-]
-%% ---- Left column: Linear model (top) and Decision tree (bottom) ----
-%% Boxes spaced 3.2cm apart so edges are 1.0cm clear (min width 2.2cm, half=1.1cm, gap=3.2-2.2=1.0cm)
-\node[font=\small\bfseries, black!70] at (3.4, 1.8) {Linear model};
-\node[lmbox] (rawa)   at (1.0, 0.6) {raw\\input};
-\node[lmbox] (feata)  at (4.2, 0.6) {hand-designed\\features};
-\node[lmbox] (scorea) at (7.4, 0.6) {one score};
-\draw[arr] (rawa)  -- (feata);
-\draw[arr] (feata) -- (scorea);
-
-\node[font=\small\bfseries, black!70] at (3.4,-1.6) {Decision tree};
-\node[lmbox] (rawb)   at (1.0,-2.4) {raw\\input};
-\node[lmbox] (splitb) at (4.2,-2.4) {branching\\rules};
-\node[lmbox] (leafb)  at (7.4,-2.4) {leaf\\prediction};
-\draw[arr] (rawb)   -- (splitb);
-\draw[arr] (splitb) -- (leafb);
-
-%% Vertical separator
-\draw[black!20, dashed] (8.8, 2.2) -- (8.8,-3.2);
-
-%% ---- Right panel: Neural network ----
-\node[font=\small\bfseries, black!70] at (12.0, 1.8) {Neural network};
-\node[lmbox] (rawc)   at (9.8,  0.0) {raw\\input};
-\node[nnbox] (hidc1)  at (12.0, 1.2) {learned\\features};
-\node[nnbox] (hidc2)  at (12.0,-1.2) {learned\\features};
-\node[lmbox] (outc)   at (14.2, 0.0) {task\\output};
-\draw[arr] (rawc)  -- (hidc1);
-\draw[arr] (rawc)  -- (hidc2);
-\draw[arr] (hidc1) -- (outc);
-\draw[arr] (hidc2) -- (outc);
-\end{tikzpicture}%
-}
-\caption{These model families all map inputs to predictions, but they place structure in different places. Neural networks are distinctive because they can learn intermediate representations rather than depending entirely on fixed features or fixed rules.}
+\begin{tikzpicture}[ml diagram]
+\node[align=center] (x) at (0,0) {recorded input\\$x$};
+\node[ml key box,minimum width=2.1cm] (h1) at (3.1,0) {hidden features\\$h^{(1)}$};
+\node[ml key box,minimum width=2.1cm] (h2) at (6.2,0) {hidden features\\$h^{(2)}$};
+\node[align=center] (s) at (9.2,0) {output score\\$s$};
+\draw[ml arrow] (x) -- (h1);
+\draw[ml arrow] (h1) -- (h2);
+\draw[ml arrow] (h2) -- (s);
+\node[ml label] at (4.65,-1) {the loss adjusts all three transformations};
+\end{tikzpicture}
+\captionof{figure}{A feedforward network learns intermediate coordinates and an output rule together. Hidden coordinates are computations, and need not have a unique human interpretation.}
 \label{fig:feature-design-vs-learning}
-\end{figure}
-
-\begin{definition}[Neural Network]
-A neural network is a parameterized function built by composing layers. Each layer typically applies an affine transformation followed by a nonlinear activation function.
-\end{definition}
-
-At the level of one unit, the calculation still looks familiar:
-\[
-z = w^\top x + b, \qquad a = \phi(z).
-\]
-Here $x$ is the input vector, $w$ a vector of weights, and $b$ a bias term. The raw weighted sum $z$, called the \emph{pre-activation}, feeds into the activation function $\phi$. The output $a$ is the transformed value after the nonlinearity, and it becomes part of the input to the next layer.
-
-This should look like an extension of Chapter~\ref{ch:linear-models}, not a clean break from it. The affine part $w^\top x + b$ is still a weighted sum plus bias. What changes is that the network repeats the process across layers and applies a nonlinear activation function to the output of each affine transformation. Those nonlinearities let the model reshape the representation itself.
-
-An affine transformation is a linear transformation followed by a shift. Think of $w^\top x + b$ as ``score the input, then move the score up or down with a bias.''
-
-\begin{figure}[t]
-\centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[font=\small, node distance=1.0cm]
-\foreach \y/\name in {1.8/$x_1$,0.6/$x_2$}
-  \node[draw, circle, minimum size=0.8cm] at (0,\y) (\name) {\name};
-\foreach \y/\name in {2.4/$h_1$,1.2/$h_2$,0.0/$h_3$}
-  \node[draw, circle, minimum size=0.8cm] at (3,\y) (\name) {\name};
-\node[draw, circle, minimum size=0.8cm] (yhat) at (6,1.2) {$\hat{y}$};
-\foreach \src in {$x_1$,$x_2$}
-  \foreach \dst in {$h_1$,$h_2$,$h_3$}
-    \draw[-Latex, thick] (\src) -- (\dst);
-\foreach \src in {$h_1$,$h_2$,$h_3$}
-  \draw[-Latex, thick] (\src) -- (yhat);
-\node at (0,3.1) {inputs};
-\node at (3,3.1) {hidden layer};
-\node at (6,3.1) {output};
-\end{tikzpicture}%
-}
-\caption{A one-hidden-layer network is structured computation. Inputs produce pre-activations, activations become learned intermediate features, and those features feed the final output.}
-\label{fig:two-layer-network}
-\end{figure}
-
-\section{Why Nonlinearity Matters}
-
-A long catalog of activation functions is not needed yet. One idea matters most: nonlinearity is what lets the learned feature space bend.
-
-Suppose a network had two layers but no activation function:
-\[
-h = W_1 x + b_1, \qquad y = W_2 h + b_2.
-\]
-Substituting the first expression into the second gives
-\[
-y = W_2 W_1 x + (W_2 b_1 + b_2).
-\]
-This is still an affine transformation of $x$. No matter how many such layers are stacked, the whole network without nonlinearity is equivalent to one larger affine model.
-
-\begin{figure}[t]
-\centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small]
-%% ---- Left panel: Without activations ----
-\node[font=\small\bfseries, black!75] at (2.4, 3.6) {Without activations};
-\node[draw, rounded corners, align=center, minimum width=2.0cm] (lin1) at (1.0, 2.0) {$W_1 x+b_1$};
-\node[draw, rounded corners, align=center, minimum width=2.0cm] (lin2) at (3.8, 2.0) {$W_2 h+b_2$};
-\node[draw, rounded corners, align=center, minimum width=2.4cm] (collapse) at (2.4, 0.5)
-  {collapses to\\one affine map};
-\draw[-Latex, thick] (lin1) -- (lin2);
-\draw[-Latex, thick] (2.4, 1.52) -- (collapse);
-%% ---- Right panel: With activations ----
-\begin{scope}[xshift=8.5cm]
-  %% Title sits above the y-axis endpoint (y-axis goes to 4.2)
-  \node[font=\small\bfseries, black!75] at (2.1, 5.0) {With activations};
-  \draw[->,black!70] (0,0) -- (4.4,0) node[right] {input};
-  \draw[->,black!70] (0,0) -- (0,4.5) node[above] {hidden feature};
-  %% Nonlinear curve (bent)
-  \draw[thick] (0.4,0.4) .. controls (1.2,2.2) and (2.2,1.0) .. (3.8,3.6);
-  %% Linear reference (dashed)
-  \draw[dashed, black!50] (0.4,0.4) -- (3.8,3.6);
-  %% Annotation outside the plot on the right, arrow points to curve
-  \node[align=left, font=\footnotesize, black!65, anchor=west] at (4.6, 2.0)
-    {nonlinearity\\bends the\\representation};
-  \draw[->, thin, black!45] (4.55, 2.3) -- (3.5, 3.0);
-\end{scope}
-\end{tikzpicture}%
-}
-\caption{Depth alone is not enough. Stacking affine maps just rewrites one affine map; inserting nonlinearities changes the space itself.}
-\label{fig:no-activation-still-linear}
-\end{figure}
-
-This is why activation functions matter. Their job is to let layered networks learn nonlinear representations. Without them, stacking layers collapses to a single affine map and depth adds no expressive power.
-
-The universal-approximation theorem below uses the notation $\sup_{x \in [0,1]^d}|\cdot|$, which reads as ``the largest possible error over every input in the unit cube.'' The theorem says that for any target accuracy, \emph{some} one-hidden-layer network achieves it; it does not say that training will find that network. A first-pass reader can take the headline---``a sufficiently wide one-hidden-layer network can approximate any continuous function''---and move on; the formal statement is here for readers who want to see the precise existence claim.
-
-\begin{theorem}[Universal approximation is an existence claim]
-For any continuous function $f$ on the unit hypercube $[0,1]^d$ and any $\varepsilon>0$, there exists a one-hidden-layer network with a continuous sigmoidal activation whose output $g$ satisfies
-\[
-\sup_{x\in[0,1]^d}|f(x)-g(x)|<\varepsilon
-\]
-\citep{cybenko1989}. Related work later broadened these approximation results for multilayer feedforward networks \citep{hornik1989}.
-\end{theorem}
-
-Read this theorem carefully for what it does and does not say. It is an existence result about expressive power. It does \emph{not} say that gradient descent will easily find the approximating network, that the network will be small, or that a flexible network will generalize well on finite data.
-
-\begin{figure}[t]
-\centering
-\definecolor{c6sigBlue}{RGB}{56,103,170}
-\definecolor{c6tanhRed}{RGB}{180,40,40}
-\definecolor{c6reluGray}{RGB}{60,60,60}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1.2cm, y=1.9cm, font=\small]
-%% Panel 1: sigmoid - scope origin at x=0
-\begin{scope}[xshift=0cm]
-  \draw[->,black!70] (-2.5,0) -- (2.7,0) node[right] {$z$};
-  \draw[->,black!70] (0,-0.1) -- (0,1.25) node[above] {$a$};
-  \draw[thick,c6sigBlue,domain=-2.3:2.3,samples=100] plot (\x,{1/(1+exp(-\x))});
-  \node[c6sigBlue, font=\small\bfseries] at (0.0,1.08) {sigmoid};
-\end{scope}
-%% Panel 2: tanh - shifted by 6.5cm (panel width approx. 5.1 units x 1.2cm = 6.1cm, gap 0.4cm)
-\begin{scope}[xshift=6.5cm]
-  \draw[->,black!70] (-2.5,0) -- (2.7,0) node[right] {$z$};
-  \draw[->,black!70] (0,-1.15) -- (0,1.25) node[above] {$a$};
-  \draw[thick,c6tanhRed,domain=-2.3:2.3,samples=100]
-    plot (\x,{(exp(\x)-exp(-\x))/(exp(\x)+exp(-\x))});
-  \node[c6tanhRed, font=\small\bfseries] at (0.0,1.08) {$\tanh$};
-\end{scope}
-%% Panel 3: ReLU - shifted by 13.0cm
-\begin{scope}[xshift=13.0cm]
-  \draw[->,black!70] (-2.5,0) -- (2.7,0) node[right] {$z$};
-  \draw[->,black!70] (0,-0.1) -- (0,2.5) node[above] {$a$};
-  \draw[thick,c6reluGray] (-2.3,0) -- (0,0);
-  \draw[thick,c6reluGray] (0,0) -- (2.2,2.2);
-  \node[c6reluGray, font=\small\bfseries] at (0.0,2.3) {ReLU};
-\end{scope}
-\end{tikzpicture}%
-}
-\caption{Three different behaviors stand out immediately: sigmoid squashes into $(0,1)$, $\tanh$ is zero-centered, and ReLU is piecewise linear with a flat region for negative inputs.}
-\label{fig:activation-functions}
-\end{figure}
-
-\begin{warningbox}
-Older saturating activations produce very small gradients when their outputs sit near the flat ends of the curve. ReLU avoids that kind of saturation for positive inputs, but it creates a different failure mode: a unit stuck in the negative region may output zero repeatedly and stop updating usefully. This is the intuition behind ``dead ReLUs.''
-\end{warningbox}
-
-\section{Worked Anchor Example: One Forward Pass, Fully Legible}
-
-Keep one small network in view long enough that the rest of the chapter reads as one story rather than a collection of topics. Consider a tiny network for predicting whether an incoming course-support message should be escalated to a human advisor rather than auto-replied. The input features are:
-\begin{itemize}[leftmargin=*]
-\item $x_1=$ deadline-mention signal (words like ``deadline,'' ``late,'' ``missed,'' or ``extension'' in the message)
-\item $x_2=$ frustration signal (a sentiment-derived score capturing distress or urgency in tone)
-\end{itemize}
-Assume both features have already been scaled into a rough range between $0$ and $1$. For one student message, let
-\[
-x = \begin{bmatrix} 0.8 \\ 0.6 \end{bmatrix}.
-\]
-
-Suppose the first hidden layer has two ReLU units:
-\[
-h_1 = \mathrm{ReLU}(1.5x_1 + 0.5x_2 - 1.0),
-\]
-\[
-h_2 = \mathrm{ReLU}(0.5x_1 + 1.5x_2 - 1.0).
-\]
-Now compute them:
-\[
-h_1 = \mathrm{ReLU}(1.5(0.8) + 0.5(0.6) - 1.0)
-= \mathrm{ReLU}(0.5)
-= 0.5,
-\]
-\[
-h_2 = \mathrm{ReLU}(0.5(0.8) + 1.5(0.6) - 1.0)
-= \mathrm{ReLU}(0.3)
-= 0.3.
-\]
-
-The output layer produces an escalation score
-\[
-s = 1.2h_1 + 0.8h_2 - 0.4
-= 1.2(0.5) + 0.8(0.3) - 0.4
-= 0.44.
-\]
-If the final layer uses a sigmoid to convert that score to a probability, then
-\[
-\hat{p} = \sigma(0.44) \approx 0.61.
-\]
-
-\begin{figure}[t]
-\centering
-\definecolor{c6netBlue}{RGB}{56,103,170}
-\definecolor{c6netGreen}{RGB}{26,112,64}
-\definecolor{c6netOrange}{RGB}{176,110,34}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  x=1cm,
-  y=1cm,
-  font=\small,
-  card/.style={draw, rounded corners=4pt, thick, align=center, minimum height=1.45cm, inner sep=7pt},
-  input/.style={card, draw=c6netBlue, fill=c6netBlue!10, text width=2.5cm},
-  hidden/.style={card, draw=c6netGreen, fill=c6netGreen!10, text width=4.1cm},
-  output/.style={card, draw=c6netOrange, fill=c6netOrange!12, text width=4.0cm},
-  stage/.style={font=\footnotesize\bfseries, black!70},
-  w/.style={font=\footnotesize, fill=white, inner sep=1.5pt}
-]
-%% Stage titles
-\node[stage] at (0.0, 4.15) {Inputs};
-\node[stage] at (5.1, 4.15) {Hidden features};
-\node[stage] at (10.4, 4.15) {Output};
-
-%% Input cards
-\node[input] (x1) at (0.0, 2.25) {$x_1$\\deadline mention\\\textbf{0.80}};
-\node[input] (x2) at (0.0,-0.55) {$x_2$\\frustration tone\\\textbf{0.60}};
-
-%% Hidden cards
-\node[hidden] (h1) at (5.1, 2.75)
-  {$h_1=\mathrm{ReLU}(1.5x_1+0.5x_2-1.0)$\\deadline-heavy feature\\\textbf{$h_1=0.50$}};
-\node[hidden] (h2) at (5.1,-1.05)
-  {$h_2=\mathrm{ReLU}(0.5x_1+1.5x_2-1.0)$\\frustration-heavy feature\\\textbf{$h_2=0.30$}};
-
-%% Output cards
-\node[output] (score) at (10.5, 1.55)
-  {escalation score\\$s=1.2h_1+0.8h_2-0.4$\\\textbf{$s=0.44$}};
-\node[output] (prob) at (10.5,-1.45)
-  {escalation probability\\$\hat{p}=\sigma(s)$\\\textbf{$\hat{p}\approx 0.61$}};
-
-%% Connections from inputs to hidden layer
-\draw[-Latex, thick, black!60] (x1.east) -- node[w, above, pos=0.33] {$1.5$} (h1.west);
-\draw[-Latex, thick, black!60] (x2.east) to[out=15, in=200]
-  node[w, above, pos=0.62] {$0.5$} (h1.west);
-\draw[-Latex, thick, black!60] (x1.east) to[out=-15, in=160]
-  node[w, below, pos=0.38] {$0.5$} (h2.west);
-\draw[-Latex, thick, black!60] (x2.east) -- node[w, below, pos=0.33] {$1.5$} (h2.west);
-
-%% Connections from hidden layer to output
-\draw[-Latex, thick, black!60] (h1.east) -- node[w, above, pos=0.45] {$1.2$} (score.west);
-\draw[-Latex, thick, black!60] (h2.east) to[out=12, in=200]
-  node[w, above, pos=0.55] {$0.8$} (score.west);
-\draw[-Latex, thick, black!60] (score.south) -- node[right, font=\footnotesize] {sigmoid} (prob.north);
-
-%% Bottom note
-\node[font=\footnotesize, text=black!60, align=center] at (5.25,-3.15)
-  {All displayed values match the hand-worked forward pass above.};
-\end{tikzpicture}%
-}
-\caption{The worked course-support escalation network with the actual numbers from the forward pass. Inputs, hidden-feature formulas, output score, and final sigmoid probability are kept visually separate so the computation is easier to follow.}
-\label{fig:forward-pass-network}
-\end{figure}
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{>{\raggedright}p{2.3cm}>{\centering}p{2.5cm}>{\centering}p{2.1cm}>{\centering\arraybackslash}p{2.1cm}}
-\toprule
-Quantity & Expression & Pre-activation & Post-activation \\
-\midrule
-Hidden unit $h_1$ & $1.5x_1 + 0.5x_2 - 1.0$ & $0.50$ & $0.50$ \\
-Hidden unit $h_2$ & $0.5x_1 + 1.5x_2 - 1.0$ & $0.30$ & $0.30$ \\
-Output score $s$ & $1.2h_1 + 0.8h_2 - 0.4$ & $0.44$ & --- \\
-Final probability $\hat{p}$ & $\sigma(s)$ & $0.44$ & $0.61$ \\
-\bottomrule
-\end{tabular}
-\caption{A forward pass becomes much less mysterious when every stage is named explicitly. Pre-activations, activations, score, and probability are different objects and should not be conflated.}
-\label{tab:forward-pass-summary}
-\end{table}
-
-\begin{warningbox}
-A sigmoid or softmax output is a model output, not yet an action. If the model will make decisions, choose the threshold on validation data. If the output will be interpreted as a probability estimate, check calibration separately instead of assuming the network did that for free.
-\end{warningbox}
-
-\begin{codeexample}[caption={From scratch: a complete forward pass with numerical values}]
-# Network: 2 inputs, 2 hidden units (ReLU), 1 output (sigmoid)
-# Input: suspicious-link signal and urgent-language signal
-x1 = 0.8    # suspicious-link signal
-x2 = 0.6    # urgent-language signal
-
-# Hidden layer weights and biases (hardcoded for illustration)
-w11, w12, b1 = 1.5, 0.5, -1.0    # weights into hidden unit 1
-w21, w22, b2 = 0.5, 1.5, -1.0    # weights into hidden unit 2
-
-# Forward pass: hidden unit 1
-z1 = w11 * x1 + w12 * x2 + b1    # linear combination
-print("hidden unit 1 pre-activation:", round(z1, 4))
-h1 = max(0.0, z1)                 # ReLU: pass positive values, zero out negative
-print("hidden unit 1 post-ReLU:   ", round(h1, 4))
-
-# Forward pass: hidden unit 2
-z2 = w21 * x1 + w22 * x2 + b2    # linear combination
-print("hidden unit 2 pre-activation:", round(z2, 4))
-h2 = max(0.0, z2)                 # ReLU activation
-print("hidden unit 2 post-ReLU:   ", round(h2, 4))
-
-# Output layer: combine hidden activations into a single score
-v1, v2, b_out = 1.2, 0.8, -0.4   # output-layer weights and bias
-s = v1 * h1 + v2 * h2 + b_out    # pre-sigmoid output score
-print("output score (pre-sigmoid): ", round(s, 4))
-
-# Sigmoid squashes the score into a probability
-import math
-p = 1.0 / (1.0 + math.exp(-s))   # sigmoid probability for class 1
-print("predicted probability:      ", round(p, 4))
-\end{codeexample}
-
-Every library that trains a neural network runs exactly this sequence of multiplications, additions, and activation calls. Seeing the numbers makes the pipeline concrete: the hidden units are not magic. They are weighted sums with a nonlinearity applied, and their outputs become inputs to the next layer.
-
-This small example already shows the logic of a network. The hidden units do not produce the final prediction directly; they create intermediate signals. One responds more strongly to suspicious-link evidence; the other to urgent-language evidence. The output layer then combines those signals into a final decision.
-
-\begin{example}[What the Hidden Layer Is Doing]
-In a linear model, the final score is computed directly from $x_1$ and $x_2$. In this network, the model first builds two internal features, $h_1$ and $h_2$. The user does not hand those features to the model; they are learned during training. This is the conceptual heart of neural networks.
-\end{example}
-
-Now change the message slightly and let $x=(0.2,0.7)$. Then
-\[
-h_1 = \mathrm{ReLU}(1.5(0.2) + 0.5(0.7) - 1.0) = \mathrm{ReLU}(-0.35)=0,
-\]
-while
-\[
-h_2 = \mathrm{ReLU}(0.5(0.2) + 1.5(0.7) - 1.0) = \mathrm{ReLU}(0.15)=0.15.
-\]
-One hidden unit is now shut off entirely. This will matter again during backpropagation. Keeping one small network alive across several sections is deliberate: the later training story should feel like continuation, not topic-switching.
-
-\section{Loss as the Teaching Signal}
-
-Once the forward pass is fully legible, the next question is what tells the model whether that output was good or bad. That role belongs to the loss. The same worked network stops being only a predictor and becomes an object that can be corrected.
-
-\textbf{Metrics judge; losses teach.} Evaluation metrics tell us what claim we can make. Training losses tell the optimizer how to correct the model.
-
-Recall the loss function $\ell(y,\hat{y})$ from Chapter~\ref{ch:prediction-loss-decision}: a per-example score where smaller values mean a better prediction and zero usually means a perfect one. Training seeks parameter values that make the average per-example loss $\mathcal{L}_{\text{train}}(\theta) = \tfrac{1}{n}\sum_{i=1}^{n}\ell(y_i,\hat{y}_i)$ small.
-
-For regression, a standard choice is mean squared error:
-\[
-\mathrm{MSE} = \frac{1}{n}\sum_{i=1}^{n}(\hat{y}_i - y_i)^2.
-\]
-For binary classification, a common choice is binary cross-entropy:
-\[
-\mathcal{L} = -\frac{1}{n}\sum_{i=1}^{n}\left[y_i \log \hat{p}_i + (1-y_i)\log(1-\hat{p}_i)\right].
-\]
-
-\begin{example}[The Direction of the Correction]
-Before differentiating, read the desired training signal qualitatively. If the true label is \(y=1\) and the model predicts \(\hat p=0.20\), the correction should push the score upward. The quantity \(\hat p-y=-0.80\) carries that sign. If the model predicts \(\hat p=0.95\), then \(\hat p-y=-0.05\) still pushes upward, but only gently. If the true label is \(y=0\) and the model predicts \(\hat p=0.90\), then \(\hat p-y=0.90\), so gradient descent pushes the score downward. The theorem below explains why sigmoid plus cross-entropy gives this clean correction signal.
-\end{example}
-
-\begin{theorem}[Sigmoid cross-entropy produces the training signal \(\hat{p}-y\) for one example]
-For one example with binary-classifier output score \(s\), predicted probability \(\hat{p}=\sigma(s)\), and label \(y\in\{0,1\}\), the derivative of binary cross-entropy with respect to the score simplifies to
-\[
-\frac{d\mathcal{L}}{ds}=\hat{p}-y.
-\]
-\end{theorem}
-
-\begin{proof}
-For one example with raw output score \(s\), often called the \emph{raw score or logit}, probability \(\hat{p}=\sigma(s)\), and label \(y\in\{0,1\}\), the loss is
-\[
-\mathcal{L}(s)=-\bigl[y\log \hat{p}+(1-y)\log(1-\hat{p})\bigr].
-\]
-Differentiate with respect to \(s\):
-\[
-\frac{d\mathcal{L}}{ds}
-=\frac{d\mathcal{L}}{d\hat{p}}\cdot \frac{d\hat{p}}{ds},
-\]
-with
-\[
-\frac{d\mathcal{L}}{d\hat{p}}=-\frac{y}{\hat{p}}+\frac{1-y}{1-\hat{p}},
-\qquad
-\frac{d\hat{p}}{ds}=\hat{p}(1-\hat{p}).
-\]
-Multiplying and simplifying gives
-\[
-\frac{d\mathcal{L}}{ds}
-=\left(-\frac{y}{\hat{p}}+\frac{1-y}{1-\hat{p}}\right)\hat{p}(1-\hat{p})
-=\hat{p}-y.
-\]
-\end{proof}
-
-If the loss is averaged over \(n\) examples, the derivative with respect to the score of example \(i\) is \((\hat p_i-y_i)/n\). The simplification is the same; the batch average just contributes the constant factor \(1/n\).
-
-This is the error signal for the output layer: the difference between what the model predicted and what the target required. The network is pushed upward when it underpredicts the true class and downward when it overpredicts.
-
-These formulas matter, but the deeper point is that the loss function defines which kinds of mistakes create the strongest correction pressure during training.
-
-\subsection{Why Not Optimize Accuracy Directly?}
-
-Accuracy is often the evaluation metric people care about first, but it is a poor training objective for gradient-based learning. It changes only when a prediction crosses a threshold, making it too coarse for smooth optimization.
-
-Loss functions such as cross-entropy provide richer feedback. If the true label is $1$, both a predicted probability of $0.51$ and one of $0.99$ count as correct under accuracy, but they should not be treated as equally good. Cross-entropy captures the difference:
-\[
--\log(0.51) \approx 0.673, \qquad -\log(0.99) \approx 0.010.
-\]
-The second prediction is not only correct but confidently correct, so it receives much lower loss.
-
-\begin{figure}[t]
-\centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=2.2cm,y=2.2cm,font=\small]
-\draw[->] (0,0) -- (3.3,0) node[right] {predicted probability for the true class};
-\draw[->] (0,0) -- (0,1.6) node[above] {loss};
-\draw[thick,blue,domain=0.05:0.99,samples=120] plot (\x,{-(ln(\x))/3});
-\draw[dashed] (0.51,0) -- (0.51,0.224);
-\draw[dashed] (0.99,0) -- (0.99,0.003);
-\filldraw (0.51,0.224) circle (1.8pt);
-\filldraw (0.99,0.003) circle (1.8pt);
-\node[align=left] at (1.8,1.2) {same label prediction: correct\\very different training signal};
-\end{tikzpicture}%
-}
-\caption{Training loss distinguishes weakly correct predictions from confidently correct ones. That is why cross-entropy is useful even when accuracy is the metric reported to an audience.}
-\label{fig:same-label-different-loss}
-\end{figure}
-
-\subsection{Multiclass Outputs}
-
-Later chapters will use multiclass classification repeatedly, so it is worth seeing the standard pattern now. A multiclass output layer typically produces one raw score per class, called a \emph{logit}, before those scores are normalized into probabilities. In this book, \emph{logit} refers to the raw output of a linear layer before any activation is applied; we sometimes use \emph{score} informally when the distinction does not matter. Softmax converts logits into probabilities:
-\[
-\mathrm{softmax}(s)_k = \frac{e^{s_k}}{\sum_j e^{s_j}}.
-\]
-If the true class is $k^\star$, multiclass cross-entropy penalizes the model according to
-\[
-\mathcal{L} = -\log \mathrm{softmax}(s)_{k^\star}.
-\]
-
-Softmax is invariant to adding the same constant to every logit. For any scalar \(c\),
-\begin{align*}
-\mathrm{softmax}(s+c\mathbf{1})_k
-&=\frac{e^{s_k+c}}{\sum_j e^{s_j+c}}
-=\frac{e^c e^{s_k}}{e^c\sum_j e^{s_j}} \\
-&=\mathrm{softmax}(s)_k.
-\end{align*}
-Only differences between logits matter, not their absolute level. Read logits as relative evidence before normalization.
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{>{\raggedright}p{1.8cm}>{\centering}p{1.6cm}>{\centering}p{2.5cm}>{\raggedright\arraybackslash}p{3.2cm}}
-\toprule
-Class & Logit & Softmax prob. & If this is true class \\
-\midrule
-Class 1 & $1.4$ & $0.654$ & loss contribution $-\log(0.654)\approx 0.425$ \\
-Class 2 & $0.5$ & $0.266$ & larger loss if true \\
-Class 3 & $-0.7$ & $0.080$ & much larger loss if true \\
-\bottomrule
-\end{tabular}
-\caption{For multiclass problems, logits are not yet probabilities. Softmax turns them into a normalized distribution, and cross-entropy trains the model to place mass on the correct class.}
-\label{tab:softmax-example}
-\end{table}
-
-\section{Optimization as Repeated Correction}
-
-With the teaching signal defined, the remaining issue is procedural: how the model uses that signal to improve itself over repeated updates. Training becomes an optimization problem: find parameter values that reduce the loss. Gradient-based optimization works by asking how the loss would change if each parameter were nudged slightly.
-
-\begin{prereqbridge}
-A derivative measures local slope. If changing a parameter slightly causes the loss to rise sharply, the derivative is large. If the change causes the loss to fall, the derivative has the opposite sign. A gradient collects these slopes across many parameters.
-\end{prereqbridge}
-
-Suppose a one-parameter model predicts $\hat{y}=wx$ and uses squared error:
-\[
-L = (wx - y)^2.
-\]
-Take one example with $x=2$, $y=6$, and current parameter $w=1$. Then
-\[
-\hat{y}=2, \qquad L=(2-6)^2=16.
-\]
-The derivative with respect to $w$ is
-\[
-\frac{dL}{dw}=2(wx-y)x.
-\]
-Substituting the current values gives
-\[
-\frac{dL}{dw}=2(2-6)(2)=-16.
-\]
-The negative sign says that increasing $w$ reduces the loss. With learning rate $\eta=0.1$, one gradient-descent step gives
-\[
-w_{\text{new}} = w - \eta \frac{dL}{dw}
-= 1 - 0.1(-16)
-= 2.6.
-\]
-
-\begin{figure}[t]
-\centering
-\resizebox{\linewidth}{!}{%
-\definecolor{c6contOuter}{RGB}{220,233,251}
-\definecolor{c6contMid}{RGB}{170,200,240}
-\definecolor{c6contInner}{RGB}{120,165,220}
-\definecolor{c6contCore}{RGB}{56,103,170}
-\definecolor{c6stepBlue}{RGB}{30,80,160}
-\begin{tikzpicture}[x=1.8cm,y=1.8cm,font=\small]
-%% Filled contour rings (outer to inner)
-\fill[c6contOuter]  (0,0) ellipse ({1.5*2.6} and {2.6});
-\fill[c6contMid]    (0,0) ellipse ({1.5*2.0} and {2.0});
-\fill[c6contInner]  (0,0) ellipse ({1.5*1.4} and {1.4});
-\fill[c6contCore!30](0,0) ellipse ({1.5*0.8} and {0.8});
-\fill[white]         (0,0) ellipse ({1.5*0.35} and {0.35});
-%% Contour outlines
-\foreach \r in {0.8,1.4,2.0,2.6}
-  \draw[white, line width=0.6pt] (0,0) ellipse ({1.5*\r} and {\r});
-%% Gradient descent path
-\filldraw[fill=white, draw=c6stepBlue, thick] (-2.4,1.6) circle (3pt);
-\draw[-Latex, c6stepBlue, thick, line width=1.2pt] (-2.4,1.6) -- (-1.5,1.0);
-\draw[-Latex, c6stepBlue, thick, line width=1.2pt] (-1.5,1.0) -- (-0.8,0.5);
-\draw[-Latex, c6stepBlue, thick, line width=1.2pt] (-0.8,0.5) -- (-0.25,0.18);
-\filldraw[c6stepBlue] (-1.5,1.0) circle (2pt);
-\filldraw[c6stepBlue] (-0.8,0.5) circle (2pt);
-%% Minimum marker
-\filldraw[fill=white, draw=black, thick] (0,0) circle (2.5pt);
-\node[font=\small\bfseries, black!70] at (0.0,-0.55) {minimum};
-%% Labels
-\node[font=\footnotesize, c6stepBlue, anchor=south] at (-2.4,1.85) {start};
-\node[font=\small, black!60, anchor=south west] at (-2.8,2.8) {follow the local slope};
-%% Loss level labels - right side, stacked vertically
-\node[font=\footnotesize, black!50, anchor=west] at (4.2, 1.0) {\textit{higher loss}};
-\draw[->, thin, black!40] (4.1, 1.0) -- (3.4, 1.0);
-\node[font=\footnotesize, black!50, anchor=west] at (4.2,-1.0) {\textit{lower loss}};
-\draw[->, thin, black!40] (4.1,-1.0) -- (1.6,-0.55);
-\end{tikzpicture}%
-}
-\caption{Gradient descent is repeated local correction, not global magic. Each update uses nearby slope information to move toward lower loss.}
-\label{fig:gradient-descent-surface}
-\end{figure}
-
-The operational pipeline of training is then:
-\begin{itemize}[leftmargin=*]
-\item compute a forward pass,
-\item compute a loss,
-\item push error information backward,
-\item update parameters,
-\item check validation behavior.
-\end{itemize}
-
-Every later training detail---learning rate, AdamW, mini-batches, batch normalization, regularization---modifies this loop rather than replacing it.
-
-The minimum mental model is forward pass, loss, gradient signal, parameter update, validation check. Optimizers, normalization layers, residual connections, dropout, augmentation, and schedules are tools for making that loop behave better. Be able to explain the loop before trying to remember the tool list.
-
-\begin{codeexample}[caption={A generic neural training loop}]
-initialize parameters
-for epoch in range(num_epochs):
-    for batch in training_data:
-        predictions = model(batch.inputs)
-        loss = objective(predictions, batch.targets)
-        compute gradients of loss with respect to parameters
-        update parameters using optimizer
-    evaluate on validation data
-\end{codeexample}
-
-One full-batch gradient-descent step on $n$ examples with $p$ parameters costs $O(np)$ time: a forward pass touches every parameter for every example, and reverse-mode automatic differentiation (backpropagation) costs the same as one forward pass up to a small constant. Memory is $O(p + n \cdot a)$, where $a$ is the activation size per example---activations dominate the memory bill on deep networks. A mini-batch step on batch size $B$ costs $O(Bp)$ time and $O(p + B \cdot a)$ memory, which is why batch size is the first knob that controls peak memory. The number of gradient steps needed to reach a target loss is a separate question---it depends on the loss surface, the learning-rate schedule, and the optimizer---and is what later sections of the chapter are really about.
-
-\begin{figure}[t]
-\centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  x=1cm,
-  y=1cm,
-  font=\small,
-  box/.style={draw, rounded corners, align=center, minimum width=2.35cm, minimum height=0.85cm},
-  note/.style={font=\footnotesize, text=black!70}
-]
-\node[box] (data) at (0,0) {load batch};
-\node[box] (forward) at (3.1,0) {forward pass};
-\node[box] (loss) at (6.2,0) {compute loss};
-\node[box] (backward) at (9.3,0) {backward pass};
-\node[box] (update) at (12.4,0) {update weights};
-\node[box] (validate) at (6.2,-2.25) {validation check};
-
-\draw[-Latex, thick] (data) -- (forward);
-\draw[-Latex, thick] (forward) -- (loss);
-\draw[-Latex, thick] (loss) -- (backward);
-\draw[-Latex, thick] (backward) -- (update);
-
-\draw[-Latex, thick] (update.south) |- node[pos=0.22, right, note] {after last batch} (validate.east);
-\draw[-Latex, thick] (validate.west) -| node[pos=0.22, below, note] {start next epoch} (data.south);
-
-\draw[rounded corners=6pt, dashed, black!35] (-1.35,0.95) rectangle (13.75,-0.95);
-\node[note] at (6.2,1.35) {repeat across training batches inside one epoch};
-\end{tikzpicture}%
-}
-\caption{The training loop is short, but each stage has a distinct role. Batch updates repeat inside an epoch, and validation runs after the training batches for that epoch. You should be able to explain what changes during the forward pass, backward pass, and update step.}
-\label{fig:training-loop-flow}
-\end{figure}
-
-\subsection{Learning Rate}
-
-The learning rate controls step size. Too small, and training becomes painfully slow. Too large, and optimization overshoots good regions and grows unstable. This is one reason neural training is partly a modeling problem and partly an optimization problem: the architecture may be sound while the training procedure is poor.
-
-In practice, the learning rate is rarely held constant. Common schedules include \emph{step decay} (halve the rate every $k$ epochs), \emph{cosine annealing} (smoothly decrease to near zero), and \emph{warmup} (start small, ramp up, then decay). The right schedule depends on the problem; the key insight is that the best rate for early training is often too large for fine-tuning near a minimum.
-
-\begin{figure}[t]
-\centering
-\definecolor{c6lrSlow}{RGB}{56,103,170}
-\definecolor{c6lrGood}{RGB}{26,112,64}
-\definecolor{c6lrFast}{RGB}{180,40,40}
-\definecolor{c6lrSlowBg}{RGB}{220,233,251}
-\definecolor{c6lrGoodBg}{RGB}{210,238,220}
-\definecolor{c6lrFastBg}{RGB}{254,216,216}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1.4cm,y=3.0cm,font=\small,
-  panel/.style={rounded corners=4pt}]
-%% ── Panel A: too small ──────────────────────────────────────
-\begin{scope}
-  \fill[c6lrSlowBg, panel] (-3.4,-0.5) rectangle (3.4,4.4);
-  \node[c6lrSlow, font=\small\bfseries] at (0,4.0) {too small};
-  \draw[->,black!60] (-3.0,0) -- (3.0,0);
-  \draw[->,black!60] (0,0) -- (0,3.6) node[above right, font=\footnotesize, black!50] {loss};
-  \draw[black!40, thick, domain=-2.6:2.6, samples=60] plot (\x,{0.4*\x*\x + 0.3});
-  %% Tiny steps barely moving
-  \filldraw[fill=white, draw=c6lrSlow, thick] (-2.0,1.9) circle (2.5pt);
-  \filldraw[c6lrSlow] (-1.6,1.32) circle (2pt);
-  \filldraw[c6lrSlow] (-1.3,0.98) circle (2pt);
-  \filldraw[c6lrSlow] (-1.05,0.74) circle (2pt);
-  \draw[-Latex, c6lrSlow, thick, line width=1.1pt] (-2.0,1.9) -- (-1.6,1.32);
-  \draw[-Latex, c6lrSlow, thick, line width=1.1pt] (-1.6,1.32) -- (-1.3,0.98);
-  \draw[-Latex, c6lrSlow, thick, line width=1.1pt] (-1.3,0.98) -- (-1.05,0.74);
-  \node[font=\footnotesize, c6lrSlow] at (1.5,2.4) {slow progress};
-\end{scope}
-%% ── Panel B: good ───────────────────────────────────────────
-\begin{scope}[xshift=7.5cm]
-  \fill[c6lrGoodBg, panel] (-3.4,-0.5) rectangle (3.4,4.4);
-  \node[c6lrGood, font=\small\bfseries] at (0,4.0) {good};
-  \draw[->,black!60] (-3.0,0) -- (3.0,0);
-  \draw[->,black!60] (0,0) -- (0,3.6) node[above right, font=\footnotesize, black!50] {loss};
-  \draw[black!40, thick, domain=-2.6:2.6, samples=60] plot (\x,{0.4*\x*\x + 0.3});
-  %% Smooth convergence
-  \filldraw[fill=white, draw=c6lrGood, thick] (-2.0,1.9) circle (2.5pt);
-  \filldraw[c6lrGood] (-0.8,0.56) circle (2pt);
-  \filldraw[c6lrGood] (-0.15,0.31) circle (2pt);
-  \draw[-Latex, c6lrGood, thick, line width=1.1pt] (-2.0,1.9) -- (-0.8,0.56);
-  \draw[-Latex, c6lrGood, thick, line width=1.1pt] (-0.8,0.56) -- (-0.15,0.31);
-  \node[font=\footnotesize, c6lrGood] at (1.5,2.4) {steady descent};
-\end{scope}
-%% ── Panel C: too large ──────────────────────────────────────
-\begin{scope}[xshift=15cm]
-  \fill[c6lrFastBg, panel] (-3.4,-0.5) rectangle (3.4,4.4);
-  \node[c6lrFast, font=\small\bfseries] at (0,4.0) {too large};
-  \draw[->,black!60] (-3.0,0) -- (3.0,0);
-  \draw[->,black!60] (0,0) -- (0,3.6) node[above right, font=\footnotesize, black!50] {loss};
-  \draw[black!40, thick, domain=-2.6:2.6, samples=60] plot (\x,{0.4*\x*\x + 0.3});
-  %% Overshooting, bouncing
-  \filldraw[fill=white, draw=c6lrFast, thick] (-2.0,1.9) circle (2.5pt);
-  \filldraw[c6lrFast] (1.6,1.32) circle (2pt);
-  \filldraw[c6lrFast] (-1.4,1.08) circle (2pt);
-  \draw[-Latex, c6lrFast, thick, line width=1.1pt] (-2.0,1.9) -- (1.6,1.32);
-  \draw[-Latex, c6lrFast, thick, line width=1.1pt] (1.6,1.32) -- (-1.4,1.08);
-  \node[font=\footnotesize, c6lrFast] at (1.5,2.4) {overshoots};
-\end{scope}
-\end{tikzpicture}%
-}
-\caption{Step size is part of the training design. Too small wastes computation; too large bounces across good regions instead of settling into them.}
-\label{fig:learning-rate-cases}
-\end{figure}
-
-\subsection{Adaptive Optimization: Momentum, Adam, and AdamW}
-
-The learning rate sets step size, but it does not say how to shape the step when the loss surface is uneven. Adaptive optimizers try to make optimization less brittle by using recent gradient information to smooth motion or scale updates per parameter.
-
-\textbf{Momentum} accumulates a running direction of travel. If successive gradients point roughly the same way, momentum keeps the update moving that way instead of restarting at every batch. If gradients alternate direction, momentum damps the zig-zag. The idea is simple: do not treat the latest gradient as the entire story.
-
-\textbf{Adam} adds a second idea: keep running statistics of both the gradient and its squared magnitude. The first tracks direction; the second tracks scale. Parameters with consistently large gradients get smaller effective steps; parameters with consistently small or noisy gradients get more usable steps. In practice, this often makes early training easier and less sensitive to a single global step size.
-
-\textbf{AdamW} is Adam with decoupled weight decay. It keeps the adaptive step logic but separates weight decay from the gradient update itself. The separation matters because weight decay is a regularization choice, not a disguised learning-rate trick. Read AdamW as saying: ``adapt the step, but still regularize the weights in the intended way.''
-
-\begin{example}[A One-Coordinate Optimizer Intuition]
-Suppose one weight sees successive gradients \(8,7,9\), while another sees \(0.2,0.1,0.3\). Plain gradient descent applies the same global learning rate to both. Momentum treats the first sequence as persistent downhill evidence and keeps velocity in that direction instead of restarting every step. Adam goes further by rescaling the coordinates: the large-gradient weight gets a more conservative effective step, while the small-gradient weight is not drowned out by the same global rate. The point is not that Adam knows the right answer; it is that different coordinates can require different step behavior.
-\end{example}
-
-\begin{codeexample}[caption={A compact adaptive-update skeleton}]
-initialize parameters
-initialize first_moment and second_moment to zero
-initialize timestep = 0
-for each minibatch gradient grad:
-    timestep = timestep + 1
-    reference_parameters = parameters
-    first_moment = beta1 * first_moment + (1 - beta1) * grad
-    second_moment = beta2 * second_moment + (1 - beta2) * (grad * grad)
-    debiased_first = first_moment / (1 - beta1^timestep)
-    debiased_second = second_moment / (1 - beta2^timestep)
-    parameters = parameters - learning_rate * debiased_first / (sqrt(debiased_second) + epsilon)
-    if using AdamW:
-        parameters = parameters - learning_rate * weight_decay * reference_parameters
-\end{codeexample}
-
-\textbf{Why the bias-correction divisor (Extension).} The exponential moving averages $m_t = \beta_1 m_{t-1} + (1 - \beta_1) g_t$ and $v_t = \beta_2 v_{t-1} + (1 - \beta_2) g_t^2$ start at $m_0 = v_0 = 0$, so for small $t$ they are biased toward zero --- an average that is supposed to estimate the gradient is dragged down by the zero start. Unrolling the recursion gives
-\[
-m_t = (1 - \beta_1)\sum_{s=1}^{t} \beta_1^{\,t-s}\, g_s, \qquad
-\mathbb{E}[m_t] = \bigl(1 - \beta_1^{\,t}\bigr)\, \mathbb{E}[g].
-\]
-Dividing by $(1 - \beta_1^{\,t})$ produces $\hat m_t = m_t / (1 - \beta_1^{\,t})$ with $\mathbb{E}[\hat m_t] = \mathbb{E}[g]$. The same trick fixes the second moment with $(1 - \beta_2^{\,t})$. The correction matters most in the first few hundred steps, when $\beta^t$ is still appreciable; once $t$ is large, both divisors approach $1$ and the corrected and uncorrected estimates coincide. This is why the Adam paper \citep{kingma2015adam} emphasizes that the trick lets training start with a stable effective step size rather than a tiny one. AdamW \citep{loshchilov2019adamw} keeps this machinery and separates weight decay from the gradient update so that regularization is not implicitly rescaled by the per-parameter adaptive step.
-
-Momentum and Adam-like methods help most when optimization is noisy, poorly scaled, or sensitive to a single global step size. They do not fix label noise, leakage, a broken loss-output match, or a model too weak to represent the task.
-
-\begin{example}[When Adam Helps and When It Does Not]
-Suppose a model trains erratically because different parameters receive gradients on very different scales. Adam often stabilizes that situation quickly. But if the labels are wrong or the output layer does not match the task, Adam can produce a confident failure faster than SGD. A better optimizer is not a substitute for correct problem formulation.
-\end{example}
-
-\subsection{Optimization Failure Versus Generalization Failure}
-
-When a neural network performs poorly, the cause is usually one of two very different problems. Conflating them wastes effort because the remedies differ.
-
-\textbf{Optimization failure} means the model cannot fit the training signal at all. Training loss stays high, barely decreases, or fluctuates without settling. The model is not learning the mapping the data contains. Common causes: a learning rate too large or too small, a weight initialization that places the network in a poor region, a mismatch between the output layer and the loss function, or label corruption that blocks any consistent rule from forming.
-
-\textbf{Generalization failure} means the model fits the training data well but fails on new examples. Training loss is low; validation loss is high or diverges from training loss as training continues. The model memorizes rather than learning a pattern that transfers. Common causes: too much capacity relative to dataset size, insufficient regularization, insufficient data augmentation, or distribution shift between training and deployment.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{2.77cm}p{2.06cm}p{2.06cm}p{2.77cm}}
-\toprule
-Failure type & Training loss & Validation loss & Where to look \\
-\midrule
-Optimization failure & High & High & Learning rate, initialization, output layer, label noise \\
-Generalization failure & Low & High & Capacity, regularization, data size, augmentation \\
-Both & High & High & Fix optimization first, then assess generalization \\
-\bottomrule
-\end{tabular}
-\caption{Diagnosing the failure type before applying remedies saves considerable effort. Regularization does not help when the model cannot fit its training data in the first place.}
-\label{tab:opt-vs-gen-failure}
-\end{table}
-
-This distinction is foundational for debugging. Without it, you may add dropout when you should be fixing the output layer, or increase capacity when you should be adding regularization. Both changes would be reasonable in other contexts; neither helps when applied to the wrong failure type. The first debugging reflex should be diagnostic, not architectural.
-
-The cleanest diagnostic is to check whether the model can overfit a very small dataset. Take a batch of ten to twenty training examples and train until the loss is very low. If the model cannot overfit even ten examples, the problem is optimization. If it can overfit ten examples but does not generalize on the full dataset, the problem is generalization. The separation is not always perfect, but the small-batch overfit test is the fastest way to decide which problem to solve first.
-
-\subsection{Mini-Batches, Initialization, and Stability}
-
-Gradients could in principle be computed on the entire training set before every update. In practice, that is often too expensive. Mini-batches---small subsets of examples that produce noisy but useful gradient estimates---are the standard alternative. They give rise to stochastic gradient descent and its many variants.
-
-\begin{figure}[t]
-\centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1.0cm,y=2.4cm,font=\small]
-\draw[->] (0,0) -- (7.2,0) node[right] {epoch};
-\draw[->] (0,0) -- (0,1.2) node[above] {training loss};
-\draw[thick,blue] plot[smooth] coordinates {(0.4,0.95) (1.2,0.75) (2.0,0.62) (2.8,0.52) (3.6,0.45) (4.4,0.39) (5.2,0.34) (6.0,0.30)};
-\draw[thick,red] plot[smooth] coordinates {(0.4,1.00) (1.0,0.82) (1.6,0.78) (2.2,0.60) (2.8,0.63) (3.4,0.47) (4.0,0.51) (4.6,0.38) (5.2,0.40) (5.8,0.31)};
-\node[blue] at (5.6,0.55) {full-batch};
-\node[red] at (5.4,0.74) {mini-batch};
-\end{tikzpicture}%
-}
-\caption{Mini-batch updates make optimization noisier than full-batch updates. The noise is often acceptable and sometimes beneficial, but it changes how training curves should be read.}
-\label{fig:full-batch-vs-minibatch}
-\end{figure}
-
-Training also does not begin from nowhere. Parameters must be initialized, inputs scaled sensibly, and layers given signals of a manageable size. Bad initialization can produce activations that are too small, too large, or too similar, making optimization slow or unstable from the first step.
-
-If two hidden units start with identical weights and bias, they compute the same pre-activation on every example, produce the same activation, and receive the same gradient update. Gradient descent preserves the equality, so the two units never specialize; the network learns one feature twice. Random initialization breaks the symmetry by giving each unit a slightly different starting point, letting different hidden units move toward different useful features.
-
-\begin{example}[Three Bad Starts]
-If every hidden unit starts at zero, the layer stays symmetric and learns duplicate features. If the initial weights are very small, signals shrink as they pass through many layers and learning becomes sluggish. If the initial weights are very large, activations or gradients can explode or saturate. Good initialization is about scale and diversity at the same time. In practice, schemes such as He initialization (for ReLU networks) and Xavier initialization (for sigmoid/tanh networks) keep activations and gradients in a reasonable range through early training. Most frameworks apply sensible defaults, but awareness of the issue helps when debugging slow or unstable convergence.
-\end{example}
-
-\textbf{Where the He and Xavier scales come from (Extension).} The goal of initialization is to keep the variance of activations roughly constant from one layer to the next, so gradients neither vanish nor explode. Consider a single hidden unit with $n_{\text{in}}$ inputs, weights $w_j$ drawn i.i.d.\ with mean zero and variance $\mathrm{Var}(w)$, and inputs $x_j$ assumed roughly mean-zero with unit variance. The pre-activation $z = \sum_j w_j x_j$ has variance $n_{\text{in}} \cdot \mathrm{Var}(w)$ by independence. To keep $\mathrm{Var}(z) = 1$ we need $\mathrm{Var}(w) = 1/n_{\text{in}}$.
-
-For activations like sigmoid or tanh that are roughly linear near zero, this gives \emph{Xavier} initialization: $w_j \sim \mathcal{N}(0, 1/n_{\text{in}})$ (or the variant $2/(n_{\text{in}}+n_{\text{out}})$ that balances forward and backward variance). For ReLU activations, $\mathrm{ReLU}(z)$ zeros out the negative half of $z$, which halves the variance of the post-activation. \emph{He} initialization corrects for this by doubling the input scale: $w_j \sim \mathcal{N}(0, 2/n_{\text{in}})$. The recurrent message is simple --- match the initialization variance to what the next layer's activation actually preserves. Most frameworks pick the right scheme automatically when you declare the activation; the derivation matters when a layer behaves unusually (custom activations, residual connections that compound variance, or attention layers with their own normalization).
-
-\begin{warningbox}
-When you say ``the network did not work,'' the failure may live in the learning rate, initialization, batch setup, or data preprocessing rather than in the idea of the model itself.
-\end{warningbox}
-
-When a neural model fails early, check simple stability questions before redesigning the architecture. Were the inputs normalized? Is the learning rate reasonable? Are the initial weights making activations explode or vanish? Is the batch size so small that gradients are mostly noise?
-
-\subsection{Batch Normalization as Signal Stabilization}
-
-Batch normalization is another way to make optimization less brittle. It is a training-time rescaling step that normalizes intermediate activations using statistics from the current mini-batch, then restores flexibility with learned scale and shift parameters. If the hidden signals stay in a manageable range, the next layers see a more stable training problem.
-
-That description is enough for this book. The exact implementation is less important than the purpose: batch normalization reduces internal scale drift, which can make optimization smoother and allow larger learning rates. It is a training aid, not a cure-all.
-
-For mini-batch activations \(a_1,\ldots,a_m\), batch normalization computes
-\[
-\hat a_i = \frac{a_i-\mu_B}{\sqrt{\sigma_B^2+\varepsilon}},
-\qquad
-b_i = \gamma \hat a_i + \beta,
-\]
-where \(\mu_B\) and \(\sigma_B^2\) are the batch mean and variance, and \(\gamma,\beta\) are learned scale and shift parameters. The normalization stabilizes the signal; the learned affine step keeps the layer expressive.
-
-\begin{practicalnote}
-During training, batch normalization uses statistics (mean and variance) computed from the current mini-batch. At inference time, the model uses running averages accumulated during training. The asymmetry means a model can behave differently in training and inference modes---a source of subtle bugs at deployment. Always verify that your framework is set to evaluation mode before serving predictions.
-\end{practicalnote}
-
-\begin{failurebox}
-\textbf{Batch norm at small batch sizes.} The batch statistics $\mu_B, \sigma_B^2$ are estimated from whatever happens to be in the current minibatch. With batch size 4 or 8, those estimates are themselves noisy random variables, and the per-batch normalization is jittering rather than stabilizing the signal. Training loss starts to oscillate, accumulated running statistics drift, and validation behaviour at inference time --- where the noisy running statistics are now \emph{the} statistics --- can be substantially worse than training would suggest. The two common responses are to switch the normalization scheme (LayerNorm, GroupNorm, InstanceNorm), each of which normalizes along an axis that does not depend on the minibatch, or to use BatchNorm with gradient accumulation that effectively enlarges the batch. ``Performance is unstable at small batch size'' should be the first hypothesis when small-batch experiments behave worse than large-batch ones; it is rarely the model.
-\end{failurebox}
-
-\begin{figure}[t]
-\centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm,y=1cm,font=\small,
-  box/.style={draw, rounded corners, align=center, minimum width=2.7cm, minimum height=0.9cm, fill=black!4}]
-\node[box] (raw) at (0,0) {hidden activations};
-\node[box] (norm) at (4.0,0) {normalize\\by batch statistics};
-\node[box] (scale) at (8.0,0) {learned scale\\and shift};
-\node[box] (next) at (12.0,0) {more stable\\next layer};
-\draw[-Latex, thick] (raw) -- (norm);
-\draw[-Latex, thick] (norm) -- (scale);
-\draw[-Latex, thick] (scale) -- (next);
-\end{tikzpicture}%
-}
-\caption{Batch normalization aims to stabilize the signal passing through the network so later layers do not have to adapt to wildly changing activation scales.}
-\label{fig:batch-norm-stability}
-\end{figure}
-
-\begin{example}[What Batch Normalization Fixes, and What It Does Not]
-If hidden activations are drifting in scale from batch to batch, batch normalization can make training smoother and less sensitive to the exact learning rate. For a mini-batch with activations \(2,4,6\), the layer first recenters them around zero before the learned rescaling step. The next layer therefore reacts to relative variation rather than raw drift in magnitude. Batch normalization still does not fix a wrong objective, a poor label set, or a model that lacks the capacity to learn the task in the first place.
-\end{example}
-
-Batch normalization stabilizes the signal within a layer. A complementary technique called a \emph{residual connection} (or skip connection) helps the signal flow between layers. When shapes match, instead of computing $h = f(x)$, the layer computes $h = f(x) + x$, adding the input directly to the output. When shapes do not match, architectures typically insert a projection on the skip path before adding. If the transformation $f$ is unhelpful, the gradient can still flow through the identity or projected branch, making deep networks much easier to train. Residual connections are a key design principle behind ResNets in vision and many transformer blocks in language.
-
-\subsection{Debugging a Broken Training Run}
-
-A common reflex on a bad neural result is to change the architecture first. That is usually too early. The disciplined first question is: what kind of failure are we seeing?
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.41cm}>{\raggedright\arraybackslash}p{3.33cm}>{\raggedright\arraybackslash}p{3.49cm}@{}}
-\toprule
-Observed pattern & First interpretation to test & Better first response than ``change the architecture'' \\
-\midrule
-Training loss hardly moves & optimization setup may be broken & check loss-output alignment, learning rate, normalization, and whether the model can overfit one tiny batch \\
-Training loss falls but validation is poor & optimization is working but generalization is weak & inspect data quality, regularization, augmentation, label noise, and evaluation split logic \\
-Loss becomes NaN or oscillates wildly & updates are unstable & lower the learning rate, inspect initialization, check activation scale, and verify preprocessing \\
-Training and validation both look strangely strong immediately & leakage or target mismatch may exist & audit splits, labels, duplicated examples, and feature construction before celebrating \\
-\bottomrule
-\end{tabular}
-\caption{Neural debugging improves when you distinguish optimization failure from generalization failure instead of treating every weak result as an architecture problem.}
-\label{tab:neural-debugging-patterns}
-\end{table}
-
-This distinction is foundational. If the network cannot even reduce the training objective, there is no point debating whether it overfits. If it fits training well but collapses on validation, the training loop is not the first suspect. Different failures demand different questions.
-
-\begin{codeexample}[caption={A minimal debugging sequence before redesigning the network}]
-pick one tiny batch of examples
-verify that targets, output layer, and loss function match
-try to overfit that tiny batch nearly perfectly
-if this fails:
-    inspect learning rate, normalization, initialization, and gradient scale
-if this succeeds but validation is weak:
-    inspect data quality, slice coverage, regularization, and leakage
-change one training choice at a time and record the effect
-\end{codeexample}
-
-The tiny-batch test is especially valuable because it removes excuses. A reasonably implemented network with aligned outputs and targets should be able to memorize a very small batch. If it cannot, the problem usually lives in the training setup rather than in the grand modeling idea.
-
-\begin{failurepattern}[Vanishing and exploding gradients]
-The earlier ``dead ReLU'' note and this paragraph on gradient clipping are two surfaces of the same underlying failure: as a gradient is propagated backward through many layers, the per-layer Jacobians multiply, and the product can either shrink toward zero (\emph{vanishing}) or grow without bound (\emph{exploding}). Vanishing gradients mean the early layers stop learning even though the loss still has signal to give them; exploding gradients mean a single batch's update can wipe out everything the network had learned. The classical symptoms: training loss plateaus at a non-trivial value while the gradient norm at the first layer is effectively zero (vanishing), or training loss spikes to \texttt{NaN} after a few seemingly normal updates (exploding). The remedies attack the multiplicative chain at different points --- careful initialization (He / Xavier) controls the per-layer variance contribution, normalization layers (BatchNorm, LayerNorm) bound the per-layer activation scale, residual connections short-circuit the multiplicative product with an additive identity path, and gradient clipping caps the worst case. Each fix is a different way of saying ``do not let a single layer's Jacobian dominate the signal.'' This phenomenon also explains why training recurrent networks over long sequences is hard --- the same Jacobian appears repeatedly in the time-direction product (see the BPTT discussion in Chapter~\ref{ch:audio-time}).
-\end{failurepattern}
-
-A simple practical remedy for exploding gradients is \emph{gradient clipping}: if the norm of the gradient vector exceeds a threshold, rescale it to that threshold before applying the update. This does not fix the underlying cause, but it prevents catastrophically large steps.
-
-\begin{decisionbox}
-Before increasing model depth or width, ask whether the run failed because the model could not fit the training signal at all, or because it fit the training signal and failed to generalize. These are different problems and call for different interventions.
-\end{decisionbox}
-
-\textbf{Tempting mistake $\rightarrow$ corrected reasoning.} Tempting mistake: ``Validation is bad, so the architecture must be wrong.'' Corrected reasoning: ``First separate optimization failure from generalization failure. If the network cannot overfit a tiny batch, debug the training setup. If it can, inspect data quality, split logic, regularization, and evaluation before redesigning the model family.''
-
-Once the training loop behaves sensibly, the remaining conceptual question is how the error signal reaches the earlier layers that built the internal representation in the first place.
-
-\section{Backpropagation as Credit Assignment}
-
-\begin{definition}[Backpropagation]
-Backpropagation is the efficient procedure for computing how the loss changes with respect to every parameter in a layered network by repeatedly applying the chain rule from the output layer backward.
-\end{definition}
-
-Conceptually, backpropagation solves one clear problem: when the network makes an error, which earlier computations deserve credit or blame, and by how much?
-
-Backpropagation is efficient because it computes gradients for \emph{every} parameter simultaneously with only one forward pass and one backward pass. The naive alternative---perturbing each parameter individually and measuring the change in loss---requires one forward pass per parameter, which is impractical for networks with millions of weights.
-
-\begin{figure}[t]
-\centering
-\definecolor{c6fwdBlue}{RGB}{56,103,170}
-\definecolor{c6bwdRed}{RGB}{180,40,40}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  circ/.style={draw=black!70, circle, minimum size=0.85cm, thick, fill=white}
-]
-%% Chain nodes on a horizontal track at y=2.0
-%% Inputs stacked to the left at x=0; z merges them at x=2.8
-\node[circ] (x1) at (0.0, 3.0) {$x_1$};
-\node[circ] (x2) at (0.0, 1.0) {$x_2$};
-\node[circ] (z)  at (3.2, 2.0) {$z$};
-\node[circ] (h)  at (6.0, 2.0) {$h$};
-\node[circ] (s)  at (8.8, 2.0) {$s$};
-\node[circ] (l)  at (11.6,2.0) {$L$};
-
-%% ---- Forward pass: blue arrows running ABOVE the node centres ----
-\draw[-Latex, thick, c6fwdBlue] (x1) -- (z);
-\draw[-Latex, thick, c6fwdBlue] (x2) -- (z);
-%% Arrows along chain with labels ABOVE the arrows
-\draw[-Latex, thick, c6fwdBlue] (z) --
-  node[above, font=\footnotesize, c6fwdBlue] {ReLU} (h);
-\draw[-Latex, thick, c6fwdBlue] (h) -- (s);
-\draw[-Latex, thick, c6fwdBlue] (s) -- (l);
-
-%% ---- Backward pass: red dashed arrows looping FAR BELOW ----
-%% Use large bend so arcs clear the node circles completely
-\draw[-Latex, thick, c6bwdRed, dashed]
-  (l.south) .. controls (10.2,0.2) and (9.4,0.2) .. (s.south);
-\node[c6bwdRed, font=\footnotesize] at (10.2, -0.1) {$\tfrac{dL}{ds}$};
-
-\draw[-Latex, thick, c6bwdRed, dashed]
-  (s.south) .. controls (7.4,0.0) and (6.6,0.0) .. (h.south);
-\node[c6bwdRed, font=\footnotesize] at (7.4, -0.3) {$\tfrac{dL}{dh}$};
-
-\draw[-Latex, thick, c6bwdRed, dashed]
-  (h.south) .. controls (4.6,0.0) and (3.8,0.0) .. (z.south);
-\node[c6bwdRed, font=\footnotesize] at (4.6, -0.3) {$\tfrac{dL}{dz}$};
-
-%% From z back to inputs - route below to avoid "input gradients" label
-\draw[-Latex, thick, c6bwdRed, dashed]
-  (z.west) .. controls (2.0,1.2) and (0.8,1.2) .. (x1.south);
-\draw[-Latex, thick, c6bwdRed, dashed]
-  (z.west) .. controls (2.0,0.6) and (0.8,0.6) .. (x2.south);
-%% "input gradients" label placed below x2, clear of all arrows
-\node[c6bwdRed, font=\footnotesize, align=center] at (1.3, -0.3)
-  {input gradients};
-
-%% ---- Section labels ----
-\node[c6fwdBlue, font=\small\bfseries] at (5.8, 4.2) {forward computation};
-\node[c6bwdRed,  font=\small\bfseries] at (7.5,-1.2) {backward credit assignment};
-\end{tikzpicture}%
-}
-\caption{Backpropagation is easiest to understand as a computational graph. The forward pass creates values; the backward pass distributes the loss signal through those same dependencies in reverse.}
-\label{fig:computational-graph-backprop}
-\end{figure}
-
-\subsection{A Small Worked Gradient Example}
-
-The next calculation switches to a one-hidden-unit squared-error network so every derivative fits on the page. It is a side example for the mechanics of backpropagation, not a replacement for the running escalation classifier. The same reverse-credit idea applies to the sigmoid cross-entropy network above; only the local derivatives change.
-
-Consider a network with one ReLU hidden unit:
-\[
-z = w_1x_1 + w_2x_2 + b_h,
-\qquad
-h = \mathrm{ReLU}(z),
-\]
-\[
-s = vh + b_o,
-\qquad
-L = \frac{1}{2}(s-y)^2.
-\]
-Take one example with input $(x_1,x_2)=(2,1)$ and target $y=1$. Let the current parameter values be
-\begin{align*}
-w_1 &= 0.5, & w_2 &= 1.0, & b_h &= -1.0, \\
-v   &= 1.2, & b_o &= -0.3.
-\end{align*}
-
-First perform the forward pass:
-\[
-z = 0.5(2) + 1.0(1) - 1.0 = 1,
-\qquad
-h = \mathrm{ReLU}(1)=1,
-\]
-\[
-s = 1.2(1) - 0.3 = 0.9,
-\qquad
-L = \frac{1}{2}(0.9-1)^2 = 0.005.
-\]
-
-Now move backward through the computation. Start with the loss derivative with respect to the score:
-\[
-\frac{dL}{ds} = s-y = 0.9-1 = -0.1.
-\]
-Increasing the score slightly would reduce the loss.
-
-The output weight $v$ multiplies $h$, so
-\[
-\frac{dL}{dv} = \frac{dL}{ds}\cdot h = (-0.1)(1) = -0.1.
-\]
-The hidden activation affects the loss through the output layer, so
-\[
-\frac{dL}{dh} = \frac{dL}{ds}\cdot v = (-0.1)(1.2) = -0.12.
-\]
-Because $z=1>0$, the derivative of ReLU at this point is $1$, so
-\[
-\frac{dL}{dz} = \frac{dL}{dh}\cdot 1 = -0.12.
-\]
-Now the hidden-layer parameters follow directly:
-\[
-\frac{dL}{dw_1} = \frac{dL}{dz}\cdot x_1 = (-0.12)(2) = -0.24,
-\]
-\[
-\frac{dL}{dw_2} = \frac{dL}{dz}\cdot x_2 = (-0.12)(1) = -0.12,
-\]
-\[
-\frac{dL}{db_h} = \frac{dL}{dz} = -0.12.
-\]
-
-The output bias behaves similarly:
-\[
-\frac{dL}{db_o} = \frac{dL}{ds} = -0.1.
-\]
-
-This is backpropagation in miniature. The error signal starts at the loss, flows backward through the output computation, through the activation, and finally into the earlier weights and bias.
-
-To make the chain feel like learning rather than bookkeeping, take one gradient-descent step with learning rate \(\eta = 0.05\):
-\[
-w_1' = 0.512, \quad w_2' = 1.006,
-\]
-\[
-b_h' = -0.994, \quad v' = 1.205,
-\]
-\[
-b_o' = -0.3 - 0.05(-0.1) = -0.295.
-\]
-Now rerun the same example with the updated parameters:
-\begin{align*}
-z' &= 0.512(2) + 1.006(1) - 0.994 = 1.036, \\
-h' &= \mathrm{ReLU}(1.036) = 1.036,
-\end{align*}
-\begin{align*}
-s' &= 1.205(1.036) - 0.295 \approx 0.953, \\
-L' &= \tfrac{1}{2}(0.953-1)^2 \approx 0.0011.
-\end{align*}
-The loss fell from \(0.005\) to about \(0.0011\) in one step. That does not prove the network will generalize, but it shows the operational meaning of the gradients: they point toward a local parameter change that improves this example.
-
-\begin{advancednote}
-\textbf{Backpropagation is reverse-mode autodiff on a computational graph.} Every neural-network forward pass can be drawn as a directed acyclic graph (DAG) of elementary operations. Each node $v_i = f_i(\mathrm{parents}(v_i))$ records a numerical value and a local Jacobian $\partial v_i/\partial \mathrm{parents}(v_i)$ that depends only on inputs to that node. The forward pass is a topological traversal that computes $v_i$ for every node up to the scalar loss $L$. The backward pass walks the same graph in reverse topological order, propagating the adjoint $\bar v_i = \partial L/\partial v_i$ via the chain rule:
-\[
-\bar v_j \mathrel{+}= \bar v_i \cdot \frac{\partial v_i}{\partial v_j} \quad \text{for each edge } v_j \to v_i.
-\]
-The worked example above is exactly this rule, applied by hand to a tiny graph with one hidden unit.
-
-The complexity argument is now visible. The forward pass visits each edge once and performs one local operation; the backward pass visits each edge once and performs one local Jacobian--vector product (the adjoint times the local Jacobian). For the operations that dominate neural networks---matrix multiplication, elementwise nonlinearities, sums, broadcasts---the Jacobian--vector product costs the same big-$O$ as the forward operation itself (a matmul transpose is still a matmul; an elementwise derivative is still elementwise). Summed over all edges, the backward pass therefore costs the same big-$O$ as the forward pass, typically within a factor of two or three in wall time. This is the algorithmic content behind the earlier claim that ``backprop costs the same as forward.''
-
-The contrast with forward-mode AD explains why deep learning chose reverse mode. Forward-mode AD propagates \emph{tangents} $\partial v_i/\partial x$ alongside values during the forward sweep; one sweep gives the derivative of every output with respect to a \emph{single} input. It is efficient when the output dimension dwarfs the input dimension. Reverse mode propagates \emph{adjoints} $\partial L/\partial v_i$ backward; one backward sweep gives the derivative of a \emph{single} scalar output with respect to every input. It is efficient when the input dimension dwarfs the output dimension---exactly the neural-network regime, where one scalar loss depends on millions or billions of parameters. Running forward-mode on a modern network would require one sweep per parameter.
-
-\begin{quote}\itshape
-Backpropagation is not a special algorithm for neural networks---it is the chain rule, organized to fit memory and reuse.
-\end{quote}
-\end{advancednote}
-
-\subsection{What Changes If ReLU Is Off?}
-
-Now imagine the same network with a hidden pre-activation $z=-0.5$. Then $h=\mathrm{ReLU}(-0.5)=0$, and because $z<0$ the local derivative of ReLU is exactly $0$ at that point. The non-differentiability issue lives at $z=0$, not at negative inputs like this one. The backward chain therefore gives
-\[
-\frac{dL}{dz} = \frac{dL}{dh}\cdot 0 = 0.
-\]
-The gradients into the earlier hidden-layer weights also become zero for that example. Whether a ReLU unit is active changes not just the forward value but whether any gradient signal flows through that pathway on that example.
-
-\begin{failurebox}
-Backpropagation does not guarantee good learning. It only tells you the local direction of improvement. If the data is weak, the model is badly chosen, the learning rate is poor, or the objective is mismatched to the task, the network can still fail badly while every gradient is computed correctly.
-\end{failurebox}
-
-In real implementations, automatic differentiation systems handle these gradient calculations. The convenience is useful, but understand the manual logic anyway. Otherwise training becomes a black box: loss goes in, gradients come out, and no one can explain why.
-
-\begin{codeexample}[caption={From scratch: one backpropagation step through the output layer}]
-# Continue from the forward pass above.
-# Restate the values computed there for clarity.
-# h1, h2: hidden unit activations (post-ReLU)
-# v1, v2, b_out: output-layer weights and bias
-# s: output score (pre-sigmoid);  p: predicted probability
-# y: true label (1 = positive class)
-y = 1
-
-# --- Binary cross-entropy loss (single example) ---
-# L = -(y * log(p) + (1-y) * log(1-p))
-import math
-loss = -(y * math.log(p) + (1 - y) * math.log(1 - p))
-print("binary cross-entropy loss:  ", round(loss, 4))
-
-# --- Gradient at the output layer ---
-# For sigmoid + cross-entropy the combined gradient simplifies to (p - y).
-dL_ds = p - y          # dL/ds: how the loss changes with the pre-sigmoid score
-print("dL/ds (output gradient):    ", round(dL_ds, 4))
-
-# Gradient w.r.t. output weight v1 (chain rule: dL/dv1 = dL/ds * ds/dv1 = dL/ds * h1)
-dL_dv1 = dL_ds * h1    # credit assigned to v1
-print("dL/dv1:                     ", round(dL_dv1, 4))
-
-# --- Gradient flowing back to hidden unit 1 ---
-# dL/dh1 = dL/ds * ds/dh1 = dL/ds * v1
-dL_dh1 = dL_ds * v1    # error signal arriving at hidden unit 1
-print("dL/dh1:                     ", round(dL_dh1, 4))
-
-# Pass through ReLU: derivative is 1 if h1 > 0, else 0
-relu_gate = 1.0 if h1 > 0 else 0.0   # local gradient of ReLU
-dL_dz1 = dL_dh1 * relu_gate           # dL/dz1
-print("dL/dz1 (through ReLU gate): ", round(dL_dz1, 4))
-
-# Gradient w.r.t. the hidden weight w11 (dL/dw11 = dL/dz1 * dz1/dw11 = dL/dz1 * x1)
-dL_dw11 = dL_dz1 * x1
-print("dL/dw11:                    ", round(dL_dw11, 4))
-
-# --- One gradient-descent update (learning rate = 0.1) ---
-learning_rate = 0.1
-new_v1  = v1  - learning_rate * dL_dv1    # output weight update
-new_w11 = w11 - learning_rate * dL_dw11   # hidden weight update
-print("updated v1:                 ", round(new_v1, 4))
-print("updated w11:                ", round(new_w11, 4))
-\end{codeexample}
-
-\begin{figure}[t]
-\centering
-\definecolor{c6fwdBlue}{RGB}{56,103,170}
-\definecolor{c6bwdRed}{RGB}{180,40,40}
-\definecolor{c6fwdBg}{RGB}{220,233,251}
-\definecolor{c6bwdBg}{RGB}{254,230,230}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[font=\small,
-  fwdarrow/.style={-Latex, thick, c6fwdBlue},
-  bwdarrow/.style={-Latex, thick, c6bwdRed},
-  box/.style={draw, rounded corners=4pt, align=center, minimum width=2.6cm,
-              minimum height=1.1cm, fill=c6fwdBg, draw=c6fwdBlue!60,
-              font=\small}]
-%% ── Boxes (left to right) ───────────────────────────────────
-\node[box] (w)   at (0.0, 0) {input weight\\$w_{11}$};
-\node[box] (h)   at (4.0, 0) {hidden unit\\$h_1$};
-\node[box] (out) at (8.0, 0) {output unit\\$s$};
-\node[box, fill=c6bwdBg, draw=c6bwdRed!50] (L) at (12.0, 0) {loss\\$\mathcal{L}$};
-%% ── Forward arrows (top, left to right) ─────────────────────
-\draw[fwdarrow] (w.east)   -- node[above, font=\footnotesize, c6fwdBlue] {forward} (h.west);
-\draw[fwdarrow] (h.east)   -- node[above, font=\footnotesize, c6fwdBlue] {forward} (out.west);
-\draw[fwdarrow] (out.east) -- node[above, font=\footnotesize, c6fwdBlue] {forward} (L.west);
-%% ── Backward gradient arrows (staggered depths) ────────────
-%% Loss → output (shallowest, y = -1.2)
-\draw[c6bwdRed, thick] (L.south) -- ++(0,-0.65) coordinate (bL1);
-\draw[bwdarrow] (bL1) -- node[below, font=\footnotesize, c6bwdRed]
-    {$\dfrac{\partial\mathcal{L}}{\partial s}=\hat{p}-y$}
-    (bL1 -| out.south) coordinate (bO1);
-\draw[c6bwdRed, thick, -Latex] (bO1) -- (out.south);
-%% Output → hidden (middle, y = -2.0)
-\draw[c6bwdRed, thick] ([xshift=-2pt]out.south) -- ++(0,-1.45) coordinate (bO2);
-\draw[bwdarrow] (bO2) -- node[below, font=\footnotesize, c6bwdRed]
-    {$\dfrac{\partial\mathcal{L}}{\partial h_1}$}
-    (bO2 -| h.south) coordinate (bH1);
-\draw[c6bwdRed, thick, -Latex] (bH1) -- ([xshift=2pt]h.south);
-%% Hidden → input weight (deepest, y = -2.8)
-\draw[c6bwdRed, thick] ([xshift=-2pt]h.south) -- ++(0,-2.25) coordinate (bH2);
-\draw[bwdarrow] (bH2) -- node[below, font=\footnotesize, c6bwdRed]
-    {$\dfrac{\partial\mathcal{L}}{\partial w_{11}}$}
-    (bH2 -| w.south) coordinate (bW1);
-\draw[c6bwdRed, thick, -Latex] (bW1) -- ([xshift=2pt]w.south);
-%% ── Row labels ──────────────────────────────────────────────
-\node[font=\footnotesize\bfseries, c6fwdBlue] at (6.0, 1.3) {forward pass};
-\node[font=\footnotesize\bfseries, c6bwdRed]  at (6.0,-4.0) {backward pass (gradient flow)};
-\end{tikzpicture}%
-}
-\caption{Backpropagation is credit assignment flowing backward through the network. Each arrow carries the gradient signal that tells one weight how much to adjust.}
-\label{fig:backprop-credit-flow}
-\end{figure}
-
-\section{Generalization Returns: Regularization as Bias Toward Stable Patterns}
-
-Neural networks are flexible enough to fit very complicated patterns. That flexibility is both powerful and dangerous. A large network can capture real structure, but it can also memorize accidents of the training set.
-
-The evaluation-discipline question from Chapter~\ref{ch:evaluation-discipline} returns in sharper form: are we reducing training loss in a way that helps on unseen data, or merely fitting noise more effectively?
-
-Read regularization not as a list of tricks but as a bias toward less brittle learned representations. These tools matter after the model can learn; they are not substitutes for fixing a broken optimization setup.
-
-\subsection{Weight Decay, Early Stopping, Dropout, and Augmentation}
-
-Several common tools control overfitting. \textbf{Weight decay} discourages large parameter values by penalizing them during optimization. \textbf{Early stopping} halts training when validation performance stops improving. \textbf{Dropout} randomly suppresses some activations during training so the network cannot rely too heavily on any one pathway. \textbf{Data augmentation} expands effective data variety by transforming inputs in label-preserving ways.
-
-The mechanisms differ but the purpose is the same: push the network toward patterns stable enough to survive outside the training sample.
-
-Dropout deserves one caution. It prevents a network from depending too heavily on one hidden pathway, but it does not create information that is absent from the data. If the core representation is wrong, dropout only regularizes a bad model.
-
-\begin{example}[What Dropout Actually Changes]
-Suppose a hidden layer produces activations \((1.2, 0.9, 0.0, 1.1)\). With dropout rate \(0.5\), one training step might keep only the first and fourth activations, while the next keeps the second and fourth. The next layer cannot rely on one fragile path always being present. Over many updates, the network is pushed to spread evidence across several features. Standard inverted-dropout implementations rescale the kept activations during training, so at inference all units are available again and the forward pass is unchanged.
-\end{example}
-
-\begin{figure}[t]
-\centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=0.9cm,y=3.0cm,font=\small]
-\draw[->] (0,0) -- (6.7,0) node[right] {epoch};
-\draw[->] (0,0) -- (0,1.1) node[above] {loss};
-\draw[thick,blue] plot[smooth] coordinates {(0.5,0.95) (1.5,0.72) (2.5,0.55) (3.5,0.40) (4.5,0.30) (5.5,0.22)};
-\draw[thick,red] plot[smooth] coordinates {(0.5,1.00) (1.5,0.78) (2.5,0.60) (3.5,0.52) (4.5,0.58) (5.5,0.70)};
-\draw[dashed] (3.5,0) -- (3.5,0.95);
-\node[blue] at (5.4,0.34) {training};
-\node[red] at (5.5,0.75) {validation};
-\node[align=center] at (4.35,0.15) {stop\\here};
-\end{tikzpicture}%
-}
-\caption{Early stopping marks the point where additional training mainly improves fit to the seen data rather than generalization to new data.}
-\label{fig:early-stopping-curve}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\definecolor{c6regBg}{RGB}{220,233,251}
-\definecolor{c6regLine}{RGB}{56,103,170}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  rbox/.style={draw=c6regLine, fill=c6regBg, rounded corners,
-               align=center, minimum width=3.6cm, minimum height=1.0cm,
-               text=c6regLine}
-]
-%% Four boxes spaced 4.4 cm apart (gap = 4.4 - 3.6 = 0.8 cm clear)
-\node[rbox] at (0.0, 0) {weight decay\\{\footnotesize smaller weights}};
-\node[rbox] at (4.4, 0) {dropout\\{\footnotesize less co-adaptation}};
-\node[rbox] at (8.8, 0) {augmentation\\{\footnotesize more input variety}};
-\node[rbox] at (13.2,0) {early stopping\\{\footnotesize halt before memorization}};
-\end{tikzpicture}%
-}
-\caption{These regularization tools work differently, but each biases learning toward patterns that remain useful outside the training sample.}
-\label{fig:regularization-toolbox}
-\end{figure}
-
-\begin{example}[A Familiar Tradeoff]
-Suppose an augmented image model scores slightly lower on clean validation images than a non-augmented model but performs much better on shifted or noisy images. That is not a contradiction. The model traded specialization for robustness. Honest reporting describes both sides of that tradeoff.
-\end{example}
-
-\section{Capacity, Data Regime, and Label Noise}
-
-``Use a bigger model'' is not universal advice. Model capacity interacts with dataset size, label quality, and augmentation quality in ways that make the same capacity increase beneficial in one regime and harmful in another.
-
-\textbf{Large capacity with sufficient clean data.} When the dataset is large and labels are reliable, a higher-capacity model can find finer structure and use its additional parameters productively. Adding layers, widening the network, or removing regularization may all help in this regime because the training signal is abundant and trustworthy.
-
-\textbf{Large capacity with limited clean data.} When the dataset is small or labels are sparse, extra capacity tends to produce memorization rather than generalization. The model learns idiosyncratic patterns of the training examples instead of the underlying structure. Here, regularization, early stopping, data augmentation, and smaller architectures help more than additional capacity.
-
-\textbf{High label noise.} When labels contain substantial errors---from careless annotation, ambiguous task definitions, or label leakage---a higher-capacity model is more likely to memorize those errors than a lower-capacity one. The large model has the flexibility to overfit the noise; the small model may not. Assess and improve label quality before architectural decisions, because adding layers to fix a label-noise problem usually makes things worse.
-
-\begin{figure}[t]
-\centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[font=\small, x=3.5cm, y=2.0cm]
-\draw[->] (0,0) -- (2.6,0) node[right] {dataset size};
-\draw[->] (0,0) -- (0,2.4) node[above] {validation performance};
-\draw[thick, blue] plot[smooth] coordinates {(0.1,0.3) (0.5,0.9) (1.0,1.4) (1.8,1.8) (2.4,2.0)};
-\draw[thick, red, dashed] plot[smooth] coordinates {(0.1,0.1) (0.5,0.5) (1.0,1.2) (1.8,1.9) (2.4,2.1)};
-\node[blue, align=left] at (1.6,0.5) {small model};
-\node[red, align=left] at (2.0,1.1) {large model};
-\end{tikzpicture}%
-}
-\caption{The benefit of increased model capacity depends on data scale. A larger model does not uniformly outperform a smaller one; it does so only when the training set is large enough to prevent memorization.}
-\label{fig:capacity-vs-data-scale}
-\end{figure}
-
-\begin{example}[Capacity Decision on a Small Medical Dataset]
-A team has a labeled dataset of $800$ patient records for a readmission-prediction task. They train a six-layer transformer and reach very low training loss but poor validation performance. Adding dropout and reducing to two layers closes most of the gap. The larger model had the capacity to overfit 800 examples; the smaller model was forced to learn a more general pattern. The improvement had nothing to do with the learning rate or optimizer.
-\end{example}
-
-Choose model size in conversation with data size and label quality. The right question before adding capacity is: does this training set contain enough reliable signal to fill these additional parameters? If yes, larger may help. If no, fix regularization and data quality first.
-
-\textbf{Capacity audit.} Before increasing model size, ask three questions. How large is the labeled training set? How clean are the labels? How much useful augmentation is available? If the answers are ``small,'' ``noisy,'' and ``limited,'' added capacity will probably hurt. Fix the data first.
-
-\section{Chapter Artifact: A Minimum Credible Neural Training Report}
-
-Real neural training involves more than equations on a board. Several practical choices strongly affect outcomes. By the end of this chapter, you should be able to produce a minimum credible training report before making any serious neural-network claim. The report keeps flexible neural models tied back to baselines and evidence instead of hype. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, and the structure-diagnosis sheet justified leaving it. This report justifies the learned-model claim itself.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{5pt}
-\begin{tabular}{p{2.57cm}p{7.52cm}}
-\toprule
-Item & What should be reported \\
-\midrule
-Seven-question focus & Questions 4, 5, and 6: what representation the network sees, what baseline it must beat, and what training evidence makes the neural claim credible \\
-Data split & train / validation / test sizes and how they were chosen \\
-Preprocessing & normalization, tokenization, resizing, augmentation, or other transforms \\
-Architecture & model family, hidden sizes, depth, and output layer \\
-Loss and metric & training objective plus the main evaluation metric \\
-Decision rule & the threshold or ranking rule used to turn scores into actions \\
-Calibration & whether probabilities were calibrated before interpretation, and by what method \\
-Optimizer & SGD, Adam, AdamW, or another method, with justification if possible \\
-Learning rate and batch size & the main optimization controls \\
-Stopping rule & fixed epochs, early stopping, or another criterion \\
-Randomness & number of seeds or repeated runs \\
-Baseline & the simpler model used for comparison \\
-\bottomrule
-\end{tabular}
-\caption{This is a minimum credible training report, not an idealized one. Project work improves immediately when these items are stated clearly instead of being left as library defaults.}
-\label{tab:minimum-credible-training-report}
-\end{table}
-
-\textbf{Minimum credible neural training report.} Before reporting a neural result, document the data split, preprocessing, architecture, loss, optimizer, learning rate, batch size, stopping rule, randomness, and baseline comparison.
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{p{2.2cm}p{3.3cm}p{4.03cm}}
-\toprule
-Optimizer & Main intuition & What students should remember \\
-\midrule
-SGD & follow noisy gradients directly & simple, still important, often benefits from careful tuning and schedules \\
-Adam / AdamW & adapt step sizes using running gradient statistics & often easier to train with at first, but still requires validation and does not replace good data practice \\
-\bottomrule
-\end{tabular}
-\caption{Optimizer choice is part of the training setup, not a cosmetic library setting. The right comparison is empirical, not tribal.}
-\label{tab:optimizer-comparison}
-\end{table}
-
-Popular optimizers such as Adam and AdamW often make training easier in practice than plain stochastic gradient descent, especially for smaller research prototypes and teaching examples. The lesson is not that one optimizer has permanently won. It is that optimizer choice is part of the experiment and must be justified empirically.
-
-\section{Representation Learning as the Payoff}
-
-The most important reason neural networks changed AI is not that they fit nonlinear functions. Trees and kernels already offered nonlinearity. The deeper change is that hidden layers can learn representations that make downstream tasks easier.
-
-An image classifier does not begin with hand-coded edge counters written by the user. A neural system can learn early filters, then combine them into motifs, parts, and larger semantic patterns. A language model can learn embeddings in which some relationships become geometrically meaningful. An audio model can learn internal features that capture frequency patterns, rhythm, and temporal context. In each case, the network is learning the coordinates in which the task becomes manageable.
-
-\begin{figure}[t]
-\centering
-\definecolor{c6repBlue}{RGB}{56,103,170}
-\definecolor{c6repBlueBg}{RGB}{220,233,251}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  rbox/.style={draw=c6repBlue, fill=c6repBlueBg, rounded corners,
-               align=center, minimum width=2.8cm, minimum height=0.9cm,
-               text=c6repBlue},
-  arr/.style={-Latex, thick, black!55}
-]
-%% Three rows: Vision / Language / Audio - compact layout
-%% ---- Vision (top row) ----
-\node[font=\small\bfseries, black!70, anchor=east] at (-0.2, 0) {Vision};
-\node[rbox] (v1) at (1.5, 0) {pixels};
-\node[rbox] (v2) at (5.2, 0) {edges / textures};
-\node[rbox] (v3) at (8.9, 0) {parts / object cues};
-\draw[arr] (v1) -- (v2);
-\draw[arr] (v2) -- (v3);
-
-%% ---- Language (middle row) ----
-\node[font=\small\bfseries, black!70, anchor=east] at (-0.2,-1.6) {Language};
-\node[rbox] (l1) at (1.5,-1.6) {tokens};
-\node[rbox] (l2) at (5.2,-1.6) {local phrase cues};
-\node[rbox] (l3) at (8.9,-1.6) {contextual meaning};
-\draw[arr] (l1) -- (l2);
-\draw[arr] (l2) -- (l3);
-
-%% ---- Audio (bottom row) ----
-\node[font=\small\bfseries, black!70, anchor=east] at (-0.2,-3.2) {Audio};
-\node[rbox] (a1) at (1.5,-3.2) {waveform / spectrum};
-\node[rbox] (a2) at (5.2,-3.2) {local frequency cues};
-\node[rbox] (a3) at (8.9,-3.2) {rhythm / context};
-\draw[arr] (a1) -- (a2);
-\draw[arr] (a2) -- (a3);
-\end{tikzpicture}%
-}
-\caption{Representation learning is the real bridge to later reusable-model chapters. The model is not merely drawing a final boundary; it is building the space in which the final boundary becomes easier to draw.}
 \label{fig:representation-hierarchy}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-This is the culmination of the chapter. Optimization is not only fitting a final boundary; it is teaching the model which internal coordinates make the task easier.
+If two layers are purely affine,
+\[
+W_2(W_1x+b_1)+b_2=(W_2W_1)x+(W_2b_1+b_2).
+\]
+Their composition remains affine. Repeating this calculation gives the same conclusion for any finite stack of affine layers. A narrow intermediate layer can restrict the rank of the combined map, and factorizing a map changes its parameterization and optimization. Depth alone does not create nonlinear functions in this setting.
 
-It is also the bridge to a later chapter on reusable representations. This chapter learned features for one task through one training loop. A later chapter asks when those learned spaces become reusable assets across tasks, domains, and label budgets. Once representation learning is strong enough, models can be pretrained on broad data and the learned spaces reused across many downstream tasks. That is the foundation-model story in one sentence.
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram]
+\node[ml label] at (2.1,1.8) {affine layers only};
+\node[ml box] (a) at (0.8,0.7) {$W_1x+b_1$};
+\node[ml box] (b) at (3.2,0.7) {$W_2h+b_2$};
+\draw[ml arrow] (a) -- (b);
+\node[align=center] at (2.1,-0.5) {$=(W_2W_1)x$\\$\phantom{=}+W_2b_1+b_2$};
+\node[ml label] at (7.1,1.8) {with nonlinearity};
+\begin{scope}[shift={(5.5,-0.8)}]
+\draw[ml axis] (0,0) -- (3.4,0);
+\draw[ml axis] (0,0) -- (0,2.2);
+\draw[ml reference] (0.25,0.2) -- (3,1.8);
+\draw[ml curve] (0.25,0.2) .. controls (0.9,1.6) and (1.7,0.4) .. (3,1.8);
+\node[ml label] at (1.7,-0.4) {input};
+\node[ml label,rotate=90] at (-0.4,1.1) {hidden feature};
+\end{scope}
+\end{tikzpicture}
+\captionof{figure}{Composed affine maps remain affine. A nonlinear activation changes the function family; the curve is schematic.}
+\label{fig:no-activation-still-linear}
+\end{minipage}\par\addvspace{\intextsep}
 
-\section{Common Mistakes with Neural Networks}
+Three familiar activations are
+\[
+\sigma(z)=\frac1{1+e^{-z}},\qquad
+\tanh(z)=\frac{e^z-e^{-z}}{e^z+e^{-z}},\qquad
+\rho(z)=\max(0,z).
+\]
+Sigmoid maps finite values into $(0,1)$, $\tanh$ into $(-1,1)$, and ReLU into $[0,\infty)$. Their derivatives are $\sigma(z)(1-\sigma(z))$, $1-\tanh^2(z)$, and $\mathbf1\{z>0\}$ for $z\ne0$. ReLU is not differentiable at zero; a chosen local derivative, often zero, specifies the update there.
 
-The mistakes in this section are not just ``deep-learning mistakes.'' They are failures of scientific judgment under flexible models.
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=0.55cm,y=1.1cm]
+\foreach \shift/\title in {0/sigmoid,6.3/$\tanh$,12.6/ReLU}{
+  \begin{scope}[xshift=\shift*0.55cm]
+  \draw[ml axis] (-2.5,0) -- (2.7,0) node[right,ml label] {$z$};
+  \draw[ml axis] (0,-1.1) -- (0,2.6);
+  \node at (0,3.0) {\title};
+  \end{scope}
+}
+\draw[ml curve,domain=-2.3:2.3,samples=80] plot (\x,{1/(1+exp(-\x))});
+\begin{scope}[xshift=3.465cm]
+\draw[ml curve,domain=-2.3:2.3,samples=80] plot (\x,{tanh(\x)});
+\end{scope}
+\begin{scope}[xshift=6.93cm]
+\draw[ml curve] (-2.3,0) -- (0,0) -- (2.2,2.2);
+\end{scope}
+\node[ml label] at (0,-1.55) {range $(0,1)$};
+\node[ml label] at (6.3,-1.55) {range $(-1,1)$};
+\node[ml label] at (12.6,-1.55) {zero for $z<0$};
+\end{tikzpicture}
+\captionof{figure}{Sigmoid saturates into $(0,1)$, $\tanh$ is zero-centered, and ReLU is flat for negative inputs.}
+\label{fig:activation-functions}
+\end{minipage}\par\addvspace{\intextsep}
 
-\textbf{Treating architecture as the whole story.} Data quality, preprocessing, metrics, and split design typically decide outcomes more than the choice of architecture. A new network on top of an unexamined pipeline rarely produces credible evidence about either the model or the task.
+Sigmoid and $\tanh$ have small derivatives near their saturated ends. ReLU has derivative one on its positive branch and zero on its negative branch. A unit inactive on one example receives no incoming-parameter gradient through that example's ReLU pathway. If it stays inactive on every relevant example, that pathway may stop learning. Other examples, shared parameters, or additional objectives can still change it.
 
-\textbf{Ignoring simpler baselines.} A neural model that is not measured against a logistic regression or shallow alternative has no scale for its result. Without a baseline, ``it works'' is a claim about training, not about the problem.
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\begin{theorem}[Universal approximation concerns existence]
+Fix a continuous sigmoidal activation $\phi$, with limits $0$ at $-\infty$ and $1$ at $+\infty$. For every continuous real-valued $f$ on $[0,1]^d$ and every $\varepsilon>0$, some finite width $m$ and real coefficients give
+\[
+g(x)=\sum_{j=1}^{m}a_j\phi(w_j^\top x+b_j),
+\qquad
+\sup_{x\in[0,1]^d}|f(x)-g(x)|<\varepsilon.
+\]
+\end{theorem}
+\end{minipage}\par\medskip
+This classical result uses a linear combination at the output \citep{cybenko1989}; related results extend the approximation setting \citep{hornik1989}. The supremum asks for an error bound at every input in the cube. The theorem supplies neither a useful width bound here nor a guarantee that optimization finds the coefficients. It also says nothing about prediction outside that domain or generalization from a finite sample. A final sigmoid would restrict the output range and would require a different target statement.
 
-\textbf{Changing too many training choices at once.} Switching architecture, optimizer, learning rate, and augmentation in the same run makes the improvement uninterpretable. Any gain could be attributed to any of the changes, and the next failure will be just as opaque.
+\section{One Forward Prediction}
 
-\textbf{Confusing confidence with understanding.} A clean training curve, a low validation loss, or a single strong number is not the same as knowing why the model behaves the way it does. Bigger models do not change this: scale increases the cost of being wrong about what was actually learned.
+Consider two quantities available at week 2: an earlier-lateness signal $x_1$ and an earlier-quiz-error signal $x_2$, scaled using training information. For an illustrative snapshot $x=(0.8,0.6)^\top$, take
+\[
+W=\begin{bmatrix}1.5&0.5\\0.5&1.5\end{bmatrix},
+\quad b=\begin{bmatrix}-1\\-1\end{bmatrix},
+\quad v=\begin{bmatrix}1.2\\0.8\end{bmatrix},
+\quad c=-0.4.
+\]
+The two hidden features and output are
+\[
+z=Wx+b=\begin{bmatrix}0.5\\0.3\end{bmatrix},
+\qquad h=\rho(z)=\begin{bmatrix}0.5\\0.3\end{bmatrix},
+\]
+\[
+s=v^\top h+c=0.44,
+\qquad \hat p=\sigma(s)\approx0.608259.
+\]
+These chosen coefficients illustrate a computation, rather than a fit to a supplied dataset. A sigmoid yields an estimate in the probability range; it does not establish calibration or the correctness of the deadline label.
 
-\section{Looking Ahead}
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,
+ ml nn value/.style={ml box,minimum width=1.7cm,minimum height=9mm},
+ ml nn weight/.style={ml label,fill=white,inner sep=1pt}]
+\node[ml nn value] (x1) at (0,0.9) {$x_1=0.80$\\{\footnotesize earlier lateness}};
+\node[ml nn value] (x2) at (0,-0.9) {$x_2=0.60$\\{\footnotesize quiz errors}};
+\node[ml nn value,ml key box] (h1) at (3.8,0.9) {$h_1=0.50$};
+\node[ml nn value,ml key box] (h2) at (3.8,-0.9) {$h_2=0.30$};
+\node[ml nn value] (s) at (7.5,0) {$s=0.44$};
+\draw[ml arrow] (x1) -- node[ml nn weight,above] {$1.5$} (h1);
+\draw[ml arrow] (x2) -- node[ml nn weight,below] {$1.5$} (h2);
+\draw[ml arrow,draw=mlLine] (x1.east) -- node[ml nn weight,pos=0.25,below] {$0.5$} (h2.west);
+\draw[ml arrow,draw=mlLine] (x2.east) -- node[ml nn weight,pos=0.25,above] {$0.5$} (h1.west);
+\draw[ml arrow] (h1) -- node[ml nn weight,above] {$1.2$} (s);
+\draw[ml arrow] (h2) -- node[ml nn weight,below] {$0.8$} (s);
+\node[ml label] at (0,1.8) {inputs};
+\node[ml label] at (3.8,1.8) {ReLU, bias $-1$};
+\node[ml label] at (7.5,1.8) {bias $-0.4$};
+\node[ml key box] (p) at (7.5,-1.6) {$\hat p\approx0.61$};
+\draw[ml arrow] (s) -- node[ml label,right] {$\sigma$} (p);
+\end{tikzpicture}
+\captionof{figure}{A week-2 snapshot passes through two ReLU features and a sigmoid output. The weights are illustrative; the output estimates the later deadline event, while a separate policy selects cases for review.}
+\label{fig:forward-pass-network}
+\label{fig:two-layer-network}
+\end{minipage}\par\addvspace{\intextsep}
 
-This chapter explained how neural learning works: hidden features, loss, backpropagation, and regularization. The thread splits in two directions before rejoining. Chapter~\ref{ch:probabilistic-models} comes next and asks what it means for predictions to carry uncertainty---how probabilistic structure can expose hidden variables, calibration problems, and uncertainty bands. Chapter~\ref{ch:representation-foundation-models} then resumes the representation-learning story this chapter set up: when the spaces a network learns become reusable assets across tasks, domains, and label budgets.
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{3.0cm}L{6.7cm}@{}}
+\toprule
+Stage & Value in the example \\
+\midrule
+Hidden pre-activations & $z=(0.5,0.3)^\top$ \\
+Hidden activations & $h=(0.5,0.3)^\top$ after ReLU \\
+Output score & $s=1.2(0.5)+0.8(0.3)-0.4=0.44$ \\
+Probability estimate & $\hat p=\sigma(0.44)\approx0.608259$ \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Each stage has a different role. A decision threshold or capacity rule acts on the final output after these calculations.}
+\label{tab:forward-pass-summary}
+\end{minipage}\par\addvspace{\intextsep}
 
-\section*{Chapter Summary}
+At threshold $0.5$ this case receives a positive label; at $0.7$ it does not. A policy selecting the five highest scores also depends on the other cases in that batch. None of those policies changes the fitted probability. Their consequences and evaluation belong to the decision problem in Chapter~\ref{ch:prediction-loss-decision}.
 
-This chapter explained neural networks as learned feature pipelines whose flexibility comes from composition, nonlinearity, and parameterized hidden representations. It connected forward computation to loss design, gradient-based optimization, and backpropagation, then returned to the generalization concerns of earlier chapters through regularization, capacity control, and data regime. The main payoff is not just that neural models fit nonlinear functions but that they can learn intermediate representations that make downstream prediction easier. A neural result is credible only when the training setup, optimization choices, and baseline comparison are documented clearly enough to show that the added flexibility was justified. Neural training is already a modeling problem: the choices of nonlinearity, optimizer, initialization, and regularization decide what the network is allowed to learn, not just how fast it learns it.
+For $x=(0.2,0.7)^\top$, the same parameters give $z=(-0.35,0.15)^\top$, $h=(0,0.15)^\top$, and $s=-0.28$. The first hidden pathway is inactive on this input. This switch changes both the forward representation and the derivative that will reach its incoming parameters.
+
+\section{A Loss Produces Derivatives}
+
+For an additive training objective,
+\[
+L(\theta)=\frac1n\sum_{i=1}^{n}\ell\bigl(y_i,f_\theta(x_i)\bigr),
+\qquad n\geq1,
+\]
+the fitting loss determines which prediction errors influence updates. It can also be reported as an evaluation metric. Mean squared error is a common numeric-target loss; binary log loss is a common loss for a sigmoid event estimate. The chosen output and loss must describe the intended target.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\begin{theorem}[Sigmoid log loss gives the score derivative $\hat p-y$]
+For finite score $s$, $\hat p=\sigma(s)$, and binary label $y\in\{0,1\}$, let
+\[
+\ell(s,y)=-y\log\hat p-(1-y)\log(1-\hat p).
+\]
+Then $\partial\ell/\partial s=\hat p-y$.
+\end{theorem}
+\begin{proof}
+Substituting the sigmoid gives $\ell(s,y)=\log(1+e^s)-ys$. Differentiation yields $e^s/(1+e^s)-y=\hat p-y$.
+\end{proof}
+\end{minipage}\par\medskip
+
+For a positive label, a probability below one gives a negative score derivative; a small step subtracting it raises the score. For a negative label, the derivative is positive. In an average over $n$ separate examples, the partial derivative with respect to example $i$'s score is $(\hat p_i-y_i)/n$. Shared parameter gradients add the paths from all examples.
+
+Zero--one accuracy has a different geometry. With a fixed threshold and nonzero margins on a finite sample, small parameter changes leave all decisions unchanged, so accuracy is locally constant. At a decision switch it is discontinuous in general. It therefore supplies no useful ordinary gradient at most parameter values.
+
+For an observed positive label, forecasts $0.51$ and $0.99$ are both correct at threshold $0.5$, but incur losses $-\log(0.51)\approx0.673345$ and $-\log(0.99)\approx0.010050$. This compares their fit to this label. Greater confidence is costly on a wrong label, and lower training log loss need not improve held-out accuracy or calibration.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=7cm,y=1.1cm]
+\draw[ml axis] (0,0) -- (1.08,0);
+\draw[ml axis] (0,0) -- (0,3.2);
+\draw[ml curve,domain=0.05:0.99,samples=100] plot (\x,{-ln(\x)});
+\draw[ml reference] (0.51,0) -- (0.51,0.673);
+\fill[mlAccent] (0.51,0.673) circle (2pt);
+\fill[mlAccent] (0.99,0.010) circle (2pt);
+\node[ml label,above right] at (0.51,0.673) {$0.51\mapsto0.673$};
+\node[ml label,above left] at (0.99,0.40) {$0.99\mapsto0.010$};
+\node[ml label] at (0.55,-0.45) {probability of the true class};
+\node[ml label,rotate=90] at (-0.07,1.6) {$-\log p$};
+\end{tikzpicture}
+\captionof{figure}{For the observed label $y=1$, both forecasts give a positive decision at threshold $0.5$. Log loss distinguishes their confidence on this case; one observed case does not establish probability quality.}
+\label{fig:same-label-different-loss}
+\end{minipage}\par\addvspace{\intextsep}
+
+\subsection{Softmax and Multiclass Log Loss}
+
+For $K\geq2$ mutually exclusive and exhaustive classes, finite scores $s_1,\ldots,s_K$ give
+\[
+p_k=\frac{e^{s_k}}{\sum_j e^{s_j}},
+\qquad
+\ell(s,k^*)=-s_{k^*}+\log\sum_j e^{s_j}.
+\]
+The probabilities sum to one. Adding the same constant to every score multiplies numerator and denominator by the same factor, leaving the distribution unchanged. Only score differences are identified by softmax. For binary outputs, a logit is literally a log-odds; a multiclass logit is a raw score whose differences determine log probability ratios.
+
+Differentiating the log-sum gives
+\[
+\frac{\partial\ell}{\partial s_k}=p_k-\mathbf1\{k=k^*\}.
+\]
+Thus the same predicted-minus-target pattern extends to a one-hot class target. The output loss is convex as a function of its scores, but a nonlinear network's joint loss need not be convex in its parameters. For multiple labels that can hold simultaneously, one softmax distribution is usually the wrong output model.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}cccc@{}}
+\toprule
+Class & Score & Probability & Loss if this class is true \\
+\midrule
+1 & $1.4$ & $0.654011$ & $0.424631$ \\
+2 & $0.5$ & $0.265901$ & $1.324631$ \\
+3 & $-0.7$ & $0.080088$ & $2.524631$ \\
+\bottomrule
+\end{tabular}
+\captionof{table}{A softmax distribution and three possible observed-label losses. The greatest score selects class 1 under the usual argmax rule, with a fixed rule for ties.}
+\label{tab:softmax-example}
+\end{minipage}\par\addvspace{\intextsep}
+
+\section{Backpropagation Organizes the Chain Rule}
+
+The forward pass evaluates intermediate quantities. The backward pass computes the derivative of a scalar loss with respect to every parameter by reusing those quantities and their local derivatives. This is reverse differentiation, commonly called backpropagation. It measures sensitivity of a computation, rather than a causal contribution of an input to a real-world outcome.
+
+For a scalar computational graph, write $\bar u=\partial\ell/\partial u$. If $u$ feeds several later nodes $r$, the chain rule gives
+\[
+\bar u=\sum_{r:\,u\to r}\bar r\,\frac{\partial r}{\partial u}.
+\]
+Every path matters. The backward calculation adds contributions at a branch; it does not choose a single path to assign blame. Vector computations use the corresponding transposed Jacobian acting on a loss derivative.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,
+ ml nn unit/.style={circle,draw=mlLine,fill=white,minimum size=8mm,inner sep=1pt}]
+\node[ml nn unit] (x1) at (0,0.6) {$x_1$};
+\node[ml nn unit] (x2) at (0,-0.6) {$x_2$};
+\node[ml nn unit] (z) at (2.4,0) {$z$};
+\node[ml nn unit] (h) at (4.6,0) {$h$};
+\node[ml nn unit] (s) at (6.8,0) {$s$};
+\node[ml nn unit,draw=mlAccent,fill=mlAccent!5] (l) at (9,0) {$L$};
+\draw[ml arrow] (x1) -- (z);
+\draw[ml arrow] (x2) -- (z);
+\draw[ml arrow] (z) -- node[ml label,above] {ReLU} (h);
+\draw[ml arrow] (h) -- (s);
+\draw[ml arrow] (s) -- (l);
+\draw[ml feedback] (l.south) to[bend left=35] node[ml label,below] {$dL/ds$} (s.south);
+\draw[ml feedback] (s.south) to[bend left=35] node[ml label,below] {$dL/dh$} (h.south);
+\draw[ml feedback] (h.south) to[bend left=35] node[ml label,below] {$dL/dz$} (z.south);
+\draw[ml feedback,draw=mlLine] (z.west) to[bend left=20] (x1.south);
+\draw[ml feedback,draw=mlLine] (z.south west) to[bend left=20] (x2.south);
+\node[ml label] at (0,-1.4) {input gradients};
+\node[ml label] at (5.7,1) {forward: values};
+\node[ml label] at (5.7,-1.4) {backward: derivatives};
+\end{tikzpicture}
+\captionof{figure}{A scalar computation and its reverse derivatives. Forward arrows carry values; dashed arrows propagate loss derivatives through the same dependencies. When a value feeds several later operations, its derivative contributions add.}
+\label{fig:computational-graph-backprop}
+\label{fig:backprop-credit-flow}
+\end{minipage}\par\addvspace{\intextsep}
+
+For the binary network above, suppose the later observed label is $y=1$. Both pre-activations are positive, so the ReLU derivatives are one. Set $\delta=\hat p-y\approx-0.391741$. Then
+\[
+\nabla_v\ell=\delta h,
+\quad \frac{\partial\ell}{\partial c}=\delta,
+\quad d=\nabla_z\ell=\delta v\odot\mathbf1\{z>0\},
+\]
+\[
+\nabla_W\ell=d x^\top,
+\qquad \nabla_b\ell=d.
+\]
+Here $\odot$ denotes coordinatewise multiplication. The outer product $dx^\top$ has the same two-by-two shape as $W$. Substitution gives
+\[
+\nabla_v\ell\approx\begin{bmatrix}-0.195870\\-0.117522\end{bmatrix},
+\qquad d\approx\begin{bmatrix}-0.470089\\-0.313393\end{bmatrix},
+\]
+\[
+\nabla_W\ell\approx
+\begin{bmatrix}-0.376071&-0.282053\\-0.250714&-0.188036\end{bmatrix}.
+\]
+All derivatives use the same pre-update parameters. Updating $v$ first and then using its new value in the hidden derivative would compute a different procedure.
+
+Subtracting $0.1$ times every derivative gives, to six decimal places,
+\[
+W'\approx\begin{bmatrix}1.537607&0.528205\\0.525071&1.518804\end{bmatrix},
+\qquad b'\approx\begin{bmatrix}-0.952991\\-0.968661\end{bmatrix},
+\]
+\[
+v'\approx\begin{bmatrix}1.219587\\0.811752\end{bmatrix},
+\qquad c'\approx-0.360826.
+\]
+Using the unrounded updates, the next forward pass gives $h'\approx(0.594018,0.362679)^\top$, $s'\approx0.658036$, and $\hat p'\approx0.658819$. The one-case log loss falls from $0.497154$ to $0.417306$. This verifies a correction for this case; it establishes neither full-sample descent nor useful prediction on new cases.
+
+\subsection{A Scalar Squared-Loss Check}
+
+A second small computation makes the local derivatives explicit. Let
+\[
+z=w_1x_1+w_2x_2+b_h,
+\quad h=\rho(z),\quad s=vh+b_o,
+\quad \ell=\tfrac12(s-y)^2.
+\]
+At $(x_1,x_2)=(2,1)$, $y=1$, and $(w_1,w_2,b_h,v,b_o)=(0.5,1,-1,1.2,-0.3)$, the forward values are $z=h=1$, $s=0.9$, and $\ell=0.005$. The backward values are
+\[
+\frac{\partial\ell}{\partial s}=-0.1,
+\quad\frac{\partial\ell}{\partial h}=-0.12,
+\quad\frac{\partial\ell}{\partial z}=-0.12,
+\]
+\[
+\nabla_{(w_1,w_2,b_h,v,b_o)}\ell=(-0.24,-0.12,-0.12,-0.1,-0.1).
+\]
+A simultaneous step of size $0.05$ gives $(0.512,1.006,-0.994,1.205,-0.295)$. The new values are $z'=1.036$, $s'=0.95338$, and $\ell'=0.0010867122$.
+
+If $b_h$ instead starts at $-2.5$, then $z=-0.5$, $h=0$, $s=-0.3$, and $\ell=0.845$. The incoming gradients and the gradient in $v$ vanish on this example, but $\partial\ell/\partial b_o=-1.3$ remains. An inactive hidden unit does not make every network parameter's gradient zero.
+
+\subsection{Computation and Long Derivative Chains}
+
+For standard affine, activation, and sum operations, a reverse derivative calculation has the same order of computational cost as the forward calculation, up to operation-dependent constants. It obtains a scalar loss gradient in all parameters without one separate perturbation per parameter. A forward derivative sweep instead follows one chosen parameter direction; recovering a full gradient that way generally requires many directions.
+
+If one example takes $C$ arithmetic operations and retains $A$ intermediate values, a straightforward batch of $B$ examples has cost of order $BC$ and activation storage of order $BA$, in addition to parameters and optimizer state. Parameter count alone does not determine $C$: shared weights can be applied repeatedly over space or time. Recomputing intermediate values trades extra computation for less storage. These costs concern an update; the number of updates required is a separate issue.
+
+For a composition of layer maps, input derivatives contain a product of Jacobians. Its norm is bounded above by the product of their norms. Repeated contraction can weaken a gradient, while amplification along relevant directions can enlarge it; scalar derivative magnitudes or weight counts alone do not determine the product. Recurrent computations produce related chains across time (Chapter~\ref{ch:audio-time}).
+
+A residual map $h=x+F(x)$ has Jacobian $I+J_F(x)$ when the shapes agree. The identity term offers another derivative pathway, but is not a lower bound on the resulting gradient: $F(x)=-x$ would cancel it entirely. Projection shortcuts use their own Jacobian. Initialization, normalization, and residual paths address different aspects of this geometry.
+
+\section{Gradient Descent and Stochastic Updates}
+
+At differentiable parameter values, full-batch gradient descent is
+\[
+\theta_{t+1}=\theta_t-\eta_t\nabla L(\theta_t),\qquad\eta_t>0.
+\]
+The negative gradient is the direction of steepest local decrease in Euclidean parameter coordinates. A finite step also depends on curvature and scale. For $\hat y=wx$ with $x=2,y=6$ and loss $(wx-y)^2$, at $w=1$ the derivative is $-16$. A step of size $0.1$ gives $w'=2.6$ and loss $0.64$, down from $16$.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=1.15cm,y=1.15cm]
+\fill[mlWash] (0,0) ellipse (3.9 and 2.6);
+\foreach \r in {0.8,1.4,2.0,2.6}
+  \draw[draw=mlLine,line width=0.6pt] (0,0) ellipse ({1.5*\r} and {\r});
+\foreach \a/\b in {-2.4/1.6,-1.5/1.0,-0.8/0.5}
+  \fill[mlAccent] (\a,\b) circle (2pt);
+\draw[ml arrow,draw=mlAccent] (-2.4,1.6) -- (-1.5,1.0);
+\draw[ml arrow,draw=mlAccent] (-1.5,1.0) -- (-0.8,0.5);
+\draw[ml arrow,draw=mlAccent] (-0.8,0.5) -- (-0.25,0.18);
+\draw[draw=mlInk,fill=white] (0,0) circle (2.5pt);
+\node[ml label,above left] at (-2.4,1.6) {start};
+\node[ml label,below] at (0,-0.15) {minimum};
+\node[ml label] at (0,2.95) {equal-loss contours};
+\end{tikzpicture}
+\captionof{figure}{An illustrative path through successively lower loss values. The contours show the local geometry; the connected points depict descent rather than a numerically specified gradient-descent run.}
+\label{fig:gradient-descent-surface}
+\end{minipage}\par\addvspace{\intextsep}
+
+For $L(w)=(w-3)^2$, the error $e_t=w_t-3$ obeys
+\[
+e_{t+1}=(1-2\eta)e_t.
+\]
+It converges for $0<\eta<1$; $\eta=1$ gives an unchanged-magnitude oscillation unless already at the minimum; $\eta>1$ diverges from a nonzero initial error. At $\eta=0.5$ it reaches the minimum in one step. These conclusions follow from this quadratic, not from a universal neural learning rate.
+
+More generally, if a differentiable objective has an $L_g$-Lipschitz gradient on a convex region containing the step segment, the descent bound is
+\[
+L(\theta-\eta\nabla L(\theta))
+\leq L(\theta)-\eta(1-L_g\eta/2)\|\nabla L(\theta)\|_2^2.
+\]
+For a nonzero gradient and $0<\eta<2/L_g$, it gives strict decrease. A ReLU network is nonsmooth at activation switches, so this smooth bound requires the stated assumptions; it cannot be applied across every possible update without qualification. Convexity is also absent for the general network, so a stationary point need not be a global minimum.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=0.5cm,y=0.65cm]
+\foreach \shift/\title in {0/{$\eta=0.1$},6.8/{$\eta=1$},13.6/{$\eta=2.75$}}{
+ \begin{scope}[xshift=\shift*0.5cm]
+ \draw[ml axis] (-2.8,0) -- (2.9,0);
+ \draw[draw=mlLine,domain=-2.6:2.6,samples=60] plot (\x,{0.4*\x*\x+0.3});
+ \node at (0,3.5) {\title};
+ \end{scope}
+}
+\foreach \shift/\factor in {0/0.92,6.8/0.2,13.6/-1.2}{
+ \begin{scope}[xshift=\shift*0.5cm]
+ \foreach \t in {0,1,2,3}{
+  \pgfmathsetmacro{\w}{-1*pow(\factor,\t)}
+  \fill[mlAccent] (\w,{0.4*\w*\w+0.3}) circle (2pt);
+  \ifnum\t>0
+   \pgfmathsetmacro{\previous}{-1*pow(\factor,\t-1)}
+   \draw[ml arrow] (\previous,{0.4*\previous*\previous+0.3}) -- (\w,{0.4*\w*\w+0.3});
+  \fi
+ }
+ \end{scope}
+}
+\node[ml label] at (0,-0.6) {slow decrease};
+\node[ml label] at (6.8,-0.6) {rapid decrease};
+\node[ml label] at (13.6,-0.6) {growing oscillation};
+\end{tikzpicture}
+\captionof{figure}{Three exact gradient-descent runs on $L(w)=0.4w^2+0.3$, all starting at $w_0=-1$. The recurrence is $w_{t+1}=(1-0.8\eta)w_t$. Only the first two chosen step sizes decrease loss.}
+\label{fig:learning-rate-cases}
+\end{minipage}\par\addvspace{\intextsep}
+
+Learning-rate schedules change $\eta_t$, for example by gradually reducing it or increasing it briefly from a small starting value. They are choices in the development procedure. Changing the architecture, schedule, optimizer, and data transformations together can improve a result without isolating which change helped.
+
+\subsection{What a Mini-Batch Estimates}
+
+At a fixed differentiable $\theta$, define $g_i=\nabla\ell_i(\theta)$ and $G=n^{-1}\sum_i g_i$. Draw indices $I_1,\ldots,I_B$ independently and uniformly from the training cases, conditional on the current parameters and training history. Then
+\[
+\hat G=\frac1B\sum_{b=1}^{B}g_{I_b},
+\qquad\mathbb E[\hat G\mid\theta,\text{history}]=G.
+\]
+Linearity of expectation proves this identity. With
+\[
+\Sigma=\frac1n\sum_i(g_i-G)(g_i-G)^\top,
+\qquad \operatorname{Cov}(\hat G)=\Sigma/B,
+\]
+independent draws average away part of the sampling variability. For a uniformly drawn subset of $1\leq B\leq n$ distinct cases from $n>1$, the covariance is instead $(n-B)\Sigma/[B(n-1)]$. At $B=n$ it is zero.
+
+These statements concern an additive per-case objective and the specified sampling scheme. Oversampling particular labels without correcting their weights targets a different average. Randomly shuffling once per epoch does not make each next batch conditionally uniform over the entire dataset after earlier batches and updates are known. Batch-dependent layers also change the objective being estimated. A noisy unbiased gradient does not imply that each noisy step decreases $L$.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=1cm,y=2.4cm]
+\draw[ml axis] (0,0) -- (7.2,0);
+\draw[ml axis] (0,0) -- (0,1.2);
+\draw[ml curve] plot[smooth] coordinates {(0.4,0.95) (1.2,0.75) (2.0,0.62) (2.8,0.52) (3.6,0.45) (4.4,0.39) (5.2,0.34) (6.0,0.30)};
+\draw[ml reference] plot[smooth] coordinates {(0.4,1.00) (1.0,0.82) (1.6,0.78) (2.2,0.60) (2.8,0.63) (3.4,0.47) (4.0,0.51) (4.6,0.38) (5.2,0.40) (5.8,0.31)};
+\draw[ml curve] (4.8,0.78) -- (5.4,0.78);
+\node[ml label,anchor=west] at (5.5,0.78) {full batch};
+\draw[ml reference] (4.8,1.02) -- (5.4,1.02);
+\node[ml label,anchor=west] at (5.5,1.02) {mini-batch};
+\node[ml label] at (3.6,-0.22) {epoch};
+\node[ml label,rotate=90] at (-0.5,0.6) {training loss};
+\end{tikzpicture}
+\captionof{figure}{Schematic full-batch and mini-batch loss trajectories. Uniform fresh sampling gives an unbiased gradient estimate for an additive objective, but an individual noisy update need not decrease full training loss.}
+\label{fig:full-batch-vs-minibatch}
+\end{minipage}\par\addvspace{\intextsep}
+
+An epoch usually means one pass through the training cases. Gradient accumulation over several batches at fixed parameters can reproduce their appropriately weighted average gradient for an additive objective. It does not generally reproduce one larger batch when the forward computations depend on batch statistics.
+
+Gradient clipping limits the gradient supplied to an update. For norm threshold $c_0>0$, define
+\[
+\tilde g=g\min\{1,c_0/\|g\|_2\},\quad g\ne0,
+\qquad \tilde g=0\text{ if }g=0.
+\]
+Then $\|\tilde g\|_2\leq c_0$, and a plain SGD step has norm at most $\eta c_0$. For $g=(3,4)^\top,c_0=2$, the result is $(1.2,1.6)^\top$. Momentum and adaptive rescaling can change the subsequent step bound. Clipping also changes the gradient estimate and need not preserve unbiasedness.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram]
+\node[ml box,minimum width=2cm] (fwd) at (0,0) {forward pass};
+\node[ml box,minimum width=2cm] (loss) at (3.5,0) {loss};
+\node[ml key box,minimum width=2cm] (bwd) at (7,0) {backpropagate};
+\node[ml box,minimum width=2cm] (upd) at (7,-1.7) {update weights};
+\node[ml box,minimum width=2cm] (val) at (0,-1.7) {validation};
+\draw[ml arrow] (fwd) -- (loss);
+\draw[ml arrow] (loss) -- (bwd);
+\draw[ml arrow] (bwd) -- (upd);
+\draw[ml feedback] (upd.west) -- (3.5,-1.7) -- (3.5,-0.85) -- (0,-0.85) -- (fwd.south);
+\node[ml label] at (1.8,-1.2) {next batch};
+\draw[ml arrow] (upd.south) -- (7,-3) -- (0,-3) -- (val.south);
+\node[ml label] at (3.5,-3.35) {periodic checks};
+\end{tikzpicture}
+\captionof{figure}{Training computes values, a loss, derivatives, and updates. Development checks select the procedure and checkpoint; a protected final evaluation concerns the selected procedure.}
+\label{fig:training-loop-flow}
+\end{minipage}\par\addvspace{\intextsep}
+
+\section{Momentum, Adam, and Weight Decay}
+
+Momentum retains earlier gradients. Let $g_t$ denote a gradient evaluated at $\theta_{t-1}$. One convention, at step $t\geq1$, is
+\[
+u_t=\beta u_{t-1}+(1-\beta)g_t,
+\qquad \theta_t=\theta_{t-1}-\eta_tu_t,
+\quad0\leq\beta<1.
+\]
+With $u_0=0,\beta=0.9$ and gradients $8,7$, the running directions are $0.8,1.42$. Other conventions omit $1-\beta$ and use a correspondingly different step scale. Persistent directions can accumulate, but momentum does not guarantee that each update is a descent direction for the current objective.
+
+Adam tracks coordinatewise first and second raw moments \citep{kingma2015adam}. Starting from $m_0=v_0=0$, at step $t$ it uses
+\[
+m_t=\beta_1m_{t-1}+(1-\beta_1)g_t,
+\qquad
+v_t=\beta_2v_{t-1}+(1-\beta_2)g_t^{\odot2},
+\]
+\[
+\hat m_t=\frac{m_t}{1-\beta_1^t},
+\qquad \hat v_t=\frac{v_t}{1-\beta_2^t},
+\qquad
+\theta_t=\theta_{t-1}-\eta_t\frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon}.
+\]
+Here $0\leq\beta_1,\beta_2<1$, $\epsilon>0$, and vector divisions, squares, and square roots are coordinatewise. The second statistic is a raw second moment, not a centered variance.
+
+Unrolling one coordinate gives
+\[
+m_t=(1-\beta_1)\sum_{s=1}^{t}\beta_1^{t-s}g_s.
+\]
+The coefficients sum to $1-\beta_1^t$. If the gradients have a constant finite mean $\mu$, then $\mathbb E[m_t]=(1-\beta_1^t)\mu$ and $\mathbb E[\hat m_t]=\mu$. A constant finite second raw moment gives the analogous result for $\hat v_t$; independence across steps is not needed for these expectation identities. In a changing training trajectory, the correction normalizes the weights of a moving average. It does not make it an unbiased estimate of the current gradient, and the ratio in the update is not an unbiased-gradient theorem.
+
+With $g_1=8,\beta_1=0.9,\beta_2=0.999$, the initial statistics are $m_1=0.8,v_1=0.064$, corrected to $8,64$. Ignoring $\epsilon$ for this arithmetic illustration, the corrected update magnitude is $\eta_1$. The duration of the initialization correction depends on each $\beta$: at step 100, $0.9^{100}\approx0.000027$ but $0.999^{100}\approx0.905$. There is no single fixed number of steps after which both corrections become negligible.
+
+Adam's denominator adjusts the step scale per coordinate. It does not assign feature importance or guarantee smaller steps whenever a coordinate is noisy. Its behavior and the resulting generalization must be compared under a specified training procedure.
+
+\subsection{A Penalty and a Decay Update Are Different Choices}
+
+Use the convention $J(\theta)=L(\theta)+(\lambda/2)\|\theta_d\|_2^2$, where $\theta_d$ names the coordinates being penalized. On those coordinates the penalty adds $\lambda\theta_d$ to the gradient. Plain SGD without momentum is then
+\[
+\theta_d'=(1-\eta\lambda)\theta_d-\eta\nabla_d L.
+\]
+Thus this particular SGD penalty update equals multiplicative decay. With an adaptive diagonal scaling $P$, however, the coupled penalty produces $-\eta\lambda P\theta_d$, whereas separate decay produces $-\eta\lambda\theta_d$. Adam's moment estimates are also affected when the penalty is included in its gradients.
+
+AdamW applies the Adam gradient step and a separate decay term \citep{loshchilov2019adamw}; under the convention here,
+\[
+\theta_{d,t}=(1-\eta_t\lambda)\theta_{d,t-1}
+-\eta_t\frac{\hat m_{d,t}}{\sqrt{\hat v_{d,t}}+\epsilon}.
+\]
+The moments use the data-loss gradients for this decoupled update. Biases or normalization parameters may be excluded by a stated policy. The multiplier shrinks magnitudes when $0\leq\eta_t\lambda<1$; an arbitrary large product does not have that interpretation. Choosing the optimizer and decay strength remains a development choice, not a guarantee of better test risk.
+
+\section{Initialization and Batch-Dependent Computations}
+
+Initialization determines the first representations and derivative scales. Symmetry also matters. If two units have identical incoming parameters, identical corresponding outgoing weights, and the same deterministic update rules, their roles can remain interchangeable under gradient descent. Identical incoming weights alone are insufficient: different downstream weights can produce different backward derivatives. Independent dropout masks can also break an otherwise symmetric update. Random starts break many such equalities, without guaranteeing that the eventual features are distinct or useful.
+
+\subsection{Second Moments Explain Initialization Scales}
+
+Consider a bias-free pre-activation $Z=\sum_{j=1}^{n_{\rm in}}W_jX_j$. Assume independent zero-mean weights of variance $s_w^2$, independent of the input vector, with $\mathbb E[X_j^2]=q<\infty$. Cross terms vanish because distinct weights have zero expected product. Therefore
+\[
+\mathbb E[Z]=0,
+\qquad\mathbb E[Z^2]=n_{\rm in}s_w^2q.
+\]
+The inputs need not themselves be centered for this identity. If $Z$ has a distribution symmetric about zero, its positive and negative halves have equal squared mass, so
+\[
+\mathbb E[\rho(Z)^2]=\tfrac12\mathbb E[Z^2].
+\]
+He's scale $s_w^2=2/n_{\rm in}$ compensates for that reduction in the ReLU output's second moment \citep{he2015rectifiers}. This is not a statement that ReLU halves variance: for standard normal $Z$, its output has mean $1/\sqrt{2\pi}$ and variance $1/2-1/(2\pi)$.
+
+For approximately linear, centered activations, balancing simplified forward and backward variance calculations leads to the Xavier/Glorot scale $2/(n_{\rm in}+n_{\rm out})$ \citep{glorot2010initialization}. A symmetric uniform distribution with endpoints $\pm\sqrt{6/(n_{\rm in}+n_{\rm out})}$ has that variance. Sigmoid is not centered at zero and has derivative $1/4$ at the origin, so it does not satisfy the same near-identity reasoning as $\tanh$. These are initialization calculations under simplifying assumptions, not guarantees throughout training, when correlations and changing activation patterns matter.
+
+\subsection{Batch Normalization During Training and Prediction}
+
+For one coordinate with batch values $a_1,\ldots,a_m$, define
+\[
+\mu_B=\frac1m\sum_i a_i,
+\qquad \sigma_B^2=\frac1m\sum_i(a_i-\mu_B)^2,
+\]
+\[
+\hat a_i=\frac{a_i-\mu_B}{\sqrt{\sigma_B^2+\epsilon}},
+\qquad r_i=\gamma\hat a_i+\beta,
+\quad\epsilon>0.
+\]
+Batch normalization differentiates through these shared statistics and learns $\gamma,\beta$ \citep{ioffe2015batchnorm}. The normalized batch mean is zero; its average squared value is $\sigma_B^2/(\sigma_B^2+\epsilon)$, not exactly one when $\epsilon>0$. The learned affine step changes that mean and scale again.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram]
+\node[ml box] (a) at (0,0) {$a_i$};
+\node[ml key box] (n) at (3.7,0) {$\hat a_i=\dfrac{a_i-\mu_B}{\sqrt{\sigma_B^2+\varepsilon}}$};
+\node[ml box] (b) at (7.8,0) {$r_i=\gamma\hat a_i+\beta$};
+\draw[ml arrow] (a) -- (n);
+\draw[ml arrow] (n) -- (b);
+\node[ml label] at (0,-1) {activation};
+\node[ml label] at (3.7,-1) {batch statistics};
+\node[ml label] at (7.8,-1) {learned scale and shift};
+\end{tikzpicture}
+\captionof{figure}{Batch normalization uses shared batch statistics during training and a learned scale and shift. Prediction usually substitutes fixed statistics estimated from training data.}
+\label{fig:batch-norm-stability}
+\end{minipage}\par\addvspace{\intextsep}
+
+During training, a case's output depends on its batch companions. Ordinary prediction usually uses fixed statistics estimated from training, often running estimates stored with the selected checkpoint. Development and final-test evaluation should use that specified prediction procedure, rather than quietly updating the statistics on their cases.
+
+Small or unrepresentative batches can make the statistics unstable. Convolutional normalization may also pool spatial positions, which increases the number of values but does not make those values independent. Accumulating gradients from several small batches does not combine their normalization statistics. Normalization methods that operate within an example avoid this particular dependence on companions, while making their own choices of coordinates to normalize. Batch normalization can help fitting, but does not guarantee stability, probability calibration, or robustness to a changed population.
+
+\section{Regularization and Selection}
+
+Architecture, optimization, and regularization jointly determine the fitted procedure. A penalty changes the preferred parameters; early stopping selects a point on the optimization path; dropout randomizes intermediate computations; augmentation changes the training examples presented. Their usefulness must be judged under the intended task and population.
+
+\subsection{Early Stopping Uses Development Evidence}
+
+If $\theta_t$ is a sequence of checkpoints and $V(\theta_t)$ a development criterion, a rule might select
+\[
+\hat t\in\operatorname*{arg\,min}_{t\in\mathcal T}V(\theta_t),
+\]
+with a stated tie rule, candidate set, and stopping policy. This is model selection. Its minimum observed development score is not a protected final estimate of the selected checkpoint's risk. The complete selection process, including repeated architectures and schedules, belongs inside development.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=0.95cm,y=3cm]
+\draw[ml axis] (0,0) -- (6.7,0);
+\draw[ml axis] (0,0) -- (0,1.1);
+\draw[ml curve] plot[smooth] coordinates {(0.5,0.95) (1.5,0.72) (2.5,0.55) (3.5,0.40) (4.5,0.30) (5.5,0.22)};
+\draw[ml reference] plot[smooth] coordinates {(0.5,1.00) (1.5,0.78) (2.5,0.60) (3.5,0.52) (4.5,0.58) (5.5,0.70)};
+\draw[draw=mlLine] (3.5,0) -- (3.5,0.98);
+\fill[mlAccent] (3.5,0.52) circle (2pt);
+\node[ml label,above] at (3.5,1.0) {selected epoch};
+\node[ml label,anchor=west] at (5.6,0.22) {training};
+\node[ml label,anchor=west] at (5.6,0.70) {validation};
+\node[ml label] at (3.3,-0.18) {epoch};
+\node[ml label,rotate=90] at (-0.45,0.55) {loss};
+\end{tikzpicture}
+\captionof{figure}{Validation loss reaches its minimum before training loss stops falling. Early stopping selects a checkpoint using validation evidence.}
+\label{fig:early-stopping-curve}
+\end{minipage}\par\addvspace{\intextsep}
+
+A development curve that rises while training loss falls supports investigating excessive fitting, but does not uniquely prove memorization. Population shift, label differences, evaluation randomness, or changes between training and prediction behavior can create a gap. Training objectives that include dropout or penalties may also differ from the loss reported during prediction. Compare like quantities before interpreting their separation.
+
+\subsection{Dropout Preserves an Activation's Mean}
+
+For fixed activation $h_j$ and keep probability $0<q\leq1$, inverted dropout uses an independent mask $M_j\sim\operatorname{Bernoulli}(q)$ and
+\[
+\tilde h_j=\frac{M_j}{q}h_j,
+\qquad
+\mathbb E[\tilde h_j\mid h_j]=h_j,
+\qquad
+\operatorname{Var}(\tilde h_j\mid h_j)=h_j^2\frac{1-q}{q}.
+\]
+The formulas follow from $\mathbb E[M_j]=q$ and $\operatorname{Var}(M_j)=q(1-q)$. Training samples masked computations; ordinary prediction removes the masks and retains the unscaled activations \citep{srivastava2014dropout}. For $(1.2,0.9,0,1.1)$ and $q=0.5$, the mask $(1,0,0,1)$ yields $(2.4,0,0,2.2)$.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram]
+\node[ml label,anchor=east] at (0,0.8) {training, one mask};
+\node[ml label,anchor=east] at (0,-0.5) {prediction, no mask};
+\foreach \x/\train/\eval in {1.2/2.4/1.2,2.9/0/0.9,4.6/0/0,6.3/2.2/1.1}{
+ \node[ml box,minimum width=1.1cm] at (\x,0.8) {$\train$};
+ \node[ml box,minimum width=1.1cm] at (\x,-0.5) {$\eval$};
+}
+\node[ml label] at (3.75,-1.4) {keep probability $q=0.5$: retained values are doubled};
+\end{tikzpicture}
+\captionof{figure}{Inverted dropout changes training activations randomly and rescales those retained. At ordinary prediction time the mask is removed. Per-activation expectations agree, but a nonlinear network's prediction need not equal its average masked prediction.}
+\label{fig:regularization-toolbox}
+\end{minipage}\par\addvspace{\intextsep}
+
+Matching each activation's expectation does not make a nonlinear downstream network equal to its average masked prediction. For example, with $h=1,q=0.5$, $\mathbb E[\sigma(\tilde h)]=[\sigma(0)+\sigma(2)]/2\approx0.690399$, whereas $\sigma(h)\approx0.731059$. Dropout's prediction rule is a chosen approximation, not an exact ensemble-average identity. Random masking can discourage dependence on particular pathways, but supplies no missing target information and need not improve generalization.
+
+\subsection{Augmentation Must Respect the Target}
+
+If $T$ is a random transformation, training on $T(X)$ with the original label assumes the transformation preserves the target meaning in the relevant setting. That assumption is specific: rotating an image may preserve one label and change another. For a deadline task, altering attendance or submission histories while keeping a future label fixed needs justification; those quantities may contain the very predictive relationship being studied. Transformations must also respect the week-2 information boundary.
+
+Augmented copies are not additional independent people or episodes. Keep them with their source observation within the split. Any randomized augmentation objective and the ordinary prediction objective should be identified when comparing losses. A robustness gain on one specified shift can coexist with a loss on ordinary inputs; both are evidence to report.
+
+\section{Diagnosing Fit and Assessing Capacity}
+
+Optimization asks whether a procedure reduces its chosen sample objective. Generalization asks how the selected procedure behaves on new observations from a stated population. High training loss can reflect incomplete optimization, restricted outputs, a limited function class, conflicting labels, irreducible uncertainty, or a deliberate penalty. Low training loss and worse held-out loss can reflect excessive fitting, shift, labels, or sampling variability. A learning curve narrows hypotheses; it does not identify these causes by itself.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{3.0cm}L{3.2cm}L{3.3cm}@{}}
+\toprule
+Observed pattern & Hypotheses to examine & Useful comparison \\
+\midrule
+High, flat training loss & Updates, objective, capacity, conflicting labels & A small consistent sample and a known baseline \\
+Low training loss, higher held-out loss & Selection, shift, labels, excessive fitting & Comparable prediction losses and protected groups or times \\
+Unstable or nonfinite loss & Step scale, operations, inputs & Gradient norms, activation ranges, and a smaller controlled step \\
+Unexpectedly strong immediate results & Leakage or a simpler task & Cutoff reconstruction, duplicates, and target rules \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Observed losses suggest questions rather than a unique failure diagnosis. A small-sample fitting check is evidence about that controlled computation, not proof about full-sample optimization or generalization.}
+\label{tab:opt-vs-gen-failure}
+\label{tab:neural-debugging-patterns}
+\end{minipage}\par\addvspace{\intextsep}
+
+Fitting a small, consistent sample can expose problems in derivatives or update scales when the model is capable of fitting those cases. Failure is not conclusive if identical inputs have conflicting targets, the output range excludes a numeric target, a hidden pathway is inactive, or strong constraints deliberately prevent a close fit. Success shows only that those cases can be fitted; it does not show that optimization of the complete objective succeeded.
+
+Parameter count is a rough description of capacity, rather than a complete measure of the functions or training behavior. Sharing, architecture, regularization, and the optimization path matter. More reliable data can make a richer procedure useful, but there is no universal sample-size threshold at which extra depth becomes beneficial. Small networks can also overfit, and heavily parameterized networks need not follow the classical single-U-shaped risk curve.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram,x=3cm,y=1.6cm]
+\draw[ml axis] (0,0) -- (2.6,0);
+\draw[ml axis] (0,0) -- (0,2.4);
+\draw[ml curve] plot[smooth] coordinates {(0.1,0.3) (0.5,0.9) (1.0,1.4) (1.8,1.8) (2.4,2.0)};
+\draw[ml reference] plot[smooth] coordinates {(0.1,0.1) (0.5,0.5) (1.0,1.2) (1.8,1.9) (2.4,2.1)};
+\draw[ml curve] (1.3,0.35) -- (1.5,0.35);
+\node[ml label,anchor=west] at (1.55,0.35) {small model};
+\draw[ml reference] (1.3,0.7) -- (1.5,0.7);
+\node[ml label,anchor=west] at (1.55,0.7) {large model};
+\node[ml label] at (1.3,-0.35) {dataset size};
+\node[ml label,rotate=90] at (-0.18,1.2) {validation performance};
+\end{tikzpicture}
+\captionof{figure}{A schematic example of capacity interacting with data size. The ranking of model sizes can change as more evidence becomes available.}
+\label{fig:capacity-vs-data-scale}
+\end{minipage}\par\addvspace{\intextsep}
+
+Recorded-label noise requires the distinction from Chapter~\ref{ch:dataset-design}: matching $\tilde Y$ need not recover the intended target $Y$. Future information leaking into inputs is an information-boundary error, not ordinary label noise. Changing architecture can improve a development score without repairing either problem. A comparison should include fitting effort, variability across meaningful resamples or starts, and the evaluation population.
+
+For the student example, keep preprocessing inside training, develop architecture and stopping rules on the allowed groups and times, and evaluate the frozen predictor together with the five-review policy. Check probability quality and selection at the same capacity as the baseline. Inspecting hidden activations can suggest hypotheses about a learned representation; it cannot establish that a coordinate has a unique semantic meaning or that outreach changes the outcome.
 
 \begin{studyquestions}
-\item Why is ``the useful internal representation is unknown'' a better opening problem than ``deep learning is powerful''?
-\item Why does a deep network without nonlinear activations still behave like a linear model?
-\item Why is cross-entropy usually a better teaching signal than accuracy for binary classification?
-\item What role does the learning rate play in repeated correction?
-\item What problem does backpropagation solve conceptually?
-\item Why is representation learning more fundamental than merely saying that neural networks are nonlinear?
+\item What does an affine stack express, and how can its factorization still affect fitting?
+\item Why does the universal-approximation result require its particular activation and output statement?
+\item How do the forward pass, scalar loss, and reverse derivatives fit together?
+\item Why can lower log loss coexist with unchanged or worse classification accuracy?
+\item Under what sampling assumptions is a mini-batch gradient unbiased?
+\item What does Adam's initialization correction establish under constant moments?
+\item Why do training and prediction differ for batch normalization and dropout?
+\item Which observations distinguish successful fitting from evidence about future deadline prediction?
 \end{studyquestions}
 
-\begin{exercises}
-\item \exercisetag{Calculation}{Core}\textbf{Learning rate by hand.} Consider a one-dimensional loss $L(w) = (w - 3)^2$ with initial weight $w_0 = 0$.
-\begin{enumerate}[label=(\alph*)]
-\item Compute the gradient $\frac{dL}{dw}$ at $w_0$.
-\item Perform three gradient-descent updates with learning rate $\eta = 0.1$. Record $w$ and $L(w)$ after each step.
-\item Repeat with $\eta = 1.5$. What happens?
-\item What learning rate would reach $w = 3$ in exactly one step?
-\end{enumerate}
-\item \exercisetag{Diagnosis}{Core}\textbf{Reading a learning curve.} A colleague shows you a plot where training loss decreases steadily, but validation loss stops improving at epoch~10 and then rises.
-\begin{enumerate}[label=(\alph*)]
-\item Name the failure pattern.
-\item Propose two interventions, one that changes the model and one that changes the data.
-\item If \emph{both} training and validation loss remain high and flat, what different failure does that suggest?
-\end{enumerate}
-\item \exercisetag{Calculation}{Core}Compute the forward pass of a one-hidden-layer network with input $x=[1,2]$, hidden unit $h=\mathrm{ReLU}(2x_1-x_2-1)$, and output score $s=1.5h-0.5$. Give the final score and the sigmoid probability.
-\item \exercisetag{Calculation}{Core}Evaluate sigmoid, $\tanh$, and ReLU at $z=-2$, $z=0$, and $z=2$. What qualitative differences do you observe?
-\item \exercisetag{Calculation}{Intermediate}Suppose the true label is $1$ and two models predict probabilities $0.55$ and $0.95$. Compute the binary cross-entropy loss for both and explain why the difference matters even though both predictions are correct at a $0.5$ threshold.
-\item \exercisetag{Calculation}{Intermediate}A multiclass classifier outputs logits $(1.0, 0.0, -1.0)$. Compute the softmax probabilities approximately and state the cross-entropy loss if class 1 is the true class.
-\item \exercisetag{Calculation}{Intermediate}For the scalar model $\hat{y}=wx$, let $x=3$, $y=9$, and current $w=1$. Using squared error loss, compute the gradient with respect to $w$ and perform one gradient descent update with learning rate $0.05$.
-\item \exercisetag{Concept}{Intermediate}Explain in words why backpropagation is a credit-assignment procedure rather than just a formula-manipulation trick.
-\item \exercisetag{Design}{Intermediate}Using Table~\ref{tab:minimum-credible-training-report}, sketch a minimum credible training report for a small binary classifier and name the simpler baseline it must beat. If you are carrying one case through the book, use the same case as your structure diagnosis sheet and state which failure pattern justified moving to a neural model.
-\item \exercisetag{Concept}{Intermediate}Give one example of a task for which a neural network may be justified because representation learning matters, and one example of a task where a simpler model may still be preferable. State what evidence would decide between them.
-\item \exercisetag{Diagnosis}{Intermediate}A training run shows steadily falling training loss but worsening validation performance after epoch 12. Name the failure type, one sensible intervention, and whether the next move should be better regularization, a better baseline comparison, or a transfer-learning workflow from Chapter~\ref{ch:representation-foundation-models}.
-\item \exercisetag{Diagnosis}{Intermediate}A training report shows a neural model beating the linear baseline by one point, but the report omits the validation curve, seed variability, and the data split protocol. Write a short critique and name the minimum evidence needed before the neural model deserves trust.
+\begin{exercises}[State the objective, update convention, and rounding used in each calculation.]
+\item \exercisetag{Calculation}{Core}For $L(w)=(w-3)^2$ and $w_0=0$, compute three updates and losses with $\eta=0.1$ and then $\eta=1.5$. Find the one-step solution and characterize the constant step sizes that converge.
+\item \exercisetag{Calculation}{Core}For $x=(1,2)^\top$, $h=\rho(2x_1-x_2-1)$, and $s=1.5h-0.5$, compute the hidden values, score, and sigmoid. For binary label $y=1$, compute the score, output-weight, output-bias, and incoming-parameter derivatives of log loss.
+\item \exercisetag{Calculation}{Core}Evaluate sigmoid, $\tanh$, and ReLU at $-2,0,2$. Give their derivatives wherever defined and state a convention at the ReLU kink.
+\item \exercisetag{Calculation}{Core}For the two-unit deadline example, verify $z,h,s,\hat p$ at $(0.8,0.6)$ and $(0.2,0.7)$. Explain which incoming parameter gradients vanish on the second input and why a five-review decision needs other cases.
+\item \exercisetag{Calculation}{Intermediate}For an observed positive label and forecasts $0.55,0.95$, calculate log loss. Reverse the label and calculate again. Explain why the comparison does not establish calibration.
+\item \exercisetag{Calculation}{Intermediate}For scores $(1,0,-1)$, compute softmax probabilities and the loss and score gradient when class 1 is true. Add 100 to every score and explain why the distribution is unchanged.
+\item \exercisetag{Calculation}{Intermediate}Reproduce all derivatives and the simultaneous update of the two-unit deadline classifier for $y=1$ and step size $0.1$. Recompute its loss with the updated parameters; distinguish this result from a generalization claim.
+\item \exercisetag{Calculation}{Intermediate}For the scalar squared-loss example, verify the derivative vector and the $0.05$ update. Repeat the backward calculation with $b_h=-2.5$, leaving all other values fixed. Which output derivative remains nonzero?
+\item \exercisetag{Calculation}{Intermediate}At a fixed scalar parameter, three per-case gradients are $-2,1,4$. Compute the full gradient, the covariance of one uniform draw, and the variance of the average of two independent draws. Repeat for a uniform two-case subset without replacement.
+\item \exercisetag{Calculation}{Intermediate}For $g=(3,4)^\top$ and clipping norm 2, compute the clipped vector and the norm of a plain SGD step with $\eta=0.1$. Explain why that step bound is not automatically an Adam bound.
+\item \exercisetag{Calculation}{Intermediate}With $m_0=v_0=0$, gradients $g_1=2,g_2=4$, and $\beta_1=\beta_2=0.5$, compute Adam's first two raw and corrected moment estimates. With $\eta=0.1$ and $\epsilon=0$ only for this calculation, compute both step magnitudes.
+\item \exercisetag{Calculation}{Intermediate}Let a data gradient be $g=1$, parameter $\theta=2$, fixed adaptive scale $P=0.5$, step size $0.1$, and $\lambda=0.2$. Compare a coupled $(\lambda/2)\theta^2$ penalty update with separate decay. Explain why plain SGD with $P=1$ makes them equal.
+\item \exercisetag{Calculation}{Intermediate}For a ReLU unit with 100 input coordinates each of second moment 3, compare the pre-activation and output second moments under weight variances $1/100$ and $2/100$, assuming the stated independence and symmetry. Give the Xavier variance when $n_{\rm in}=100,n_{\rm out}=50$.
+\item \exercisetag{Calculation}{Intermediate}For batch values $2,4,6$, compute the normalization mean and variance. Use $\epsilon=0$ for this positive-variance calculation and $\gamma=2,\beta=1$ to find all outputs. Explain which statistics are used in ordinary prediction.
+\item \exercisetag{Calculation}{Intermediate}For activation $h=1.2$ and dropout keep probability $q=0.5$, find the possible training values, their mean and variance, and the ordinary prediction value. Verify the sigmoid example showing that downstream nonlinear expectations can differ.
+\item \exercisetag{Diagnosis}{Intermediate}Training loss falls while development loss rises after epoch 10. Give at least three plausible explanations and a controlled comparison for one. Explain why successful fitting of ten consistent examples does not settle the full-sample diagnosis.
+\item \exercisetag{Design}{Intermediate}Specify a small week-2 deadline network, output, loss, group/time boundaries, checkpoint-selection rule, same-capacity baseline, and five-review policy. State how you would distinguish evidence about deadline prediction from evidence about outreach benefit.
 \end{exercises}
 
-\begin{challengeexercises}
-\item \exercisetag{Proof}{Advanced}Consider a two-layer network with no activation between layers. Write the full expression for the output and show algebraically why it can be rewritten as one affine transformation.
-\item \exercisetag{Calculation}{Advanced}In the worked backpropagation example, recompute the gradients if the hidden pre-activation had been $z=-0.5$ instead of $z=1$. What changes, and what does that say about ReLU units?
-\item \exercisetag{Concept}{Advanced}A model family with many parameters performs worse than logistic regression on a small text-classification dataset. Give three technically plausible explanations that do not reduce to ``neural networks are bad.''
-\item \exercisetag{Design}{Advanced}Pick one public learning task of your choice. Propose a minimum neural training plan: output layer, loss, optimizer, batch size, validation strategy, and baseline.
-\item \exercisetag{Diagnosis}{Advanced}Two neural runs differ in architecture, optimizer, batch size, and augmentation policy, and one of them scores higher by one percentage point on the validation set. Explain why this is not yet convincing evidence of a better model.
+\begin{challengeexercises}[State assumptions and justify each claimed implication.]
+\item \exercisetag{Proof}{Advanced}Prove the affine-composition identity and its rank limitation through a narrower hidden layer. Explain why the function-family result does not imply identical optimization paths for the factorized and combined maps.
+\item \exercisetag{Proof}{Advanced}Derive the sigmoid and softmax score gradients, then derive the two-unit classifier's full parameter gradient. Show explicitly how contributions add if one hidden activation feeds two later outputs in a scalar loss.
+\item \begin{minipage}[t]{\linewidth}\exercisetag{Proof}{Advanced}Prove the mini-batch mean and covariance identities with replacement, and derive the finite-population covariance factor without replacement. Explain what changes with unequal sampling or batch normalization.\end{minipage}
+\item \exercisetag{Proof}{Advanced}Unroll Adam's first-moment recursion for a varying mean $\mathbb E[g_s]=\mu_s$. Derive the normalized weighted mean, and construct two gradient means for which it differs from the current mean. Explain why an unbiased numerator does not establish an unbiased update ratio.
+\item \begin{minipage}[t]{\linewidth}\exercisetag{Proof}{Advanced}Derive the initialization second-moment identity, ReLU half-moment identity, and dropout expectation and variance. Give a nonlinear downstream transformation for which preserving an activation's mean does not preserve the output's mean.\end{minipage}
+\item \exercisetag{Diagnosis}{Advanced}Two runs differ in architecture, optimizer, batch size, and augmentation, and one has a better development score. Specify which claims the comparison supports, how to isolate one intervention in the training procedure, and how to obtain protected final evidence after selection.
 \end{challengeexercises}
+
+\clearpage
+\begingroup\pagestyle{empty}\cleardoublepage\endgroup
+\endgroup

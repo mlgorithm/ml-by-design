@@ -1,796 +1,483 @@
+\begingroup
+\raggedbottom
+\clubpenalty=10000
+\widowpenalty=10000
 \chapter{Vision: Learning from Images}
 \label{ch:vision}
 
-Vision models are difficult not because images are large arrays of numbers, but because the same object can appear under different lighting, scales, viewpoints, backgrounds, and occlusions. A useful visual representation must preserve what matters and ignore what should not change the answer. This chapter studies vision from that modeling perspective. We begin with task formulation, since classification, detection, and segmentation each demand different outputs. We then work through convolution, pooling, augmentation, transfer, and robustness as ways to control which visual variation counts as signal and which counts as nuisance. The running question is not whether a model recognizes an object, but whether it learned the right cue under the conditions the deployment camera will actually produce. \emph{Deployment-camera realism} means matching the data, stress tests, and failure review to the actual lens, mounting position, and acquisition conditions of the deployed system. The chapter later treats \emph{saliency} maps---visual overlays showing which image regions most affected a prediction---as diagnostic evidence rather than proof. By the end, you should be able to diagnose a vision problem in terms of invariance, structure, and deployment realism rather than architecture alone.
+An image is a spatially organized measurement. Lighting, viewpoint, exposure, blur, and occlusion can change its pixels while the object of interest remains present. The same image can also support different questions: whether a person is present, where each person is, which pixels belong to them, or whether the same person persists across frames. A useful model must preserve the distinctions its particular output requires.
 
-\section{Opening Dilemma: The Same Object Can Look Like Many Different Pixel Arrays}
+Consider a hypothetical pedestrian detector for a low-speed campus shuttle. A forward-facing camera behind the windshield supplies frames, and the model returns labeled boxes. Glare, rain, distant people, and partial occlusion are proposed operating conditions, rather than observed results from an actual shuttle study. The examples and scores in this chapter are constructed to examine the design.
 
-Suppose the task is to support a road-scene system that must detect pedestrians. The same person on the roadside can appear under bright sun, at dusk, under headlight glare, partially occluded, seen from different camera heights, or blurred by motion. The semantic object stays the same, but the pixel array changes drastically.
+This case makes the role of symmetry concrete. Moving a visible person within an image may preserve an image-level presence label. It must move the detector's box, and a crop that removes the person must change the visible-object target. The appropriate transformation concerns the input and its target together.
 
-Vision therefore should not begin with architecture names. It should begin with a judgment question: which variations should preserve the label, and which should change it? A pedestrian shifted slightly within the image is still a pedestrian. A change in lighting should usually not erase the label. But removing the pedestrian entirely, swapping the person for a traffic sign, or switching from detection to segmentation should all change what the model outputs.
+Convolution shares a local computation across image locations. That restriction reduces the number of weights and supplies a translation relation under stated conditions. It does not guarantee that a model will recognize the intended object, tolerate every camera change, or make reliable downstream decisions. Architecture, annotation, fitting data, and evaluation each contribute to those claims.
 
-Keep one running case in view throughout this chapter: a dashboard-camera pedestrian detector for a low-speed campus shuttle. The detector must work through windshield glare, dusk and night conditions, light rain, partial occlusion, and camera-specific geometry. This single case forces the chapter to connect invariance, architecture, augmentation, shortcuts, and deployment-camera realism inside one visual system rather than treating them as separate ideas.
-
-That dilemma sets the chapter's shape. First we fix the output object and the invariance audit. Then we clarify annotation and locality. Next we turn to augmentation and transfer. Finally we ask how to distrust benchmark success correctly.
-
-\section{Problem-Solving Technique: Invariance Audit}
-
-Before training a vision model, write down which variations should preserve the label, which should change it, which sensor or camera changes are realistic in deployment, and what spatial detail the downstream task actually needs.
-
-This is the chapter's most reusable habit. The audit connects task formulation, augmentation, architecture, and evaluation. Image classification may need broad invariance to small translations and lighting changes. Segmentation may tolerate that same variation while demanding far more spatial detail. If deployment uses a different camera than the training set, the camera itself becomes part of the modeling problem.
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\resizebox{\linewidth}{!}{\input{figures/ch07-vision-pipeline}}
-\caption{The vision development pipeline integrates invariance auditing, task formulation, architecture choices, and evaluation strategy into a coherent workflow. Each stage blocks different failure modes, with feedback loops revealing shortcut learning and robustness gaps that require pipeline redesign.}
+\input{figures/ch07-vision-pipeline}
+\captionof{figure}{The target and annotation policy determine the output to fit and evaluate. Tests under relevant capture conditions examine whether the fitted system supports the intended use.}
 \label{fig:vision-pipeline}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-You cannot interpret vision performance before the invariance audit is clear. A model cannot be said to work unless we know what it was supposed to ignore, what it was supposed to preserve, and what the deployment camera will actually produce. A useful workflow runs in this order: start from the task and required output, run the invariance audit, make the annotation policy explicit, pick the smallest baseline that matches the output shape, add augmentations only for label-preserving variation, then compare training from scratch against a frozen pretrained backbone and a fine-tuned pretrained backbone on deployment-relevant slices. The running artifact is a vision design and stress-test card with fields for task type, intended signal, nuisance variation, deployment camera, likely shortcut risks, and the slices or stress tests that would reveal failure before deployment.
+\section{Targets Determine the Meaning of an Error}
 
-\section{Task Formulation Before Architecture Depth}
+A visual target is a statement about an image or sequence under an annotation policy. Image-level labels, boxes, masks, and trajectories contain different information. A classification score alone cannot establish localization, and accurate boxes in separate frames cannot establish correct identity association over time.
 
-One of the biggest mistakes in vision is asking ``CNN or transformer?'' before asking what output is actually required. This section settles what the system must produce, and therefore what evidence later architecture and evaluation must preserve.
-
-\subsection{Classification}
-
-Classification asks what is in the image. A road-scene classifier might answer ``pedestrian present'' or ``no pedestrian present.'' This is useful but rarely sufficient for safety-critical settings.
-
-On the same scene, classification answers a coarse yes/no question about the whole image. It does not say where the pedestrian is, whether the object is partially occluded, or whether the model confused the crossing with the person. The output object must therefore be chosen before architecture depth becomes the main topic.
-
-\subsection{Detection}
-
-Object detection asks both \emph{what} appears and \emph{where}. A detector must localize relevant objects, usually with bounding boxes, and assign categories.
-
-Suppose a predicted bounding box is \(B\) and the ground-truth box is \(G\). A standard overlap score is intersection over union:
-\[
-\mathrm{IoU}(B,G)=\frac{|B\cap G|}{|B\cup G|}.
-\]
-If the class is correct and IoU exceeds a chosen threshold such as \(0.5\), the detection is often counted as a hit. IoU matters because detection is not only about naming an object; it is about placing the box tightly enough that the localization is operationally useful.
-
-A detector usually makes three linked predictions at many candidate locations or regions: is there an object here, what class is it, and how should the current box move to fit it better? Detection errors therefore come in three distinct forms: missed candidates, mislabeled objects, and badly placed boxes.
-
-A modern detector typically emits hundreds to thousands of candidate boxes per image. Most of them overlap heavily on the same object: an anchor-based detector evaluates many slightly shifted anchors per location, and a one-stage detector like RetinaNet or YOLO predicts a box at every spatial position of multiple feature pyramid levels. The system needs a way to reduce that crowd to one box per actual object. The standard tool is \emph{non-maximum suppression}.
-
-\begin{codeexample}
-import numpy as np
-
-def iou(box, others):
-    """Vectorized IoU of one box against many; boxes are [x1, y1, x2, y2]."""
-    x1 = np.maximum(box[0], others[:, 0])
-    y1 = np.maximum(box[1], others[:, 1])
-    x2 = np.minimum(box[2], others[:, 2])
-    y2 = np.minimum(box[3], others[:, 3])
-    inter = np.clip(x2 - x1, 0, None) * np.clip(y2 - y1, 0, None)
-    area_b = (box[2] - box[0]) * (box[3] - box[1])
-    area_o = (others[:, 2] - others[:, 0]) * (others[:, 3] - others[:, 1])
-    return inter / (area_b + area_o - inter + 1e-12)
-
-def nms(boxes, scores, iou_threshold=0.5):
-    """Greedy non-maximum suppression. Returns indices of kept boxes."""
-    order = np.argsort(scores)[::-1]      # high scores first
-    keep  = []
-    while len(order):
-        i = order[0]
-        keep.append(i)
-        if len(order) == 1:
-            break
-        ious = iou(boxes[i], boxes[order[1:]])
-        order = order[1:][ious < iou_threshold]
-    return keep
-
-# Five overlapping boxes around two true objects
-boxes  = np.array([[ 10,  10, 110, 110],   # high-score box near object A
-                   [ 12,  14, 108, 105],   # near-duplicate of the same A
-                   [ 14,  10, 112, 115],   # another duplicate of A
-                   [220, 200, 320, 300],   # high-score box near object B
-                   [218, 205, 322, 305]])  # near-duplicate of B
-scores = np.array([0.95, 0.86, 0.74, 0.92, 0.81])
-print(nms(boxes, scores, iou_threshold=0.5))   # -> [0, 3]
-\end{codeexample}
-
-The loop is the algorithm. Sort candidates by score, repeatedly accept the top-remaining box, and drop any remaining boxes whose IoU with it exceeds the threshold. The output is at most one box per cluster of overlapping detections---the boxes that ``win'' their neighborhood. Variants worth knowing about: \emph{soft-NMS} replaces the hard drop with a score-decay schedule, which helps when two adjacent true objects produce overlapping high-confidence boxes; class-aware NMS runs the procedure per class so that two different objects in the same location are not suppressed against each other. The complexity is $O(n^2)$ in the number of candidate boxes after score-thresholding---usually fine in practice because the candidate count after a confidence filter is typically in the hundreds, not millions.
-
-\subsection{Segmentation}
-
-Segmentation assigns labels to pixels or regions rather than to the whole image. Semantic segmentation marks categories such as road, pedestrian, and sky. Instance segmentation goes further and separates individual object instances.
-
-If \(M\) is the predicted mask and \(G\) the ground-truth mask, two common overlap scores are
-\[
-\begin{aligned}
-\mathrm{IoU}(M,G) &= \frac{|M\cap G|}{|M\cup G|}, \\
-\mathrm{Dice}(M,G) &= \frac{2|M\cap G|}{|M|+|G|}.
-\end{aligned}
-\]
-Both reward overlap, and for a fixed pair of masks Dice is a monotone transform of IoU. Practitioners often report both because small foreground regions can make either score swing sharply under modest boundary errors.
-
-\begin{example}[Why Small Masks Are Hard]
-Missing twenty pixels on a large road region barely changes the score. Missing twenty pixels on a pedestrian silhouette can erase an arm or leg. Segmentation metrics must therefore be read together with class size and boundary importance, not as if every pixel error carried the same operational weight.
-\end{example}
-
-\subsection{Tracking and Other Structured Vision Tasks}
-
-Other vision tasks include pose estimation, keypoint detection, tracking across video frames, depth estimation, and optical flow. Vision is not one problem but a family of problems organized around spatial perception.
-
-For video, a single-frame detector may suffice if each frame is evaluated independently. Tracking or temporal smoothing enters the task the moment the system must follow the same object over time.
-
-\subsection{Why Structured Outputs Need Structured Evaluation}
-
-The output type changes the evidence you must collect. Classification can usually be judged with image-level accuracy, precision, recall, and calibration. Detection needs those same habits plus localization quality, because a box in the wrong place is not the same failure as a box with the wrong class. Segmentation needs overlap metrics and boundary checks because the task is about regions rather than whole images. Tracking adds temporal consistency because the system must keep identity stable across frames. In each case, evaluation should match the output object, not only the underlying image.
-
-Structured outputs create structured failures. Classification can be wrong about an object's presence; detection can be wrong about presence or placement; segmentation can be wrong about boundaries or small regions; tracking can be wrong about identity over time. The model choice should make those failure modes legible.
-
-\begin{decisionbox}
-\textbf{Choose the output before the backbone.} Use classification when only image-level presence or absence matters, detection when location or count matters, segmentation when region shape or fine boundary support matters, and tracking when identity has to remain stable over time rather than only within one frame.
-\end{decisionbox}
-
-Figure~\ref{fig:vision-street-scene} makes this concrete. A single street image can support several outputs depending on what the downstream system needs.
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c8road}{RGB}{130,130,130}
-\definecolor{c8side}{RGB}{210,200,185}
-\definecolor{c8cls}{RGB}{56,103,170}
-\definecolor{c8det}{RGB}{180,40,40}
-\definecolor{c8seg1}{RGB}{100,160,100}
-\definecolor{c8seg2}{RGB}{220,233,251}
-\definecolor{c8seg3}{RGB}{240,220,180}
-\definecolor{c8ped}{RGB}{214,120,62}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small]
-
-%% ── Macro: draw a bird's-eye road scene at xshift ───────────────────────
-%% Scene: 4cm wide × 3cm tall with one pedestrian in the shuttle camera view.
-\newcommand{\roadscene}[1]{%  #1 = xshift value
+\begin{tikzpicture}[ml diagram]
+\newcommand{\personshape}{%
+  \fill (1.4,1.48) circle (0.13);
+  \fill (1.27,0.84) rectangle (1.53,1.28);
+  \draw[line width=1.6pt] (1.30,1.17)--(1.10,0.98) (1.50,1.17)--(1.70,0.98)
+    (1.32,0.85)--(1.18,0.53) (1.48,0.85)--(1.62,0.53);
+}
+\newcommand{\smallscene}[1]{%
   \begin{scope}[xshift=#1]
-    %% sidewalk top
-    \fill[c8side]  (0,2.0) rectangle (4.0, 3.0);
-    %% road
-    \fill[c8road]  (0,0.6) rectangle (4.0, 2.0);
-    %% crosswalk stripes (white)
-    \foreach \s in {0.55,0.95,1.35,1.75,2.15,2.55,2.95} {
-      \fill[white!95!c8road] (\s,0.62) rectangle (\s+0.28,1.98);
-    }
-    %% sidewalk bottom
-    \fill[c8side]  (0,0.0) rectangle (4.0, 0.6);
-    %% pedestrian silhouette
-    \fill[black!75] (2.02,1.56) circle (0.12);
-    \fill[black!75] (1.94,1.06) rectangle (2.10,1.46);
-    \draw[black!75, line width=0.8pt] (1.94,1.35) -- (1.74,1.18);
-    \draw[black!75, line width=0.8pt] (2.10,1.35) -- (2.30,1.18);
-    \draw[black!75, line width=0.8pt] (1.96,1.06) -- (1.82,0.78);
-    \draw[black!75, line width=0.8pt] (2.08,1.06) -- (2.22,0.78);
-    %% thin border
-    \draw[black!30, thin] (0,0) rectangle (4.0,3.0);
-  \end{scope}%
+  \fill[mlWash] (0,0) rectangle (2.85,2.0);
+  \fill[mlLine!65] (0,0.40) rectangle (2.85,1.64);
+  \foreach \p in {0.20,0.75,1.30,1.85,2.40}{\fill[white] (\p,0.50) rectangle (\p+0.25,1.54);}
+  \draw[mlLine] (0,0) rectangle (2.85,2.0);
+  \end{scope}
 }
-
-%% ── Panel spacing ────────────────────────────────────────────────────────
-%%    panels at x = 0, 5.0, 10.0  (4cm wide + 1cm gap)
-
-%% ─── Panel 1 : Classification ────────────────────────────────────────────
-\roadscene{0}
-%% label badge
-\node[fill=c8cls!15, draw=c8cls, rounded corners=3pt,
-      font=\footnotesize\bfseries, text=c8cls, inner sep=4pt]
-  at (2.0, 3.55) {pedestrian present: \textbf{yes}};
-\draw[->, thin, c8cls] (2.0, 3.35) -- (2.0, 3.05);
-\node[font=\small\bfseries, black!70] at (2.0,-0.45) {Classification};
-\node[font=\footnotesize, black!55]   at (2.0,-0.82) {label for the whole image};
-
-%% ─── Panel 2 : Detection ─────────────────────────────────────────────────
-\roadscene{5.0}
-%% bounding box around the pedestrian
-\draw[c8det, thick, dashed] (6.72, 0.72) rectangle (7.32, 1.72);
-%% corner coordinates
-\node[font=\tiny, c8det, anchor=north west] at (6.72, 0.72)
-  {$(x_{\min},y_{\min})$};
-\node[font=\tiny, c8det, anchor=south east] at (7.32, 1.72)
-  {$(x_{\max},y_{\max})$};
-\node[font=\small\bfseries, black!70] at (7.0,-0.45) {Detection};
-\node[font=\footnotesize, black!55]   at (7.0,-0.82) {box around each object};
-
-%% ─── Panel 3 : Segmentation ──────────────────────────────────────────────
-%% Re-draw the scene with colour-coded regions
-\begin{scope}[xshift=10.0cm]
-  %% sidewalk top - green
-  \fill[c8seg1!40] (0,2.0) rectangle (4.0,3.0);
-  %% road - blue-ish
-  \fill[c8seg2]    (0,0.6) rectangle (4.0,2.0);
-  %% crosswalk stripes remain part of the road surface
-  \foreach \s in {0.55,0.95,1.35,1.75,2.15,2.55,2.95} {
-    \fill[white!92!c8seg2] (\s,0.62) rectangle (\s+0.28,1.98);
-  }
-  %% sidewalk bottom - green
-  \fill[c8seg1!40] (0,0.0) rectangle (4.0,0.6);
-  %% pedestrian mask
-  \fill[c8ped] (2.02,1.56) circle (0.12);
-  \fill[c8ped] (1.94,1.06) rectangle (2.10,1.46);
-  \draw[c8ped, line width=1.1pt] (1.94,1.35) -- (1.74,1.18);
-  \draw[c8ped, line width=1.1pt] (2.10,1.35) -- (2.30,1.18);
-  \draw[c8ped, line width=1.1pt] (1.96,1.06) -- (1.82,0.78);
-  \draw[c8ped, line width=1.1pt] (2.08,1.06) -- (2.22,0.78);
-  \draw[black!30, thin] (0,0) rectangle (4.0,3.0);
-  %% legend chips – spaced so labels don't clip
-  \fill[c8seg2]    (0.05, 3.38) rectangle (0.38, 3.62);
-  \node[font=\tiny, anchor=west] at (0.42, 3.50) {road};
-  \fill[c8ped]     (1.20, 3.38) rectangle (1.53, 3.62);
-  \node[font=\tiny, anchor=west] at (1.57, 3.50) {pedestrian};
-  \fill[c8seg1!40] (2.65, 3.38) rectangle (2.98, 3.62);
-  \draw[black!20, thin] (2.65, 3.38) rectangle (2.98, 3.62);
-  \node[font=\tiny, anchor=west] at (3.02, 3.50) {sidewalk};
-\end{scope}
-\node[font=\small\bfseries, black!70] at (12.0,-0.45) {Segmentation};
-\node[font=\footnotesize, black!55]   at (12.0,-0.82) {per-pixel region label};
-
-\end{tikzpicture}%
-}
-\caption{The same dashboard-camera frame can be read three ways depending on the output required. Classification asks whether a pedestrian is present anywhere in the frame. Detection localizes the pedestrian with a bounding box. Segmentation assigns labels at pixel level, including the pedestrian mask. Task formulation must come first because each output demands a different loss, metric, and architecture head.}
+\smallscene{0cm}
+\smallscene{3.55cm}
+\smallscene{7.1cm}
+\begin{scope}[color=mlInk]\personshape\end{scope}
+\begin{scope}[xshift=3.55cm,color=mlInk]\personshape\end{scope}
+\begin{scope}[xshift=7.1cm,color=mlAccent]\personshape\end{scope}
+\draw[mlAccent, line width=0.9pt] (4.58,0.43) rectangle (5.32,1.68);
+\node[ml label, text=mlAccent, anchor=south] at (4.95,1.70) {person};
+\node[ml label] at (1.425,2.38) {pedestrian: yes};
+\node[align=center] at (1.425,-0.40) {Classification};
+\node[align=center] at (4.975,-0.40) {Detection};
+\node[align=center] at (8.525,-0.40) {Segmentation};
+\node[ml label] at (1.425,-0.80) {one image label};
+\node[ml label] at (4.975,-0.80) {one object box};
+\node[ml label] at (8.525,-0.80) {person pixels highlighted};
+\end{tikzpicture}
+\captionof{figure}{One schematic scene, three output types: an image label, a bounding box, and a pixel mask. The blue marks show the additional spatial information required by detection and segmentation.}
 \label{fig:vision-street-scene}
-\end{figure}
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{p{2.12cm}p{7.83cm}}
-\toprule
-Task & Output on the same road-scene image \\
-\midrule
-Classification & \texttt{pedestrian present = yes} \\
-Detection & \texttt{pedestrian = [x\_min, y\_min, x\_max, y\_max]} \\
-Segmentation & Pixelwise mask separating pedestrian, road, sidewalk, and background \\
-\bottomrule
-\end{tabular}
-\caption{The same image can define very different output structures. This is why task formulation must come before architecture choice.}
 \label{tab:vision-task-output-structure}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-\begin{example}[Why Task Formulation Matters]
-A system that classifies a dashboard-camera frame as ``contains a pedestrian'' is not enough for the campus shuttle. The shuttle still needs to localize the person, distinguish them from nearby background structure, and preserve enough spatial detail to support downstream decisions. Decide the output requirement before architecture depth becomes the main topic.
-\end{example}
+\subsection{Image Classification}
 
-Model choice follows the output object. Image-level labels suggest a classification head and image-level evaluation. Box labels suggest a detector with localization-aware evaluation. Pixel masks suggest a segmentation head with overlap and boundary checks. When the failure pattern is wrong, the next question is usually whether the annotation policy or output type was underframed---not whether the network was too small.
+For the shuttle example, a binary classification target could be $Y=\mathbf1\{\text{an in-scope pedestrian is visible}\}$. A classifier can estimate $\hat p(x)$ and make a presence decision at a selected threshold. It supplies no location or count. A multilabel task can assign several category-presence labels to one image; a single-category task instead requires an explicit convention about which category defines that image.
 
-\textbf{Task-specific evaluation.} Judge classification with accuracy, precision, recall, and calibration if the output drives a decision. Detection must also respect localization, so IoU and false positives matter alongside class recall. Segmentation usually needs overlap quality such as IoU or Dice, plus boundary behavior when fine spatial detail matters.
+Accuracy weights images by their frequency in the evaluation set. If only $1\%$ of images contain a pedestrian, always predicting absence achieves $99\%$ accuracy while missing every positive. Class precision, recall, and probability calibration answer other questions. They require a specified positive definition, decision threshold, and evaluation population. Calibration of a presence probability does not establish calibration of a detector's box-level score.
 
-\subsection{A Running Case: What the Camera Actually Sees}
+Nearby video frames are dependent observations. Splitting them randomly can put almost the same person and background in both training and evaluation. Hold out clips, routes, dates, people, or cameras when the claimed use concerns those changes. An uncertainty calculation that treats every correlated frame as an independent new case can exaggerate precision.
 
-Suppose the campus shuttle uses a forward-facing dashboard camera mounted low behind the windshield. For the rest of this chapter, treat the real task as \emph{pedestrian detection}, not scene classification, because the system must know where the person is---not only whether one is somewhere in the frame. This running case anchors the rest of the chapter: annotation policy, locality assumptions, augmentation choices, shortcut hypotheses, and deployment slices all answer to the same detector.
+\subsection{Detection: Overlap, Matching, and Ranking}
 
-The camera is not neutral. A low-mounted dashboard camera sees glare from the glass, reflections from the dashboard, raindrops and smear marks on the windshield, seasonal shadows, and strong scale changes as pedestrians move from far away to very close. A benchmark image can therefore look visually clean while still being a weak proxy for deployment. The invariance audit is already doing work here: small horizontal shifts, mild lighting changes, and modest blur should usually preserve the label, while heavy occlusion, extreme darkness, or viewpoint changes that make the person unresolvable may change what the system can reliably output.
+A detector returns a set of predicted categories, boxes, and scores. It can miss an object, choose the wrong category, place a box poorly, or produce duplicate predictions. Detection architectures need not all have the same separate objectness head or suppression procedure; the evaluation still has to decide which predictions correspond to which annotated objects.
 
-In vision, the image is not the world. It is the output of a camera, lens, mounting position, exposure system, and environment. A good vision practitioner keeps asking what that acquisition process adds or removes before the model ever sees the scene.
-
-\begin{warningbox}
-For image sequences or camera data, avoid random splits that put near-duplicate frames on both sides of the evaluation boundary. Split by camera, route, day, clip, or location when those sources could leak the same visual context into train and test.
-\end{warningbox}
-
-\section{Annotation Ontology and Label Ambiguity}
-
-Once the output object is fixed, the next question is what the labels actually mean. Every vision dataset rests on an annotation policy that defines---sometimes implicitly---which objects count, what counts as an occurrence, and how annotators should resolve ambiguous cases. That policy is a modeling decision. It shapes the label space, and therefore the task, before any image reaches any model.
-
-\paragraph{Object boundary ambiguity.}
-For the pedestrian-detector running case, the annotation policy must decide whether to count a person seen through a store window, behind a fence, with only a headless torso visible at the image boundary, or with their back turned. Different policies on these questions produce different label sets. A model trained under one policy can behave very differently from a model trained under another, even on the same raw images.
-
-\paragraph{Scale and minimum-size conventions.}
-Objects at long range are often tiny in the image. Below some pixel area, even a human annotator cannot resolve the object reliably. Detection datasets therefore often define a minimum bounding-box area for inclusion. That threshold is a property of the annotation protocol, not of reality. A model trained with a $32 \times 32$ pixel minimum was never taught to find smaller objects, which is not the same as saying the deployment system is allowed to miss them.
-
-\paragraph{Annotator disagreement.}
-When two annotators draw different bounding boxes around the same pedestrian, or one annotator marks an occluded person and another does not, the disagreement usually reflects genuine ambiguity rather than careless labeling. The annotation protocol must resolve this ambiguity with explicit rules. Explicit rules do not eliminate the underlying fuzziness; they replace it with a conventionalized definition that some downstream uses will satisfy and others will not.
-
-\begin{example}[Annotation Policy Shapes Recall]
-Suppose a pedestrian-detector dataset uses a policy that excludes heavily occluded people (visible fraction below 30\%). A model trained on this dataset learns to suppress predictions on heavily occluded cases. In a safety evaluation, engineers later discover that the model misses pedestrians partially hidden behind parked vehicles. The model is behaving correctly under its training policy. The training policy was wrong for the deployment context.
-\end{example}
-
-\textbf{Label space audit.} Before training a vision model, write down the annotation rules that govern edge cases: minimum object size, occlusion policy, boundary handling, and multiple-instance rules. Then ask whether those rules are defensible for the deployment context. The label space is a modeling choice, not a given.
-
-With the output object and annotation policy fixed, the next question is representational: what local visual structure must the model detect reliably across the image?
-
-\section{Why Raw Pixels Are Not Enough}
-
-Images are often described as arrays of pixels, but that description is too weak to explain why vision is difficult. A photograph is not merely a grid of numbers; it is the joint result of lighting, geometry, occlusion, texture, viewpoint, scale, and sensor properties. Different pixel arrays can represent the same object, and nearly identical arrays can represent different scenes.
-
-This is the core educational point. Vision is hard because raw measurements do not come with meaning attached. A model must infer edges, parts, shapes, textures, and object relationships from those measurements. The real challenge is building internal descriptions that remain useful under translation, clutter, lighting change, background change, and viewpoint variation.
-
-Classical computer vision relied heavily on hand-designed features: edges, corners, texture histograms, local descriptors, and shape cues. Those pipelines remain conceptually important because they show what practitioners once thought stable visual structure looked like. Deep learning changed the field not by making structure irrelevant, but by making feature extraction itself learnable. The next section gives the chapter's first architectural answer: ask the same local question across the image rather than treating every pixel position as unrelated.
-
-\section{Convolution as a Repeated Local Question}
-
-\begin{practicalnote}
-\textbf{Reading order.} If convolution is new, read the vertical-edge worked example first and then return to the theorem language about equivariance. The example supplies the visual intuition; the theorem names the general property that the example suggests.
-\end{practicalnote}
-
-\begin{definition}[Convolutional Layer]
-A convolutional layer applies a small learnable filter across an image, producing a feature map whose values measure how strongly the filter matches local patterns at each position.
-\end{definition}
-
-The right headline for convolution is simple. It is also the first concrete architectural response to the invariance audit:
-
-\begin{center}
-\emph{Convolution matters because vision is local before it is global.}
-\end{center}
-
-Two related terms help before the notation. A representation is \emph{equivariant} when an input change produces a corresponding, structured change in the representation---for example, a feature map that shifts along with a shifted image. A decision rule is closer to \emph{invariant} when the answer stays effectively the same under small label-preserving changes. Vision systems usually want equivariant intermediate features and more invariant final outputs.
-
-Suppose an image is represented by a grid $X$ and a small filter $K$ by a $3 \times 3$ matrix. Using the standard deep-learning convention, the local filtering response at location $(i,j)$ is
+\par\noindent\begin{minipage}{\linewidth}
+For boxes treated as continuous rectangles, write $B=[x_1,y_1,x_2,y_2]$ with $x_2>x_1,y_2>y_1$ and area $(x_2-x_1)(y_2-y_1)$. Their intersection over union is
 \[
-S_{i,j} = \sum_{u=0}^{2}\sum_{v=0}^{2} K_{u,v} X_{i+u,j+v}.
+\operatorname{IoU}(B,G)=\frac{|B\cap G|}{|B|+|G|-|B\cap G|}.
 \]
-The filter slides across the image and produces a new grid of responses. One filter may respond to horizontal edges, another to vertical edges, another to corners; later filters can respond to more complex motifs built from earlier ones.
-This operation is technically cross-correlation rather than flipped-kernel convolution, but deep-learning libraries call it convolution. The theorem below uses the unflipped filtering operator defined by the displayed sum.
+\end{minipage}\par\addvspace{\belowdisplayskip}
+Intersection width is $\max(0,\min(x_2^B,x_2^G)-\max(x_1^B,x_1^G))$, with the analogous height. Pixel-index conventions need their own area rule; adding one to continuous coordinate differences would change this calculation.
 
-For the pedestrian-detector running case, these feature maps are not the final output. They are local evidence maps. A detector turns such evidence into objectness scores, class scores, and bounding boxes, then evaluates localization with IoU and detection precision/recall. A toy digit classifier teaches convolution and pooling, but the deployment task also needs box geometry and false-positive control.
+For $B=[0,0,2,2]$ and $G=[0.2,0,2.2,2]$, the intersection area is $3.6$, the union area $4.4$, and IoU is $9/11\approx0.818$. A correct class and sufficient overlap are necessary for a match under many protocols, but are not enough to count every overlapping prediction as a new true positive.
 
-\begin{prereqbridge}
-The formula above is a weighted sum applied repeatedly at many image locations. Instead of learning one set of weights for the whole image, the model reuses the same small weights everywhere. That reuse is called parameter sharing.
-\end{prereqbridge}
+To define a simple protocol, fix one category, an IoU threshold $\tau$, and a deterministic tie rule. Within each image, process predictions in decreasing score order. Match a prediction to the unmatched annotated object of that category with greatest IoU if the overlap is at least $\tau$. Each ordinary object can match once. An unmatched prediction is a false positive; an unmatched object is a false negative. This example assumes complete annotations, no ignored regions or crowd cases, and no prediction cap. Benchmark protocols can change these assumptions.
 
-\begin{theorem}[Local filtering is shift equivariant away from boundaries]
-Let \(f_K\) denote the fixed-kernel filtering operator defined above, with unit stride and padding chosen so both sides are defined on the same interior locations. If \(T_\delta\) shifts an image by \(\delta=(\delta_1,\delta_2)\), then
+Pool the scored predictions for that category across images and order them by score. If $t_i\in\{0,1\}$ indicates a true positive at rank $i$, and $N_G>0$ is the number of eligible annotated objects, then
+\[
+P_i=\frac{\sum_{j\le i}t_j}{i},\qquad
+R_i=\frac{\sum_{j\le i}t_j}{N_G}.
+\]
+These precision--recall points describe a ranking. An operating threshold selects one point; average precision summarizes several points according to a convention. It is neither the average of prediction scores nor the accuracy of a box classifier.
+
+For hand calculations, define \emph{uninterpolated} average precision as
+\[
+\operatorname{AP}_{\rm raw}=\frac1{N_G}\sum_i t_iP_i.
+\]
+With two objects and ranked outcomes $(1,0,1)$, precisions are $1,1/2,2/3$ and recalls are $1/2,1/2,1$. Thus $\operatorname{AP}_{\rm raw}=(1+2/3)/2=5/6$. If the middle prediction duplicates the first object, its high overlap still gives $t_2=0$ because that object was already matched.
+
+Another convention interpolates the precision envelope,
+\[
+P_{\rm int}(q)=\max\bigl(\{P_i:R_i\ge q\}\cup\{0\}\bigr),
+\]
+and averages it over selected recall values. COCO uses $101$ recall values from $0$ to $1$ and reports its main AP averaged over IoU thresholds $0.50,0.55,\ldots,0.95$ and eligible categories. The evaluator also specifies maximum detections, object-size ranges, ignored annotations, and crowd handling \citep{coco2015evaluation}. These choices are part of the metric. ``mAP'' needs its category averaging, IoU thresholds, and interpolation stated; AP at $0.50$ is a different quantity from COCO's main AP.
+
+The toy ranking above has interpolated precision $1$ at recall values $0,0.01,\ldots,0.50$ and $2/3$ at the remaining $50$ values. Its $101$-point average is $253/303\approx0.835$, slightly different from $5/6$. Categories with no eligible ground truth need a stated treatment; assigning them an arbitrary perfect score can distort an average. An aggregate metric also does not establish recall for distant people or the false-alarm rate acceptable to a particular application.
+
+\subsection{Suppressing Predictions Is a Separate Decision}
+
+Some detectors use greedy non-maximum suppression before evaluation. Within a specified category, retain the highest-scoring box and suppress remaining boxes whose IoU with it exceeds a chosen suppression threshold. Repeat on the survivors. Other detectors can be fitted to produce a set without this same post-processing step.
+
+Take $A=[0,0,2,2]$, $B=[0.2,0,2.2,2]$, and $C=[3,0,5,2]$ with scores $0.9,0.8,0.7$. At suppression threshold $0.5$, retain $A$, suppress $B$ because their IoU is $9/11$, and retain $C$. Suppression compares predictions with predictions; evaluation matching compares predictions with annotations. Their thresholds serve different purposes.
+
+The rule does not discover real object identity. It can suppress two distinct, overlapping people, or retain duplicates whose boxes overlap too little. It also is not a connected-component rule: in another arrangement, boxes $A,B,C$ can have high $A$--$B$ and $B$--$C$ overlap but low $A$--$C$ overlap. If $A$ is retained and $B$ suppressed, $C$ may survive.
+
+\subsection{Segmentation: Pixel Sets and Their Aggregation}
+
+Semantic segmentation assigns categories to pixels. Instance segmentation additionally separates individual objects of one category. A pedestrian region can therefore be correct as a semantic foreground while still merging two people whose identities the task requires separately.
+
+For binary predicted and annotated foreground sets $M,G$ with nonempty union,
+\[
+\operatorname{IoU}(M,G)=\frac{|M\cap G|}{|M\cup G|},\qquad
+\operatorname{Dice}(M,G)=\frac{2|M\cap G|}{|M|+|G|}.
+\]
+Let $J=\operatorname{IoU}(M,G)$. Since $|M|+|G|=|M\cup G|+|M\cap G|$,
+\[
+\operatorname{Dice}(M,G)=\frac{2J}{1+J}.
+\]
+This transform is increasing on $[0,1]$. It preserves ordering for a fixed mask-pair comparison, but applying it after averaging IoUs does not generally equal averaging the corresponding Dice scores.
+
+If $|M|=80,|G|=100,|M\cap G|=60$, then IoU is $60/120=1/2$ and Dice is $120/180=2/3$. If both masks are empty, each displayed ratio is $0/0$. An evaluation protocol may award agreement, exclude the pair, or report a separate absence measure; its convention must be explicit. Ignored pixels are removed consistently from the eligible domain.
+
+Aggregation changes the question. Suppose one image has one foreground pixel which is missed, while another has $100$ foreground pixels predicted perfectly. Mean per-image IoU is $1/2$; pooling intersections and unions gives $100/101\approx0.990$. The pooled score lets the large region dominate. Mean per-class, per-image, per-instance, and globally pooled scores therefore support different claims. Boundary errors and small-object misses can matter even when a large background or road region scores well.
+
+\subsection{Tracking Requires Association Evidence}
+
+A tracker associates objects across frames. Evaluation must examine detection, localization, and identity association, rather than treating temporal smoothness as correctness. A smoothly moving box can follow the wrong person.
+
+Identity measures such as IDF1 use a sequence-level assignment between predicted and annotated identities \citep{ristani2016tracking}. With eligible identity true positives, false positives, and false negatives,
+\[
+\operatorname{IDF1}=\frac{2\operatorname{IDTP}}{2\operatorname{IDTP}+\operatorname{IDFP}+\operatorname{IDFN}}.
+\]
+The quantities depend on the identity assignment and spatial-match rules. They are not obtained simply by counting framewise class matches.
+
+Consider two people over three frames, with both boxes placed exactly in every frame. Predicted track names $a,b$ follow the correct people for the first two frames and swap in the third. Framewise detection can be perfect. Under the best one-to-one assignment of these two track names to the two people, four of six detections have the correct identity, giving IDTP $=4$, IDFP $=2$, IDFN $=2$, and IDF1 $=2/3$. HOTA provides another evaluation that combines and separates detection, association, and localization effects under its specified protocol \citep{luiten2021hota}. Report the matching and aggregation conventions alongside the score.
+
+\section{Annotation and Acquisition Define the Available Evidence}
+
+An annotation ontology determines which categories and instances count. For the hypothetical shuttle, the policy must address partial bodies at image boundaries, people behind fences or windows, reflections, distant objects, and ambiguous visibility. Boxes may cover only visible pixels or approximate a full, partly occluded body. Comparing those different conventions as if they were identical introduces disagreement before model error is measured.
+
+Minimum-size and visibility rules describe what the dataset supervises. A threshold of $32\times32$ pixels or a visible fraction of $30\%$ would be hypothetical protocol choices here, not universal detection standards. Excluding small or heavily occluded people creates a coverage gap. If they are ignored in the loss, the model receives no direct requirement to suppress or detect them; if they are treated as background, the fitting pressure differs. Neither treatment guarantees the model's resulting behavior or makes its deployment misses acceptable.
+
+Annotator disagreement can reflect ambiguity, inconsistent instructions, or ordinary mistakes. Repeated annotation and adjudication can estimate the disagreement, while explicit rules define how the measured target resolves it. A model cannot repair an unresolved policy disagreement merely by gaining more layers.
+
+The camera determines what evidence reaches the model. Mounting height, lens geometry, exposure, windshield reflections, compression, and motion can change the input distribution. A new camera can leave the target definition intact while changing how difficult it is to infer that target. If the target is physical presence, a person becoming unresolvable under severe darkness removes measurement evidence without making the person absent. A visibility-based target instead needs a rule for when such an image is positive, ineligible, or ambiguous. These are different annotation questions.
+
+For the proposed shuttle setting, public road images may omit windshield glare or use a different viewpoint from the intended camera. Real target-camera footage is therefore a separate evaluation source. Synthetic blur can test response to its specified blur operation; it does not reproduce every effect of rain, low-light exposure, or a moving sensor.
+
+Split construction follows the claim. A held-out camera tests transfer to that source, a held-out route tests that route change, and a later period tests conditions at that time. Each can also change people, weather, and backgrounds. Keeping those factors visible prevents a source comparison from being interpreted as an isolated camera effect. Broad predictive evaluation remains distinct from evaluating the shuttle's complete sensing and control system.
+
+\section{Convolution Shares a Local Computation}
+
+Raw pixels can contain enough information for a task, yet fitting a useful rule from them can be difficult. A spatially unrestricted dense mapping gives every input--output pair its own weight. Convolution instead restricts interactions to local neighborhoods and shares the same weights across positions. This is an inductive bias, rather than a theorem that all visual reasoning must be local.
+
+Let $X$ be a single-channel image and $K$ a $3\times3$ filter. The common deep-learning convention computes
+\[
+[f_K(X)]_{i,j}=\sum_{u=0}^2\sum_{v=0}^2K_{u,v}X_{i+u,j+v}.
+\]
+This is cross-correlation: the kernel is not reversed. Mathematical convolution reverses its spatial indices under the corresponding definition. Learned filters can represent either convention after reparameterization. Reversing the antisymmetric vertical-edge filter below changes its sign. State the convention when checking a numerical response.
+
+For
+\[
+K=\begin{bmatrix}-1&0&1\\-1&0&1\\-1&0&1\end{bmatrix},\qquad
+P=\begin{bmatrix}0&1&1\\0&1&1\\0&1&1\end{bmatrix},
+\]
+each row contributes $1$, so the response is $3$. Brighter pixels on the right produce a positive vertical-contrast response; reversing the patch horizontally produces $-3$. A patch constant across each row has response zero, even if its rows differ in brightness. The feature detects a particular contrast, rather than establishing that a pedestrian is present.
+
+\subsection{Shape, Parameters, and Arithmetic}
+
+For $C_{\rm in}$ input channels and $C_{\rm out}$ output channels, a standard ungrouped square-kernel layer uses weights $K_{u,v,c,o}$ and one bias $b_o$ per output channel. With stride $s$, dilation $a$, and a padded input $\tilde X$,
+\[
+S_{i,j,o}=b_o+\sum_{c=1}^{C_{\rm in}}\sum_{u,v=0}^{k-1}
+K_{u,v,c,o}\tilde X_{si+au,sj+av,c}.
+\]
+Dilation spaces the sampled kernel entries. The effective kernel extent is $k_{\rm eff}=a(k-1)+1$. For input height $H$, width $W$, and symmetric padding $p$, valid nonempty output sizes are
+\[
+H_{\rm out}=\left\lfloor\frac{H+2p-k_{\rm eff}}s\right\rfloor+1,
+\qquad
+W_{\rm out}=\left\lfloor\frac{W+2p-k_{\rm eff}}s\right\rfloor+1.
+\]
+For an odd kernel, $a=1,s=1,p=(k-1)/2$ preserves height and width. Undilated even kernels need asymmetric padding to preserve them at unit stride. With dilation, the parity of the effective extent determines whether symmetric integer padding suffices. ``Same'' padding at other strides requires its own convention; it need not mean equal input and output size.
+
+This layer has
+\[
+k^2C_{\rm in}C_{\rm out}+C_{\rm out}
+\]
+trainable parameters, independent of $H,W$. With $k=3,C_{\rm in}=3,C_{\rm out}=64$, the count is $1{,}792$. On a $224\times224$ input with unit stride and padding one, the output is $224\times224\times64$ and the weighted sums use
+\[
+224^2\cdot64\cdot9\cdot3=86{,}704{,}128
+\]
+multiply--accumulate operations, excluding bias addition and any activation. Counting a multiply and an addition separately gives a different arithmetic convention. Output activations contain $3{,}211{,}264$ entries; differentiation can retain further intermediate state. Few weights do not imply little activation memory.
+
+A dense mapping between those same flattened input and output shapes has $150{,}528\cdot3{,}211{,}264=483{,}385{,}147{,}392$ weights, plus output biases. The convolution restricts local connections and ties their weights. This enormous count difference does not prove a fixed sample-efficiency gain or equal representational capacity. Sharing can help when the repeated pattern is useful; it can be too restrictive when different locations require different rules.
+
+\subsection{Translation Equivariance Has Boundary and Grid Conditions}
+
+Define an integer translation by $(T_\delta X)_{i,j}=X_{i-\delta_1,j-\delta_2}$. Unit-stride shared filtering obeys a precise translation relation.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\begin{theorem}[Shared local filtering follows an interior translation]
+For the displayed fixed-kernel, unit-stride cross-correlation,
 \[
 f_K(T_\delta X)=T_\delta f_K(X)
 \]
-at all locations unaffected by the image boundary \citep{goodfellow2016,lecun2015}.
+on an infinite grid, or at finite-image locations where both calculations use corresponding interior neighborhoods.
 \end{theorem}
-
 \begin{proof}
-Write the shifted image as \((T_\delta X)_{i,j}=X_{i-\delta_1,j-\delta_2}\). Then at an interior location \((i,j)\),
+At such a location,
 \[
 [f_K(T_\delta X)]_{i,j}
-= \sum_{u,v} K_{u,v}(T_\delta X)_{i+u,j+v}
-= \sum_{u,v} K_{u,v}X_{i+u-\delta_1,j+v-\delta_2}.
+=\sum_{u,v}K_{u,v}X_{i+u-\delta_1,j+v-\delta_2}
+=[f_K(X)]_{i-\delta_1,j-\delta_2}.
 \]
-The final expression is exactly \([f_K(X)]_{i-\delta_1,j-\delta_2}\), which equals \([T_\delta f_K(X)]_{i,j}\). The feature map therefore shifts with the input, except where boundary handling changes the available neighborhood.
+The last expression is the translated feature response.
 \end{proof}
+\end{minipage}\par\medskip
 
-The equivariance guarantee holds at locations unaffected by the image boundary. Implementations handle edges with \emph{padding} (typically zero-padding). \emph{Valid} convolution avoids padding entirely and shrinks the output; \emph{same} convolution with unit stride pads the input so the output matches the input size. For tasks involving small objects near image edges---common in detection---padding strategy can affect performance.
+A shared bias and a pointwise activation preserve this relation. Compositions preserve it when their domains and translations remain compatible. Finite cropping, zero padding, position-specific operations, and downsampling can change the conditions. A feature map which moves with the input is equivariant; an invariant output stays the same. A detector usually needs the former location relation, while a presence classifier may seek the latter.
 
-\subsection{Why Parameter Sharing Matters}
+With stride $s$, translations by multiples of $s$ can correspond to integer output-grid translations away from boundaries. A one-pixel input shift need not produce a simple shift on a stride-two output grid. The architecture therefore does not supply arbitrary translation invariance merely by having convolutional layers.
 
-If a vertical edge matters on the left side of an image, it probably matters on the right side too. A dense model would learn those cases separately. A convolutional layer reuses the same filter across positions. The advantages are twofold: fewer parameters (so learning is more data-efficient) and a built-in bias toward detecting the same local pattern at multiple locations.
+\subsection{Shared Weights Receive Shared Gradient Evidence}
 
-This does not make a convolutional network perfectly location-invariant. Weight sharing gives translation-equivariant local detectors, and later operations such as pooling add partial invariance. Even so, the architecture is far better matched to image structure than a fully unstructured dense network on raw pixels.
-
-Convolution answers how to detect local patterns efficiently, but not how stable those detections remain under the small shifts and perturbations that real images introduce.
-
-\begin{advancednote}
-\textbf{The convolution arithmetic every grad student should know.} For an input feature map of shape $H \times W \times C_{\text{in}}$ passing through a conv layer with $C_{\text{out}}$ filters of size $k \times k$, stride $s$, and padding $p$:
-
-\emph{Output spatial size.} $H_{\text{out}} = \lfloor (H + 2p - k)/s \rfloor + 1$ and $W_{\text{out}}$ analogously. The classic ``same'' convolution uses $s=1, p=\lfloor k/2 \rfloor$, which keeps $H_{\text{out}} = H$.
-
-\emph{Parameter count.} $k^2 \cdot C_{\text{in}} \cdot C_{\text{out}} + C_{\text{out}}$ (the $+ C_{\text{out}}$ is the per-filter bias). For a $3 \times 3$ filter, $C_{\text{in}} = 3$, $C_{\text{out}} = 64$, this is $3 \cdot 3 \cdot 3 \cdot 64 + 64 = 1{,}792$ parameters---independent of $H, W$, which is the formal payoff of parameter sharing.
-
-\emph{Per-layer compute.} $H_{\text{out}} \cdot W_{\text{out}} \cdot C_{\text{out}} \cdot k^2 \cdot C_{\text{in}}$ multiply-adds. For the same layer on a $224 \times 224$ input with $s=1, p=1$: $224 \cdot 224 \cdot 64 \cdot 9 \cdot 3 \approx 8.7 \times 10^7$ MACs.
-
-\emph{Activation memory.} $O(H_{\text{out}} \cdot W_{\text{out}} \cdot C_{\text{out}})$ per layer, the floats that must be stored for the backward pass. Deep stacks make activations, not parameters, the memory bottleneck.
-
-\emph{Comparison to dense.} A fully-connected layer mapping the same $224 \cdot 224 \cdot 3$ input to a $224 \cdot 224 \cdot 64$ output would need $(224 \cdot 224 \cdot 3) \cdot (224 \cdot 224 \cdot 64) \approx 4.8 \times 10^{11}$ parameters---about $270$ million times the conv layer. The conv layer is the only reason convnets are trainable on natural-image resolution at all.
-\end{advancednote}
-
-\textbf{Backward pass through a convolution (Extension; skip on a first pass).} Let $Y = X \star K$ denote the forward pass (using $\star$ for the cross-correlation operator the chapter calls convolution). The chain rule gives two gradients. The gradient with respect to the input is itself a convolution, with the kernel \emph{flipped} (the so-called transposed convolution): $\partial L / \partial X = \partial L / \partial Y \star \mathrm{flip}(K)$, where $\mathrm{flip}$ rotates the kernel by $180^\circ$ and the operation uses padding chosen to recover the original input shape. The gradient with respect to the kernel is a cross-correlation of the input with the upstream gradient: $\partial L / \partial K = X \star (\partial L / \partial Y)$. The forward pass and both backward passes are therefore the \emph{same} structural operation---one convolution---differing only in which tensor plays the role of input, which plays the role of kernel, and how the kernel is oriented. That is the reason GPU convolution kernels can be reused for the backward pass, and it is the practical version of the statement that reverse-mode autodiff over a linear operator costs the same as the forward pass.
-
-\subsection{Worked Example: Detecting a Vertical Edge}
-
-Consider the following simple $3 \times 3$ filter:
+For fixed $K$, flatten the entries and write the linear part as $y=C_Kx$. If $g=\nabla_yL$, the chain rule gives
 \[
-K =
-\begin{bmatrix}
--1 & 0 & 1 \\
--1 & 0 & 1 \\
--1 & 0 & 1
-\end{bmatrix}.
+\nabla_xL=C_K^\top g.
 \]
-This filter returns a large positive value when the right side of a local patch is brighter than the left---one way to detect a vertical edge.
-
-Now consider a local image patch:
+The transpose sends each derivative back to contributing input locations. It is an adjoint, not an inverse, and cannot generally undo pooling, stride, or information loss. For the single-channel unit-stride example,
 \[
-P =
-\begin{bmatrix}
-0 & 1 & 1 \\
-0 & 1 & 1 \\
-0 & 1 & 1
-\end{bmatrix}.
+\frac{\partial L}{\partial K_{u,v}}=\sum_{i,j}g_{i,j}X_{i+u,j+v}.
 \]
-The convolution response is
-\begin{align*}
-\sum_{u,v} K_{u,v} P_{u,v}
-  &= (-1)(0) + 0(1) + 1(1) \\[-2pt]
-  &\quad + (-1)(0) + 0(1) + 1(1) \\[-2pt]
-  &\quad + (-1)(0) + 0(1) + 1(1) = 3.
-\end{align*}
-The response is strongly positive because the patch contains exactly the vertical contrast the filter is designed to detect.
+The same kernel entry receives summed fitting pressure from every position where it was used.
 
-\begin{example}[What a Feature Map Means]
-If the same vertical edge appears at several positions, the feature map produced by $K$ shows strong responses at those positions. The feature map is therefore not the final answer; it is a spatial summary of where a certain pattern was found.
-\end{example}
-
-\section{Hierarchy and Approximate Invariance}
-
-Each neuron in a convolutional network usually sees only a local region of the image, called its receptive field. As layers stack, receptive fields grow. Early layers may respond to edges and textures; later layers integrate those into parts and larger shapes. This is where the chapter moves from local detectors to partial robustness: architecture can help with small shifts, but it does not settle the invariance question by itself.
-
-Deep vision models are hierarchical for this reason: early layers detect local patterns, later layers combine them into larger structures, and pooling and later processing make the final decision less sensitive to small shifts. Even so, perfect invariance is not automatic.
-
-\begin{advancednote}
-\textbf{Receptive-field arithmetic and the limits of translation invariance.} For a stack of layers with kernel sizes $k_i$ and strides $s_i$, the receptive field at depth $L$ obeys the recursion
+A small one-dimensional version makes both gradients explicit. For $y_0=ax_0+bx_1$, $y_1=ax_1+bx_2$,
 \[
-r_L = r_{L-1} + (k_L - 1) \prod_{i < L} s_i, \qquad r_0 = 1.
+\nabla_xL=(ag_0,\;bg_0+ag_1,\;bg_1),\qquad
+\nabla_{(a,b)}L=(g_0x_0+g_1x_1,\;g_0x_1+g_1x_2).
 \]
-The size of the input region a deep unit can see therefore grows multiplicatively with stride and additively with kernel size. A stack of three $3 \times 3$ convolutions with stride $1$ gives $r_3 = 1 + 2 + 2 + 2 = 7$; replacing the middle layer with stride $2$ jumps the final receptive field to $r_3 = 9$ while halving spatial resolution. This is why deep convolutional stacks with small kernels can still attend to large image regions: strides multiply the reach of every later layer, and a few well-placed downsampling steps inflate receptive fields quickly.
+The middle input participates in both outputs, while each shared weight receives contributions from both neighborhoods.
 
-The same arithmetic exposes a gap between the equivariance theorem and what modern CNNs actually deliver. The theorem applies to a single, pure-convolution layer with unit stride and no boundary effects. Real CNNs use strided convolutions, max-pooling, and (in many architectures) absolute positional encodings, all of which break exact translation invariance: shifting an input by one pixel can change the feature map at deeper layers because the input's alignment with the downsampling grid shifts. See Engstrom et al.\ 2019 for empirical demonstrations that small translations and rescalings flip predictions on standard image classifiers. The practical implication is the converse of the textbook slogan: an augmentation pipeline that pretends modern strided CNNs are translation-invariant is hiding evaluations the model should be subjected to, not enforcing a property it already has.
-\end{advancednote}
+\section{Receptive Fields and Pooling}
 
-\subsection{Pooling}
+A theoretical receptive field describes which input locations can influence an output under the architecture. It need not identify which locations actually have large derivatives or fitted influence. Learned zero weights, nonlinear gates, and competing paths can make the effective contribution smaller or uneven. Attention or other global operations require their own dependency analysis.
 
-\begin{definition}[Max Pooling]
-Max pooling replaces a small local region of activations with its largest value, reducing spatial resolution while preserving strong local evidence.
-\end{definition}
-
-Pooling makes representations less sensitive to tiny translations or distortions. If the same edge shifts one pixel left or right, the pooled response can stay similar even though the raw feature map changes.
-
-Convolution is often described as \emph{translation equivariant}: when the input shifts, the feature map tends to shift too. Pooling and augmentation then push the representation toward \emph{invariance}, where the downstream decision does not change much under small shifts. Equivariance and invariance are related but distinct ideas.
-
-Equivariance means the representation moves when the input moves:
+For a simple stack of local layers, let $r_\ell$ be the receptive-field extent along one axis and $j_\ell$ the spacing between neighboring output centers measured in input pixels. With kernel $k_\ell$, stride $s_\ell$, and dilation $a_\ell$,
 \[
-f(T_\delta X)=T_\delta f(X).
+r_0=j_0=1,\qquad
+r_\ell=r_{\ell-1}+(k_\ell-1)a_\ell j_{\ell-1},\qquad
+j_\ell=s_\ell j_{\ell-1}.
 \]
-Invariance means the representation stays the same:
+Padding affects alignment and boundary content, rather than this nominal interior extent. Three undilated $3\times3$ layers with unit stride give extents $3,5,7$ and spacing one. If the middle layer has stride two, the extents are $3,5,9$ and spacings $1,2,2$. Later neighborhoods reach farther in the input, while the output is more coarsely sampled. Exact spatial sizes still come from the shape formula.
+
+For one-dimensional max pooling of width $k$ and stride $s$,
 \[
-g(T_\delta X)=g(X).
+[\operatorname{Pool}(x)]_t=\max_{0\le u<k}x_{st+u}.
 \]
-Convolution is usually equivariant, not invariant. That suits detection and segmentation, where location matters. Later pooling or global aggregation can push the system toward invariance when the task is classification and position should not change the answer.
+A unit-stride local maximum is equivariant on compatible interior neighborhoods. A strided maximum downsamples and only retains the corresponding grid relations. It can be unchanged when a peak moves within one window, yet change abruptly when that peak crosses a window boundary.
 
-Pooling helps with local stability, but architectural bias is only part of the story. The data pipeline still has to declare which transformations preserve the label.
+For $x=(0,1,0,0)$ with width and stride two, the valid pooled vector is $(1,0)$. Shift the fixed-length input right by one with zero fill: $(0,0,1,0)$ pools to $(0,1)$. The representation changes rather than remaining invariant. A two-pixel right shift gives $(0,0,0,1)$ and the same $(0,1)$, corresponding here to one output-cell shift. The finite example assumes no nonzero content is lost at the boundary.
 
-\section{Augmentation as a Label-Preserving Claim}
+Global maximum or mean aggregation is invariant to a permutation of all its feature locations. If a feature map translates by such a permutation, that aggregation removes its position. Finite shifts that crop content or introduce different padding are not necessarily permutations, so even this argument needs a boundary condition. Discarding position may suit image classification and hinder a localization target.
 
-If convolution and pooling give an architectural bias toward useful local structure, augmentation states the same judgment at the data level. Augmentation is not a bag of tricks for improving leaderboard performance. It is an explicit claim about which transformations preserve the label.
+Low-pass filtering before downsampling can reduce sensitivity to sampling phase. Zhang studied anti-aliased modifications and measured improved shift consistency in specified convolutional models \citep{zhang2019shift}. This is evidence about those fitted procedures; neither pooling nor anti-aliasing guarantees the correct decision under every visual transformation.
 
-Common examples include random crops and translations (with boxes or masks transformed for structured outputs), horizontal flips, small rotations, color jitter, blur, noise, and cutout-style masking.
+\section{Augmentation Transforms Inputs and Targets}
 
-These transformations can teach a model that position, lighting, and small perturbations should not override the semantic content of the image. But augmentation must match the task. A horizontal flip may be harmless for generic object recognition and harmful for text recognition or medical laterality tasks.
+An augmentation specifies a new supervised pair, not only a new image. Let $T$ transform the input and let $\rho_T$ describe the corresponding target change. Task-compatible equivariance asks for
+\[
+f(Tx)\approx\rho_T(f(x)).
+\]
+For a preserved class label, $\rho_T$ can be the identity. For a translated segmentation mask or box, the target must move. Cropping can remove instances or introduce a visibility convention; an incorrect unchanged target supplies inconsistent supervision. Constructing the target after cropping a presence-labeled image can require annotations beyond its original class label. The displayed relation applies where the target transformation is defined.
 
-\begin{decisionbox}
-Every augmentation is a claim about the world. Use it only if the transformed example should still carry the same label in the real problem.
-\end{decisionbox}
+Using augmented pairs fits an objective such as
+\[
+\frac1n\sum_i\mathbb E_T\left[\ell\bigl(\rho_T(y_i),f_\theta(Tx_i)\bigr)\right].
+\]
+Low average augmented loss encourages performance under that transformation distribution. Finite data, imperfect fitting, and limited transformation coverage do not establish exact equivariance or robustness to every real acquisition change.
 
-\begin{example}[Augmentation Must Match the Camera]
-For the running pedestrian-detector case, small crops, modest brightness changes, mild blur, and limited weather-style corruption are justified because the deployment camera really does see framing variation, dusk, motion blur, and windshield noise. Vertical flips, large rotations, and stylized color shifts are different. They create scenes the dashboard camera will never produce and can teach the wrong invariances. Good augmentation imitates the sensor world rather than decorating the dataset.
-\end{example}
+\subsection{Box and Mask Geometry Must Follow the Image}
 
-\section{Augmentation Claim Matrix}
+In continuous edge coordinates on an image of width $W$, horizontal reflection maps a box to
+\[
+[x_1,y_1,x_2,y_2]\mapsto[W-x_2,y_1,W-x_1,y_2].
+\]
+With $W=100$, $[10,20,30,60]$ becomes $[70,20,90,60]$. Discrete pixel indices instead reflect positions using $W-1$; confusing pixel-center and box-edge conventions produces an offset error. Reflect masks and any left/right labels consistently.
 
-Each augmentation is a claim that the transformation leaves the label intact. Making that claim explicit---rather than applying a standard list by convention---helps practitioners choose augmentations that match their task and deployment context.
+For a crop window $C$, a visible-region box must first be intersected with $C$ and then expressed relative to the crop origin. The box $[10,20,40,60]$ intersected with crop $[20,10,70,70]$ becomes $[20,20,40,60]$ in original coordinates and $[0,10,20,50]$ in crop coordinates. The retained area is $800$ of $1{,}200$, or $2/3$. Whether the truncated instance remains eligible depends on the stated target policy. A full-body annotation may require a different update from a visible-region box.
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{2.47cm}p{4.11cm}p{3.37cm}}
+For measurable regions $B,G$ with positive finite union area and the same invertible affine transform $T(x)=Ax+b$, areas of intersections and unions both multiply by $|\det A|$. Thus
+\[
+\operatorname{IoU}(T(B),T(G))=\operatorname{IoU}(B,G).
+\]
+This concerns transformed sets without clipping. Replacing a rotated polygon by an axis-aligned enclosing box, rasterizing a mask, or cropping the regions can change IoU. Geometry-preserving input transformations do not automatically preserve every representation or target convention used by a pipeline.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{2.1cm}L{3.5cm}L{4.1cm}@{}}
 \toprule
-Augmentation & Implicit claim & When the claim fails \\
+Transform & Target relation to examine & A plausible failure \\
 \midrule
-Random crop and translate & For classification, object location should not change the class; for detection or segmentation, transformed boxes or masks should remain valid & Tasks where position is semantically relevant, or crops that remove or truncate the target object \\
-Horizontal flip & Left-right orientation is irrelevant to the label & Text recognition, medical laterality (left/right hand), traffic signs \\
-Color jitter & Exact hue and saturation are not defining features & Ripeness grading by color, skin-condition classification, specific plant disease detection \\
-Gaussian blur & Fine-grained texture detail is not required & Texture classification tasks where fine-grained surface structure is the target \\
-Cutout or random erasing & The label is still clear even when parts are occluded & Any task where the critical feature may be the part that was erased \\
-Rotation by large angle & The label is invariant to orientation & Text detection, aerial images where ``up'' carries orientation meaning \\
+Crop or translation & Move spatial targets; revise visibility and instance membership & The target leaves the frame or location itself defines the class \\
+Horizontal flip & Reflect geometry and any orientation labels & Text, laterality, or direction changes the required category \\
+Color or blur change & Preserve the target only while the necessary evidence remains usable & Color defines ripeness, or fine texture distinguishes the target \\
+Erasing or large rotation & State the permitted occlusion or orientation change & The erased detail is decisive, or the transformed scene conflicts with use conditions \\
 \bottomrule
 \end{tabular}
-\caption{Each augmentation encodes a claim about label invariance. Applying an augmentation whose claim is false for the task will teach the model a wrong invariance.}
+\captionof{table}{Augmentation claims are task-dependent. Spatial transformations often require transformed targets rather than an unchanged label.}
 \label{tab:augmentation-claims}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-The pedestrian-detector case illustrates how to use the matrix. Small crops are justifiable: the system must detect pedestrians across framing variations as the camera moves. Modest brightness changes are justifiable: the deployment camera sees dusk, overcast conditions, and reflections. Large rotations are not: the camera is fixed in orientation and the system never needs to find upside-down pedestrians. Heavy stylization is not: the camera is a real lens, not an artistic filter. Each inclusion or exclusion is a deliberate claim rather than a recipe pick.
+A horizontal flip may preserve generic person presence while changing the side of a road, a gesture's direction, or text in a scene. Color jitter may preserve one object category while altering the measurement used to grade ripeness. Label semantics matter even when the transformed image looks plausible.
 
-Before finalizing an augmentation pipeline, write down the claim behind each augmentation. Then ask whether that claim is true for the real deployment scenario. Augmentations whose claims are false are not neutral: they actively teach the wrong invariances and can hurt performance on the deployment cases that violate the claimed invariance.
+For the hypothetical shuttle, modest changes in framing, brightness, and blur are candidate augmentations because similar effects may occur in the intended acquisition process. Their intensities and target updates still need testing. A brightness multiplier does not model all properties of night exposure; synthetic blur does not model all rain on a windshield. Large rotations and vertical flips are poorly motivated by a fixed, upright camera, but their absence from normal operation alone does not prove that training with them must hurt. Compare the actual fitted procedures on permitted conditions.
 
-\section{Modern Visual Backbones and Transfer}
+An augmentation can regularize by making fitting harder, even when it does not reproduce a physical camera mechanism exactly. That potential benefit is an empirical claim separate from label validity. Generated images also need their own annotation, provenance, and coverage checks; generation does not guarantee that small objects, box geometry, or rare conditions are faithful \citep{ho2020ddpm,rombach2022}.
 
-Convolutional networks dominated vision for many years because their inductive biases fit images well. More recently, Vision Transformers (ViTs) \citep{dosovitskiy2021vit} and hybrid architectures also became important, especially when pretrained at scale. A ViT splits the image into fixed-size patches, embeds each patch as a token, and applies the same self-attention machinery introduced in Chapter~\ref{ch:representation-foundation-models}. The architectural lesson is that the inductive bias of locality is no longer mandatory once enough data is available; whether convolution still helps becomes an empirical question per task. The high-level lesson from the representation-learning chapter still applies: once a model learns a strong visual representation, many downstream tasks can reuse it. Backbone choice becomes meaningful only after the task, annotation policy, and invariance claims are clear.
+\section{Backbones and Transfer Are Controlled Comparisons}
 
-Pretrained visual backbones often learn reusable low-level and mid-level features: edges, textures, contours, shapes, and object-part relationships. Transfer learning became effective in vision long before many students encountered large language models.
+A convolutional backbone and a patch-based attention backbone arrange spatial computation differently. A Vision Transformer embeds patches and combines their representations through attention and positional mechanisms. The original ViT study evaluated large-scale pretraining and transfer in specified image-classification settings \citep{dosovitskiy2021vit}. It does not establish that local biases become unnecessary for every task once an unspecified amount of data is available.
 
-In applied vision work, training from scratch should not be the default. If a reliable pretrained backbone exists and the target domain is not radically different, transfer learning is usually the stronger baseline.
+A backbone must connect to the required output. A frozen image-level linear probe assesses classification accessibility, while a detector on frozen features fits a spatial readout and localization procedure. A strong image-classification probe does not alone establish that the features retain the resolution needed for small boxes or mask boundaries.
 
-Transfer learning is not automatic. When the source domain (e.g., ImageNet photographs) differs sharply from the target domain (e.g., satellite imagery or medical scans), even strong pretrained representations can fail. The choice between a frozen backbone with a linear head and full fine-tuning depends on the size of the labeled target dataset. With few labels, freezing reduces overfitting risk. With many labels, fine-tuning adapts features to the new domain. Monitor validation performance under both strategies before committing.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.45cm}L{3.6cm}L{3.65cm}}
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{2.3cm}L{3.4cm}L{4.0cm}@{}}
 \toprule
-Vision baseline & When it is useful & Evidence needed to move on \\
+Comparison & What is fitted & What the comparison can test \\
 \midrule
-Raw-pixel or simple feature baseline & Sanity check for easy visual cues & Fails on deployment-relevant slices or cannot localize objects \\
-Small CNN from scratch & Tests whether local learned features suffice & Needs enough labeled target data and honest validation gain \\
-Frozen pretrained backbone & Tests reuse with low overfitting risk & Strong probe suggests reusable visual structure \\
-Fine-tuned detector & Justified when target shift or localization demands it & Better detection metrics on deployment slices, not only aggregate accuracy \\
+Simple target baseline & A specified feature rule or small model & Whether readily available cues suffice for the chosen output \\
+Target CNN from scratch & Local shared features and a target head & Performance with the target fitting data and budget \\
+Frozen source backbone & A specified target readout & Accessibility in the fixed source features under that readout \\
+Adapted source model & The head and selected backbone parameters & Whether the tested parameter updates improve target performance \\
 \bottomrule
 \end{tabular}
-\caption{A vision baseline ladder keeps transfer learning tied to evidence instead of model prestige.}
+\captionof{table}{Vision baselines differ in source information, permitted fitting, and output capacity. A comparison requires matching the target task and documenting resource budgets.}
 \label{tab:vision-baseline-ladder}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-\subsection{Generative Vision: A Pointer (Extension)}
+Freezing reduces the parameters fitted to target labels, but does not guarantee lower target error or immunity to shift. Fine-tuning increases what can change, but does not guarantee better adaptation with many labels. Source-domain mismatch, feature resolution, target data, regularization, and optimization all matter. Compare protected target performance and relevant slices under documented label and tuning budgets.
 
-\begin{advancednote}
-Vision is no longer only a discriminative field. Diffusion models \citep{ho2020ddpm,dhariwal2021,rombach2022} now generate, edit, and condition photorealistic images at scale, and they appear inside vision pipelines as augmentation engines, perceptual loss components, and end-to-end image-to-image systems. Chapter~\ref{ch:generative-representations} introduces diffusion as a representation-learning tool; this chapter notes only that any audit of a deployed vision system in 2026 should account for whether some training or evaluation images were synthetic. A model that learned on diffusion-generated augmentations is making a different reuse claim than one that learned on natural images alone.
-\end{advancednote}
+Pretraining may have seen target images, near-duplicates, labels, or acquisition sources. A frozen model retains that exposure. Record what is known about the source corpus, fit target preprocessing inside training boundaries, and select layers, prompts, crops, and stopping settings using development evidence. Keep the selected system's final evaluation protected. Source data and fitting costs remain part of the comparison even when they are reused across tasks.
 
-Once we know how visual structure can be learned, the next question is how that same flexibility can go wrong.
+\section{Testing Shortcuts and Capture Conditions}
 
-\section{Shortcut Learning, Robustness, and Failure Analysis}
+A model can use a background, overlay, watermark, scanner marker, or camera-specific pattern when it predicts the recorded label. Such a cue becomes a shortcut concern when the fitted dependence fails under the intended conditions. Background information is not inherently illegitimate: road geometry can be useful context. The question is whether the system's dependence supports the particular claim and operating population.
 
-The chapter now turns from building the visual system to distrusting it correctly. This is the emotional center of the chapter.
+For the hypothetical detector, crossing paint may co-occur with pedestrians. Training and evaluation that preserve this correlation can reward a rule which combines people and crossings, or a rule which largely depends on the crossing. Positive people away from crossings and negative crossings without people help separate these possibilities. Neither a schematic example nor a clean-looking photograph is a measured detector result.
 
-\begin{center}
-\emph{A vision model may look competent because the dataset made the shortcut useful.}
-\end{center}
-
-Data curation matters intensely in vision. Label quality, viewpoint diversity, class balance, background variation, sensor differences, and cropping policies all shape what a model learns. Vision models are especially vulnerable to shortcut learning because images contain many correlated signals beyond the intended object.
-
-\begin{failurebox}
-A vision model may appear to recognize the object while really using background, watermark, scanner artifact, camera angle, room lighting, or text overlay as a shortcut. High test accuracy on a narrow benchmark does not rule this out.
-\end{failurebox}
-
-\subsection{Shortcut Learning}
-
-Suppose a dataset of wolves often contains snow while a dataset of dogs does not. A classifier may lean on snow texture more than animal shape. A medical model may lean on a scanner marker instead of pathology. A classroom whiteboard classifier may lean on room lighting rather than handwriting clarity. These are not bizarre edge cases. They are normal consequences of optimizing on finite datasets with accidental regularities.
-
-The pedestrian-detector case has its own likely shortcuts. If most positive examples show pedestrians near painted crossings, crossing stripes can become an accidental cue. If the training set is dominated by bright daytime footage from one vehicle, camera height, windshield tint, and day-specific contrast patterns can join the internal decision rule. The model may then appear to recognize pedestrians while really recognizing ``pedestrian near familiar crossing under familiar camera conditions.''
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\includegraphics[width=0.78\linewidth]{figures/external/road_scene_crossing_small.jpg}
-\caption{A road scene with no pedestrian in frame: painted crossing stripes, lane markings, tire skid marks, and storm drains remain prominent. A pedestrian-detection model trained mostly on positive examples taken near crossings can learn to fire on the crossing itself rather than on the person. The shortcut is visible only when the deployment distribution includes empty-crossing scenes like this one. Photograph by Jay Galvin, Wikimedia Commons, CC0 \citep{wikimedia_crossing_crossroad}.}
-\label{fig:empty-crossing-shortcut}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\resizebox{\linewidth}{!}{\input{figures/ch07-shortcut-learning}}
-\caption{Shortcut learning occurs when models discover easily-exploitable correlations rather than learning robust visual concepts. High benchmark accuracy can mask reliance on background cues, camera artifacts, or contextual shortcuts that fail during deployment under different conditions.}
+\input{figures/ch07-shortcut-learning}
+\captionof{figure}{Separating a person from a co-occurring crossing creates informative cases for a shortcut hypothesis. Evaluation must still control other differences between the images.}
 \label{fig:shortcut-learning}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-\subsection{Worked Example: Slice Breakdown Reveals the Wrong Cue}
-
-Suppose the detector is evaluated on several held-out slices.
-
-\begin{table}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\small
-\begin{tabular}{p{6.8cm}c}
-\toprule
-Evaluation slice & Pedestrian recall \\
-\midrule
-Daytime, familiar camera, marked crossing visible & 0.91 \\
-Daytime, familiar camera, crossing paint masked synthetically & 0.62 \\
-Dusk, familiar camera & 0.68 \\
-Night rain, familiar camera & 0.53 \\
-Night rain, unseen dashboard camera & 0.44 \\
-\bottomrule
-\end{tabular}
-\caption{Most rows still confound markings, illumination, and camera source, but the second row is a \emph{controlled} slice: same daytime, same familiar camera, same scene type, with only the crossing paint removed by synthetic masking. The drop from 0.91 to 0.62 localizes the shortcut to a single feature in a way the confounded rows cannot.}
-\label{tab:vision-slice-breakdown}
-\end{table}
+\includegraphics[width=0.72\linewidth]{figures/external/road_scene_crossing_small.jpg}
+\captionof{figure}{Crossing markings provide background structure without a person occupying the marked crossing. The photograph illustrates a candidate cue-separating case, rather than evidence about model performance. Source: www.Pixel.la Free Stock Photos, Wikimedia Commons, CC0 \citep{wikimedia_crossing_crossroad}.}
+\label{fig:empty-crossing-shortcut}
+\end{minipage}\par\addvspace{\intextsep}
 
-\begin{figure}[t]
+A documented source example gives a different kind of evidence. Zech et al.\ evaluated pneumonia classifiers across hospital systems and found lower external than internal performance in three of five natural comparisons. Separate classifiers could also identify acquisition sites from the radiographs \citep{zech2018}. This supports concern about available source cues and site-specific differences; it does not prove that every medical model uses a scanner mark or that one cue explains every cross-site gap.
+
+\subsection{Slices Describe Performance; Interventions Test Dependence}
+
+For a fixed detector, score threshold, IoU rule, and annotation policy, imagine five constructed slices, each with $100$ eligible people. The recalls below correspond to $91,62,68,53,44$ matched people. The equal denominators are part of this example, rather than sample counts from a real camera study.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c8barBlue}{RGB}{56,103,170}
-\definecolor{c8barBg}{RGB}{220,233,251}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small]
-%% Layout: bars span x=0..9  (9cm = recall 1.0)
-%%         row labels anchor=east at x=-0.3
-%%         y-axis title at x=-4.2, rotated 90
-%%         rows at y=0,-1.4,-2.8,-4.2,-5.6
-
-%% ── Grid lines and x-axis ticks ──────────────────────────────────────────
-\foreach \v/\lbl in {0/0.00, 2.25/0.25, 4.5/0.50, 6.75/0.75, 9.0/1.00} {
-  \draw[black!20, thin] (\v, 0.5) -- (\v, -6.1);
-  \node[below, font=\footnotesize] at (\v,-6.1) {\lbl};
+\begin{tikzpicture}[ml diagram]
+\foreach \x/\lab in {0/0,2.4/0.5,4.8/1.0}{
+\draw[mlLine,line width=0.4pt] (\x,0.3)--(\x,-3.5);
+\node[ml label,below] at (\x,-3.55) {\lab};
 }
-%% x-axis label
-\node[font=\footnotesize, black!70] at (4.5,-6.75) {Pedestrian recall};
-
-%% ── Y-axis label (far left, clear of row labels) ─────────────────────────
-\node[rotate=90, font=\footnotesize, black!70] at (-4.0,-2.8) {Test condition};
-
-%% ── Bars (recall × 9cm) ──────────────────────────────────────────────────
-%% recall values: 0.91, 0.62 (controlled), 0.68, 0.53, 0.44
-\def\bh{0.48}  %% half-height of each bar
-
-\node[anchor=east, font=\small] at (-0.3, 0.0) {Day, familiar, crossing};
-\fill[c8barBg]  (0,-\bh) rectangle (8.19, \bh);
-\fill[c8barBlue!70] (0,-\bh) rectangle (8.19, \bh);
-\draw[c8barBlue] (0,-\bh) rectangle (8.19, \bh);
-\node[anchor=west, font=\footnotesize, c8barBlue] at (8.24, 0.0) {0.91};
-
-\node[anchor=east, font=\small] at (-0.3,-1.4) {Day, familiar, paint masked};
-\fill[c8barBlue!70] (0,-1.4-\bh) rectangle (5.58,-1.4+\bh);
-\draw[c8barBlue] (0,-1.4-\bh) rectangle (5.58,-1.4+\bh);
-\node[anchor=west, font=\footnotesize, c8barBlue] at (5.63,-1.4) {0.62};
-
-\node[anchor=east, font=\small] at (-0.3,-2.8) {Dusk, familiar};
-\fill[c8barBlue!70] (0,-2.8-\bh) rectangle (6.12,-2.8+\bh);
-\draw[c8barBlue] (0,-2.8-\bh) rectangle (6.12,-2.8+\bh);
-\node[anchor=west, font=\footnotesize, c8barBlue] at (6.17,-2.8) {0.68};
-
-\node[anchor=east, font=\small] at (-0.3,-4.2) {Night rain, familiar};
-\fill[c8barBlue!70] (0,-4.2-\bh) rectangle (4.77,-4.2+\bh);
-\draw[c8barBlue] (0,-4.2-\bh) rectangle (4.77,-4.2+\bh);
-\node[anchor=west, font=\footnotesize, c8barBlue] at (4.82,-4.2) {0.53};
-
-\node[anchor=east, font=\small] at (-0.3,-5.6) {Night rain, unseen camera};
-\fill[c8barBlue!70] (0,-5.6-\bh) rectangle (3.96,-5.6+\bh);
-\draw[c8barBlue] (0,-5.6-\bh) rectangle (3.96,-5.6+\bh);
-\node[anchor=west, font=\footnotesize, c8barBlue] at (4.01,-5.6) {0.44};
-
-%% ── Axis border ──────────────────────────────────────────────────────────
-\draw[black!40] (0,0.5) -- (0,-6.1);
-\draw[black!40] (0,-6.1) -- (9.0,-6.1);
-\end{tikzpicture}%
+\foreach \y/\lab/\v in {
+0/{Day, familiar, crossing}/0.91,
+-0.8/{Day, familiar, paint masked}/0.62,
+-1.6/{Dusk, familiar}/0.68,
+-2.4/{Night rain, familiar}/0.53,
+-3.2/{Night rain, unseen camera}/0.44}{
+\node[ml label,anchor=east,align=right,text width=3.5cm] at (-0.2,\y) {\lab};
+\draw[mlMuted,line width=0.7pt] (0,\y)--(4.8*\v,\y);
+\fill[mlAccent] (4.8*\v,\y) circle (2.2pt);
+\node[ml label,anchor=west] at (4.8*\v+0.12,\y) {\v};
 }
-\caption{The slice pattern becomes visually obvious once recall is plotted by condition. Performance stays high in the familiar crossing regime, drops sharply on the controlled paint-masked slice (which holds daytime and camera fixed), and falls further as the detector loses daylight and finally the familiar camera itself.}
+\node[ml label] at (2.4,-4.05) {recall at one fixed operating setting};
+\end{tikzpicture}
+\captionof{figure}{Constructed recalls with $100$ eligible people per slice. The masked comparison is a paired edit; the other slices can differ in people, scenes, illumination, weather, and source.}
 \label{fig:vision-shortcut-slices}
-\end{figure}
+\label{tab:vision-slice-breakdown}
+\end{minipage}\par\addvspace{\intextsep}
 
-The overall benchmark score may still look respectable, especially if the test distribution resembles the daytime training distribution. Table~\ref{tab:vision-slice-breakdown} tells a different story. The detector loses much more performance when crossing markings disappear, illumination worsens, and the camera changes. The confounded rows alone do not identify the cause: the night-rain rows move three factors at once. The controlled row earns its keep here. Holding daytime, camera, and scene fixed while masking only the crossing paint isolates the paint as the active variable; the recall drop from 0.91 to 0.62 is then attributable to the masking rather than to illumination or sensor change. A confounded slice supports a shortcut hypothesis; a controlled slice localizes the shortcut to a specific feature.
+The equally weighted mean of these five recalls is $318/500=0.636$. The denominator counts object--condition evaluations, including paired original and edited cases, rather than $500$ distinct people. This is a descriptive mean of the specified evaluations. A deployment-population score needs appropriate weights and counts each eligible object once; overlapping natural slices cannot be pooled as independent new cases. A benchmark emphasizing familiar daytime images would also weight conditions differently. Recall alone omits false positives.
 
-The right claim is therefore neither ``the model fails everywhere'' nor ``crossing paint is definitely the cause.'' It is narrower and more useful: the detector appears competent on the familiar camera-and-crossing regime but is not yet reliable across the deployment conditions that matter. That claim leads to better next steps---collecting non-crossing positives, holding out camera sources by design, and reviewing night failures frame by frame---rather than celebrating one aggregate score.
+Suppose the first two rows use the same daytime images and annotations, with only the paint edited. The $0.29$ recall difference measures sensitivity to that intervention. It does not uniquely identify a background shortcut: editing can introduce an unfamiliar artifact, cover part of a person, or remove useful context. Matched edits of unrelated regions and alternative paint-removal procedures help assess these explanations. Natural marked and unmarked scenes add evidence but can differ in route, pedestrian scale, traffic, and illumination.
 
-Shortcut diagnosis usually comes from slice design, source breakdowns, and failure review---not from one dramatic heatmap. If a visual concept matters, evaluate it under the backgrounds, cameras, and conditions that might tempt the model to use something easier.
+The familiar and unfamiliar camera rows at night rain differ by $0.09$. A common condition label does not isolate camera hardware; the people, settings, mounting, and exposure may also differ. Repeated matched captures or a controlled acquisition experiment support a narrower source-effect claim. Observational slices still provide useful evidence about where the system performs poorly without establishing a unique cause.
 
-\subsection{Robustness and Domain Shift}
+At a selected operating threshold, report recall together with false positives per image, clip, or time unit as appropriate. Tracking failures can be long episodes rather than isolated boxes. Confidence intervals and repeated-fit comparisons should respect clip or source dependence. An absence of observed misses in a small slice does not establish robustness across an entire condition family.
 
-A stronger backbone improves representational power but does not guarantee that the model is using the intended evidence. An image model can perform well on the benchmark distribution and still fail under new lighting, small geometric shifts, blur or motion artifacts, different cameras or sensors, new backgrounds, or rare subgroups and unusual poses.
-
-Average test accuracy is therefore only one part of evaluation. Vision systems should also be stress-tested under plausible shifts and broken down by subgroup, condition, and source.
-
-Evidence that a vision model is genuinely learning the intended concept should include more than clean benchmark accuracy. Useful supporting evidence includes robustness to small shifts, reasonable behavior under augmentation, inspection of failure cases, subgroup analysis, source breakdowns, and comparisons against simpler baselines.
-
-\subsection{Annotation Policy and Label Noise}
-
-Vision labels are often less objective than they first appear. For pedestrian detection, the dataset policy must decide how to label tiny far-away people, heavily occluded people, reflections, partial bodies, and cases where the person is visible but not clearly localizable. Annotation disagreement is not always a sign of bad labeling; sometimes the task boundary itself is fuzzy.
-
-\begin{warningbox}
-Write down the annotation policy before training. In vision, label noise often comes from ambiguous visibility rules, crop choices, or object-boundary disagreement rather than from random mistakes.
-\end{warningbox}
-
-\section{Robustness by Nuisance-Factor Stress Tests}
-
-This section converts shortcut suspicion into a test plan. Organize robustness evaluation around nuisance factors: input properties that should not change the correct label but that vary across deployment conditions. Naming the factors first makes the stress tests concrete and the coverage gaps visible.
-
-\textbf{Naming the nuisance.} For the pedestrian-detector case, the relevant nuisance factors include lighting level (daylight, dusk, night, artificial illumination), weather and precipitation (dry, wet, fog, rain on the windshield), motion blur (from the vehicle or the pedestrian), camera-specific artifacts (compression, rolling shutter, chromatic aberration), and distance-related scale change. For a medical imaging classifier, the nuisance factors include scanner model, acquisition protocol, patient position, image compression, and contrast agent.
-
-\textbf{Predicting the failure.} Before running any test, state which nuisance factors are likely to degrade performance and why. At night, the model may rely on high-contrast edges that vanish in low light. With rain on the windshield, texture-based features may be disrupted. Making the prediction explicit before testing means the results carry information either way: a predicted failure that materializes confirms the concern; a predicted failure that does not materialize is evidence of genuine robustness.
-
-\textbf{Testing deliberately.} Collect or synthesize examples that represent each nuisance factor at several intensity levels. Report per-nuisance performance separately, not only as an aggregate. An average that combines strong daylight performance with severe night failure hides the operational risk.
-
-\textbf{Deciding whether the failure matters.} Not every nuisance failure requires a fix. If the deployment context excludes nighttime operation---the shuttle only runs during daylight hours---then night failure is not an operational concern. Tie the stress-test output back to the deployment specification rather than treating it as a standalone robustness ranking.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{2.29cm}p{2.46cm}p{2.46cm}p{2.46cm}}
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{2.3cm}L{3.4cm}L{4.0cm}@{}}
 \toprule
-Nuisance factor & Predicted failure mode & Test method & Deploy risk? \\
+Condition & Evidence to compare & Limit of the comparison \\
 \midrule
-Night / low light & Misses pedestrians at distance & Held-out night clips & Yes, if shuttle runs at night \\
-Rain on windshield & Spurious edge detections & Synthetic blur or real rain clips & Moderate \\
-Unfamiliar campus zone & Background shortcut does not transfer & Out-of-area held-out set & Yes, if routes expand \\
+Low light or rain & Held-out real clips; separately specified synthetic corruptions & One corruption does not cover every exposure or windshield effect \\
+Unfamiliar source & Protected camera or route groups with matched target rules & Source may also change scene, people, and object scale \\
+Scene structure & People at and away from crossings; matched cue interventions & Natural groups and edited backgrounds have different confounds \\
 \bottomrule
 \end{tabular}
-\caption{A structured stress-test record connects each nuisance factor to a predicted failure, a test, and a deployment-risk judgment. This prevents robustness tests from being disconnected from the deployment specification.}
+\captionof{table}{Capture-condition tests make the evaluated scope explicit. Conditions outside the intended operating specification support a different claim from those within it.}
 \label{tab:robustness-stress-test}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-\textbf{Nuisance-factor stress-test habit.} Name the nuisance, predict the failure, test deliberately, report per-nuisance, and judge relevance to deployment. The habit is the structure; the specific tests will differ across domains.
+\subsection{Saliency Describes a Specified Computation}
 
-\section{Deployment-Camera Realism}
+For a differentiable score $s(x)$, a basic saliency quantity is $|\partial s/\partial x_i|$. It measures local sensitivity to a coordinate perturbation under the chosen score and parameterization. It is not an intervention effect of removing an object, and it can be small where a nonlinear score saturates despite dependence on that input.
 
-Many of the chapter's earlier concerns collapse into one practical rule: the sensor is part of the task. Vision systems inherit the acquisition process. If benchmark images come from one camera and deployment images come from another, the task has changed even if the object categories have not. Camera height changes object geometry. Lens choice changes distortion. Compression changes texture. Exposure changes what is visible at night. Dirt, rain, glare, and rolling shutter all affect the evidence the model receives.
+A heatmap can suggest a region to examine, but different attribution definitions can highlight different properties. Adebayo et al.\ proposed model and label randomization tests and found that some tested methods retained similar maps under those changes \citep{adebayo2018sanity}. Such tests examine whether a visualization reflects aspects of the fitted model. Passing them does not certify a complete causal explanation.
 
-For the pedestrian-detector case, a training set collected from public road datasets is still an imperfect proxy for the actual shuttle camera. The shuttle may sit lower, use a wider lens, record at a different frame rate, and see more campus-specific lighting and pedestrian behavior. A system that looks strong on benchmark road scenes can still be weak on the real sensor pipeline.
-
-\begin{decisionbox}
-In vision, the deployment camera is part of the task definition. If camera geometry, image quality, or capture conditions differ materially from training, the model has not yet been tested on the real problem.
-\end{decisionbox}
-
-Before claiming the detector is ready, a minimal stress-test matrix should at least cover daylight, dusk, and night; dry roads, rain, and glare; familiar and unseen camera sources; marked crossings and unmarked curb approaches; and near, medium, and far pedestrian scale.
-
-This is not bureaucratic caution. It is how the team learns whether the system is robust to the actual image-acquisition process or only to the benchmark story.
-
-\section{Saliency Is Diagnostic Evidence, Not Proof}
-
-Students sometimes hope a heatmap or saliency map fully explains a model. Such tools can be informative but are not definitive. Explanation methods are themselves model-dependent and can be unstable. Treat them as diagnostic evidence, not as proof that the model ``looked at the right thing.''
-
-This matters because the rest of the chapter is about evidence quality. A saliency map may localize suspicion or hint at model focus, but it cannot by itself settle whether the model learned the intended cue or a shortcut.
-
-\begin{example}[Saliency Suggests, Stress Tests Decide]
-A saliency map for a pedestrian detector might highlight bright crosswalk paint near a person. That is a useful suspicion, not a verdict. Stronger evidence would occlude the paint, compare marked and unmarked crossings, test camera-source holdouts, and inspect low-light or rainy slices. If performance collapses only when the crosswalk cue disappears, the shortcut hypothesis becomes much stronger than any heatmap alone could make it.
-\end{example}
-
-\section{Chapter Artifact: A Vision Design and Stress-Test Card}
-
-By the end of this chapter, you should be able to produce a one-page design and stress-test card before making a serious vision claim. The framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, the structure diagnosis sheet justified leaving it, the training report justified the learned-model claim, and the reuse-and-adaptation plan clarified what transfer could legitimately explain. This card adds the vision-specific layer: what the camera sees, what variation should be ignored, what shortcuts are likely, and what slices must be passed before a benchmark result means anything operational.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{3.25cm}p{6.98cm}}
-\toprule
-Card field & What must be written clearly \\
-\midrule
-Seven-question focus & Questions 3, 4, 6, and 7: what image evidence exists, what visual structure matters, what tests justify the claim, and how deployment conditions affect action \\
-Task type & Classification, detection, segmentation, tracking, or another structured vision output \\
-Target visual signal & What visual content the model is truly supposed to use \\
-Nuisance variations to ignore & Lighting, small translation, blur, background, viewpoint, or other variations that should preserve the label \\
-Variations that should change the label & The changes that really do alter the class or output structure \\
-Acceptable augmentations & Which label-preserving transformations are justified by the task \\
-Likely shortcut risks & Background, watermark, scanner marker, room lighting, crop policy, or sensor artifact \\
-Pretrained backbone choice & What representation source will be reused and why \\
-Deployment camera or sensor & What image-acquisition process the real system will actually face \\
-Critical slices & Which deployment-relevant conditions such as night, rain, unseen cameras, rare poses, or changed backgrounds must be checked separately \\
-Required stress tests & Shift tests, subgroup checks, source breakdowns, or robustness probes that must be run before a claim is trusted \\
-\bottomrule
-\end{tabular}
-\caption{A vision design and stress-test card turns the chapter's ideas into a practical protocol before benchmark numbers are reported.}
-\label{tab:vision-stresstest-card}
-\end{table}
-
-\textbf{Vision design and stress-test card.} Before reporting performance, write down the task type, intended signal, nuisance variation, acceptable augmentations, shortcut risks, deployment camera, critical slices, and required stress tests.
-
-\begin{example}[Filled Vision Design Card]
-For a pedestrian detector on dashboard-camera footage, a sensible card reads as follows. Task type: \emph{detection}. Target visual signal: pedestrian shape, motion, and local road context. Nuisance variations: small translation, daylight change, and mild blur. Label-changing variations: replacing the pedestrian with a sign or removing the pedestrian entirely. Acceptable augmentations: small crops, brightness changes, and mild weather corruption---but not vertical flips or unrealistic rotations. Shortcut risks: crossing paint, road background, camera height, and annotation crop policy. Backbone: a pretrained road-scene detector. Deployment: a low-mounted dashboard camera at dusk and night as well as daytime. Critical slices: marked versus unmarked crossings, night rain, and unseen camera sources. Required stress tests: low-light slices, rain, glare, source-heldout evaluation, and manual review of missed close-range pedestrians.
-\end{example}
-
-\section{Common Mistakes in Vision}
-
-The recurring mistakes in vision are failures to connect pixel measurements back to the real task. Readers treat pixels as independent features even when locality and neighborhood structure are central, apply augmentations without asking what they mean in the world, declare understanding from benchmark accuracy alone, ignore data-collection bias, and forget that the deployment camera and acquisition process are part of the problem rather than neutral background details.
-
-\section{Looking Ahead}
-
-This chapter grounded representation learning in vision: invariance, locality, augmentation, shortcut learning, and camera realism. The next chapter keeps the same methodological discipline but changes the source of difficulty. Instead of asking which visual variation should be ignored, it asks which linguistic context must be preserved---and when external grounding is needed before fluent output can be trusted.
-
-\section*{Chapter Summary}
-
-This chapter treated vision as a problem of preserved and discarded variation. Task formulation, annotation policy, convolutional structure, augmentation, and robustness testing are all ways of deciding which visual changes should and should not matter. The central lesson is that benchmark success is not enough: a credible vision system must show that it learned the intended signal and that this signal survives the lighting, camera, and scene changes that deployment will actually produce. Vision is already a modeling problem: which variations to preserve, which to ignore, and which augmentations to allow are claims about what the system is supposed to see, not architectural details.
+If a pedestrian detector's map highlights crossing paint, the next evidence is the detector's behavior under specified matched changes and relevant held-out cases. Combining saliency, cue-separating examples, source holdouts, and failure review can strengthen a dependence hypothesis. It still leaves the limits of editing realism, coverage, and the complete decision system visible.
 
 \begin{studyquestions}
-\item Why is it misleading to think of image understanding as only a pixel-processing problem?
-\item What does an invariance audit force the modeler to state explicitly?
-\item What does parameter sharing buy us in a convolutional layer?
-\item Why can max pooling make a representation less sensitive to tiny image shifts?
-\item Why must augmentation choices depend on the task?
-\item Why does high benchmark accuracy not prove robust visual understanding?
-\item Why can a pedestrian detector look strong on familiar crossings yet still be weak on the real deployment route?
+\item How do image presence, boxes, masks, and trajectories change what counts as an error?
+\item Why can two high-overlap detections of one object include a false positive?
+\item Which matching, interpolation, and averaging conventions determine an AP or mAP result?
+\item Why does a low mean segmentation error not establish quality on small instances?
+\item What do locality and parameter sharing restrict, and what does their parameter count fail to guarantee?
+\item When does a translation relation survive convolution, stride, pooling, and boundaries?
+\item Why must augmentation update a spatial target and sometimes its instance membership?
+\item How do a performance slice, a matched intervention, and a saliency map support different claims?
 \end{studyquestions}
 
-\begin{exercises}
-\item \exercisetag{Calculation}{Core}Use the vertical-edge filter from the chapter on a new $3 \times 3$ patch of your own design. Compute the convolution response by hand.
-\item \exercisetag{Concept}{Core}Explain in words why a dense network on raw pixels may need far more parameters than a convolutional network to detect the same local pattern at many image positions.
-\item \exercisetag{Concept}{Core}Perform a short invariance audit for a pedestrian-detection system. Name two variations that should preserve the label and two that should change what the system must output.
-\item \exercisetag{Concept}{Core}Give one example of an augmentation that is likely helpful for a generic object classifier and one example of an augmentation that could be harmful in a specialized vision task.
-\item \exercisetag{Concept}{Intermediate}Describe a real-world setting in which object detection is necessary but classification alone is insufficient.
-\item \exercisetag{Concept}{Intermediate}Give two examples of shortcut signals a vision model might exploit in a poorly designed dataset.
-\item \exercisetag{Concept}{Intermediate}Suppose a model performs well on benchmark photos but poorly on low-light phone images from deployment. Give two plausible technical reasons for the gap.
-\item \exercisetag{Design}{Intermediate}Sketch a minimal stress-test matrix for a dashboard-camera pedestrian detector. Include at least one lighting slice, one weather slice, one source slice, and one scene-structure slice.
-\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:vision-stresstest-card} to sketch a one-page design and stress-test card for a vision task of your choice. If you are carrying one case through the book, explicitly preserve the same task, review policy, and evaluation commitments while adding the vision-specific invariance and shortcut checks.
-\item \exercisetag{Implementation}{Core}Implement a $3\times 3$ vertical-edge filter from scratch in \verb|numpy|. Construct a $32\times 32$ synthetic grayscale image with a single vertical bar of brighter pixels and small Gaussian noise elsewhere. Apply your convolution (no \verb|scipy| or \verb|torch| call) using the kernel $\begin{pmatrix}-1 & 0 & 1\\ -1 & 0 & 1\\ -1 & 0 & 1\end{pmatrix}$, then display the input and the rectified response side by side. Verify that the response peaks near the bar's edge columns and is near zero elsewhere; rotate the bar to horizontal and confirm the response collapses, illustrating the filter's directional selectivity.
-\item \exercisetag{Implementation}{Intermediate}Add a translation-invariance check on top of the previous exercise. Shift your synthetic image by 1, 4, and 8 pixels horizontally and recompute the rectified convolution map. Show that the response simply translates with the input (equivariance). Then apply $2\times 2$ max pooling with stride 2 to each map, and report by how much each shift changes the pooled feature vector measured in $\ell_2$. Comment on why pooling reduces but does not remove sensitivity to position.
+\begin{exercises}[State coordinate, matching, and aggregation conventions.]
+\item \exercisetag{Calculation}{Core}Use the vertical-edge filter on a $3\times3$ patch of your own design. Compute its cross-correlation response, and explain which contrast it measures.
+\item \exercisetag{Concept}{Core}Explain how local connections and parameter sharing reduce parameters relative to a dense mapping of the same input and output shapes. Give a task in which position-specific weights might be useful.
+\item \exercisetag{Concept}{Core}For pedestrian detection, name two changes compatible with the same visible-person identities and two that change the required boxes or instance membership. Distinguish geometric target movement from a changed category.
+\item \exercisetag{Concept}{Core}Give a plausible class-preserving augmentation for one task and an example where it changes another task's label. Specify how to test the claim on protected cases.
+\item \exercisetag{Concept}{Intermediate}Describe a setting requiring detection rather than image-level classification. Explain what segmentation or tracking would add if required.
+\item \exercisetag{Diagnosis}{Intermediate}Give two source or background cues a model could exploit. Design a comparison that tests dependence on one, and state an alternative explanation it must address.
+\item \exercisetag{Diagnosis}{Intermediate}A model performs well on benchmark photographs and poorly on low-light deployment images. Give two plausible reasons and a comparison that narrows one explanation.
+\item \exercisetag{Design}{Intermediate}Design protected lighting, weather, source, and scene-structure slices for the hypothetical shuttle. Specify eligible objects, false-positive measurement, and clip or source grouping.
+\item \exercisetag{Design}{Intermediate}Choose a vision task and two transformations with valid input--target relations plus two potentially invalid ones. Explain how to evaluate those relations without selecting them on final test images.
+\item \exercisetag{Calculation}{Core}For $K=\begin{pmatrix}-1&0&1\\-1&0&1\\-1&0&1\end{pmatrix}$, compute responses to $\begin{pmatrix}0&0&1\\0&0&1\\0&0&1\end{pmatrix}$ and $\begin{pmatrix}0&0&0\\0&0&0\\1&1&1\end{pmatrix}$. Explain the directional difference and how spatially reversing $K$ changes the first response.
+\item \exercisetag{Calculation}{Core}Pool $(0,1,0,0)$ with width and stride two. Repeat after right shifts of one and two positions with fixed length and zero fill. Identify the two-pixel grid relation and why neither result proves general invariance.
+\item \exercisetag{Calculation}{Core}Compute IoU of $[0,0,2,2]$ and $[0.2,0,2.2,2]$. Apply the chapter's suppression rule to these two boxes and $[3,0,5,2]$ with scores $0.9,0.8,0.7$ at threshold $0.5$. Explain why suppression is not annotation matching.
+\item \exercisetag{Calculation}{Intermediate}Two eligible objects give ranked detection outcomes $(1,0,1)$. Compute precision, recall, uninterpolated AP, and the $101$-point interpolated AP. Explain how a duplicate can receive the middle false-positive outcome. If another category has uninterpolated AP $1/2$, compute the equally weighted two-category mean under that convention.
+\item \exercisetag{Calculation}{Core}For masks with sizes $80$ and $100$ and intersection $60$, compute IoU and Dice. Compare mean per-image and pooled IoU for the missed one-pixel object and perfectly predicted $100$-pixel object. State the both-empty convention required by an evaluator.
+\item \exercisetag{Calculation}{Intermediate}For the two-person, three-frame identity-swap example, compute IDTP, IDFP, IDFN, and IDF1 under the best one-to-one identity assignment. Explain why framewise detection can still be perfect.
+\item \exercisetag{Calculation}{Intermediate}An ungrouped layer takes $32\times32\times3$ inputs and has eight $3\times3$ filters, stride two, padding one, dilation one, and one bias per output channel. Compute output shape, parameter count, weighted-sum MACs, and output activation count.
+\item \exercisetag{Calculation}{Intermediate}Compute the extent and spacing after three $3\times3$ layers with strides $(1,2,1)$ and dilation one. Repeat with dilation two in the last layer. Explain why the calculated extent is not a measure of every pixel's fitted influence.
+\item \exercisetag{Calculation}{Intermediate}For $x=(1,2,3)$, $(a,b)=(2,-1)$, and output gradient $g=(3,4)$, compute the two cross-correlation outputs, input gradient, and shared-weight gradient. Explain why the input-gradient operator is not an inverse.
+\item \exercisetag{Calculation}{Intermediate}Reflect box $[10,20,30,60]$ horizontally in continuous coordinates with image width $100$. Reproduce the crop calculation for $[10,20,40,60]$ and crop $[20,10,70,70]$, including retained area fraction. State which annotation choice affects eligibility after cropping.
+\item \exercisetag{Calculation}{Intermediate}For the five constructed slices with $100$ eligible objects per condition, calculate the equally weighted mean recall, the paint-edit recall difference, and the familiar versus unfamiliar camera difference at night rain. Explain why $500$ evaluations need not mean $500$ distinct people, and why neither difference uniquely identifies its suspected mechanism.
 \end{exercises}
 
-\begin{challengeexercises}
-\item \exercisetag{Concept}{Advanced}Explain carefully why convolution supports translation equivariance rather than perfect invariance, and why later layers or augmentation are still needed.
-\item \exercisetag{Diagnosis}{Advanced}A vision model trained to detect disease from scans performs extremely well, but a hospital discovers that the model relies heavily on scanner-specific marks. Explain how this can happen and propose an evaluation protocol that would reveal it.
-\item \exercisetag{Diagnosis}{Advanced}Compare two deployment strategies for a small vision dataset: frozen pretrained backbone plus linear head, versus full fine-tuning. State when each would be preferable and what evidence would justify the choice.
-\item \exercisetag{Diagnosis}{Advanced}A vision design card proposes vertical flips, large rotations, and heavy color stylization for a fixed dashboard-camera pedestrian detector. Mark which invariance claims are unjustified, which deployment slices should be tested, and what augmentation policy would be safer.
-\item \exercisetag{Design}{Advanced}Design a stress-test suite for a road-scene pedestrian detector that uses at least four shift types or subgroup checks. Explain what failure in each case would mean.
+\begin{challengeexercises}[Make boundary and evaluation assumptions explicit.]
+\item \exercisetag{Proof}{Advanced}Prove unit-stride interior cross-correlation equivariance, then derive the corresponding stride-$s$ relation for translations by multiples of $s$. Show when a global mean readout becomes translation-invariant, and explain how finite cropping invalidates that proof.
+\item \exercisetag{Diagnosis}{Advanced}A disease classifier performs well within a hospital and poorly elsewhere, while its images reveal scanner or site cues. Design a protected evaluation with source and prevalence comparisons, matched interventions, and annotation controls. Explain why a source gap does not uniquely identify scanner marks as the cause.
+\item \exercisetag{Design}{Advanced}Compare a frozen source backbone and full fine-tuning on a small target dataset. Match task, label and selection budgets, account for source exposure and feature resolution, and state what each protected result establishes.
+\item \exercisetag{Diagnosis}{Advanced}Assess vertical flips, large rotations, and heavy color changes for a fixed upright dashboard camera. Distinguish unsupported deployment realism from incorrect target semantics, and design an augmentation comparison rather than asserting that unrealistic training examples must hurt.
+\item \exercisetag{Design}{Advanced}Design a pedestrian evaluation with at least four capture conditions or subgroup checks, specified localization and false-alarm conventions, and sequence-level identity measures if tracking is required. State the scope of a successful result.
+\item \exercisetag{Proof}{Advanced}Derive Dice from IoU and explain why their monotone relation does not commute with averaging. Construct an aggregation example. For two regions with positive finite union area, prove IoU invariance under the same invertible affine transform and identify where reboxing, rasterization, or clipping changes the argument.
+\item \exercisetag{Diagnosis}{Advanced}A detector's saliency map highlights crossing paint, and recall drops after paint removal. Design matched edits and natural-source comparisons that test dependence while addressing editing artifacts, legitimate context, and annotation changes. State which causal or deployment claims remain unestablished.
 \end{challengeexercises}
+
+\clearpage
+\begingroup\pagestyle{empty}\cleardoublepage\endgroup
+\endgroup

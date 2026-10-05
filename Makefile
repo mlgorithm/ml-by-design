@@ -1,7 +1,7 @@
 BUILD_DIR = build
 BOOK_SRC = tex/book.tex
 BOOK_BUILD_PDF = tex/book.pdf
-BOOK_ROOT_PDF = ml-by-design.pdf
+BOOK_OUTPUT_PDF = output/pdf/ml-by-design-concepts.pdf
 LATEXMK = latexmk -norc -cd -pdf -interaction=nonstopmode
 BUILD_AUX = tex/book.aux tex/book.bbl tex/book.blg tex/book.fdb_latexmk tex/book.fls tex/book.log tex/book.out tex/book.toc
 COMPANION_MINIMAL = $(shell find companion -path '*/minimal/*.py' | sort)
@@ -11,9 +11,9 @@ COMPANION_MINIMAL = $(shell find companion -path '*/minimal/*.py' | sort)
 all: book
 
 book:
-	mkdir -p $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR) $(dir $(BOOK_OUTPUT_PDF))
 	$(LATEXMK) $(BOOK_SRC)
-	cp -f $(BOOK_BUILD_PDF) $(BOOK_ROOT_PDF)
+	cp -f $(BOOK_BUILD_PDF) $(BOOK_OUTPUT_PDF)
 	rm -f $(BUILD_AUX) $(BOOK_BUILD_PDF)
 
 companion-check:
@@ -30,4 +30,4 @@ clean:
 	rm -f .bbl-setup .~lock*
 
 distclean: clean
-	rm -f $(BOOK_ROOT_PDF) $(BOOK_BUILD_PDF) book.pdf
+	rm -f $(BOOK_OUTPUT_PDF) $(BOOK_BUILD_PDF) book.pdf

@@ -1,1386 +1,716 @@
-\chapter{Representation Learning and Foundation Models}
+\begingroup
+\raggedbottom
+\clubpenalty=10000
+\widowpenalty=10000
+\chapter[Representation Learning and Foundation Models]{Representation Learning\\and Foundation Models}
 \label{ch:representation-foundation-models}
 
-The course-support team's routing model has been retrained from scratch six times this term. Each new dataset---a registrar export, a refreshed help-desk corpus, a changed list of canonical question types---means a new training run, a new tuning sweep, a new round of validation. The model never reuses anything. Each version is born from zero.
+A representation maps an input into features that another computation can use. Learning that map changes which distinctions are easy to compare or predict. It can also discard information. A space useful for retrieving similar messages may hide the distinction needed to identify a missed deadline; a space useful for recognizing objects may ignore the color a different task needs.
 
-That is the gap this chapter fills. A model can succeed on a task in two very different ways: by learning a narrow solution tied to the task, or by learning a representation that stays useful when the task changes.
+Representation learning fits such maps from data. Its objective supplies the pressure: labels reward distinctions useful for a specified target, reconstruction rewards recovering an input, and paired-view objectives reward relationships defined by the pairing procedure. None guarantees usefulness for every task.
 
-The book's center of gravity now shifts. The unit of value is no longer per-task accuracy; it is whether the model learns a space in which the next task becomes easier, and what evidence shows that the reuse is real rather than hidden inside a powerful downstream head. Foundation-model workflows push this further still: pretrain for reuse first, adapt later.
+For the student--course task, only records available by the end of week 2 may enter the representation. The target remains missing at least one of two specified deadlines in weeks 3--4. A pretrained encoder changes how those early records are represented; it does not turn that proxy into a measure of who benefits from an adviser check-in. The review policy still permits at most five cases.
 
-\section{Problem-Solving Technique: Make the Reuse Claim Testable}
+A separate message-routing example asks whether an encoder learned from routine and urgent course messages can help categorize questions about course content. Source and target tasks may share useful language patterns, but the new categories require their own labels and evaluation. Reuse is a hypothesis about a complete learning procedure, rather than a property established by calling a space semantic.
 
-Treat a learned representation as a claim about which structure has been preserved and made accessible. The right diagnostic question is never ``is this embedding good?'' but ``good for which downstream task, under which adaptation, against which alternative explanation?''
+\section{Information Loss and Accessibility}
 
-\textbf{Reuse and adaptation plan.} Before adopting a pretrained representation, write five things: the pretrained object being reused, the first clean diagnostic that would isolate reuse from adaptation capacity, the shallowest adaptation that the label budget and domain shift justify, the external evidence the workflow still depends on, and the alternative explanation that could fake the gain.
+Let a raw input be $x$ and its representation be $z=\phi(x)\in\mathbb R^d$. The map may be hand-designed or learned. An \emph{embedding} is a vector representation used through its coordinates or geometry. The coordinates need not have individual human-readable meanings, and distances need not match the similarity a particular task requires \citep{bengio2013rep}.
 
-Most embarrassing transfer claims in practice come from skipping the first clean diagnostic---a frozen linear probe---and going straight to a powerful fine-tuned head. The head papers over a brittle representation, and the team learns nothing about whether the pretrained object was the source of the gain.
+Calling $\phi$ a change of coordinates is appropriate when it is invertible on the relevant inputs. A general encoder need not be invertible: pooling, normalization, truncation, and many bottlenecks merge distinct inputs. If $\phi(x)=\phi(x')$, any deterministic readout of that representation gives the same output for both. A readout cannot recover a distinction that the map removed without another information source.
 
-\begin{decisionbox}
-\textbf{Core path through the chapter.} On a first serious pass, keep the spine narrow: reusable space, training pressure that created it, frozen probe, shallowest justified adaptation, and reuse plan. Attention, transformers, retrieval, prompting, and fine-tuning matter because they change the reuse claim; they should not obscure the diagnostic question of what is actually being reused.
-\end{decisionbox}
+Consider independent signs $U,V\in\{-1,+1\}$ with four equally likely combinations. Let $X=(U,V)$ and $Y=\mathbf1\{UV=1\}$. The same-sign corners have label one, and the other corners have label zero. No affine threshold separates them: the midpoint of either class pair is $(0,0)$, where an affine score must equal the average score of either pair. Those averages cannot be on opposite sides of a separating threshold.
 
-\section{Opening Dilemma: Solve One Task, or Learn a Reusable Space?}
+The representation $Z=UV$ is only one coordinate. It merges the two inputs in each class, so it loses the separate signs. Nevertheless, $Y=\mathbf1\{Z>0\}$ is now a linear-threshold decision. The map did not create information about $Y$; it made existing information accessible to a simpler readout. For a different target, such as $\mathbf1\{U=1\}$, the same representation loses the required distinction.
 
-A course-support team has labeled a few thousand student messages for routing. A new dataset of student questions arrives a month later, this time about course-content rather than logistics. The natural question is whether last month's model has any value here, or whether the team starts again from scratch.
-
-If the model learned a narrow solution to last month's routing, the answer is essentially nothing transfers. If, in the course of solving routing, the model learned a representation of student messages---a space where similar messages sit near each other for reasons larger than the routing label---then the new task may need only a lightweight readout on top of the same space. That is the chapter's opening dilemma. Should we solve a task directly from scratch, or invest in learning a reusable representation that might help across tasks, domains, or label budgets?
-
-The question matters whenever useful structure is expensive to relearn. A model trained for a single classifier may work today and still throw away value that could have served retrieval, clustering, transfer, or later fine-tuning. A reusable representation changes what counts as progress. The rest of the chapter turns that idea into a workflow: define the space, ask what pressure created it, test it with the cleanest downstream diagnostic, and only then decide how much adaptation is justified.
-
-Invest in reusable representation learning when the raw input is too entangled for simple task-specific modeling and the learned space is likely to be reused across tasks, domains, or limited-label settings. A sensible workflow has five steps: identify the source representation; test it first with a frozen-feature or linear-probe diagnostic; compare against a retrieval-only or prompting-only baseline when relevant; choose the shallowest adaptation that still addresses label budget and domain shift; and write down alternative explanations for any gain.
-
-The chapter's key question is therefore:
-
-\begin{center}
-\emph{When is it worth learning a reusable representation instead of solving one task directly, and how do we know the reusable representation is actually what is helping?}
-\end{center}
-
-\section{Representation as a Change of Coordinates}
-
-A useful first mental model treats representation learning as a change of coordinates: data are mapped into a space where the structure needed for downstream tasks becomes easier to separate, compare, or read out. The same mental model holds the rest of the chapter together. When the coordinates improve, simple downstream readouts, transfer diagnostics, and later adaptation should all become easier for a reason we can inspect.
-
-\begin{definition}[Representation Learning]
-Representation learning is the process of learning transformations of data that make useful structure easier to detect, compare, transfer, or predict from.
-\end{definition}
-
-\begin{definition}[Representation, embedding, feature]
-A \emph{representation} is any learned internal structure produced by a model. An \emph{embedding} is a specific kind of representation: a vector placed in a learned continuous space where geometric relationships encode meaningful structure. \emph{Features} is the most general term, covering any attribute or signal---whether hand-crafted or learned---used as input to a model. In this chapter, ``representation'' is the default term; ``embedding'' is used when the geometric space matters.
-\end{definition}
-
-In one coordinate system, classes overlap, neighborhoods are meaningless, and prediction requires many labels. In another, examples that ``mean the same thing'' cluster naturally and simple downstream decisions become effective.
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  x=1cm,
-  y=1cm,
-  font=\small,
-  paneltitle/.style={font=\footnotesize\bfseries, align=center},
-  panelsub/.style={font=\scriptsize, text=black!65},
-  axislabel/.style={font=\footnotesize, text=black!70},
-  classpos/.style={circle, fill=black, draw=black, inner sep=2.3pt},
-  classneg/.style={circle, fill=white, draw=black, line width=0.8pt, inner sep=2.3pt}
-]
-\begin{scope}
-\node[paneltitle] at (1.7,4.35) {Raw Space};
-\node[panelsub] at (1.7,3.95) {classes overlap};
-\draw[-Latex, semithick] (0,0) -- (3.4,0);
-\draw[-Latex, semithick] (0,0) -- (0,3.4);
-\node[axislabel] at (1.7,-0.42) {$x_1$};
-\node[axislabel, rotate=90] at (-0.42,1.7) {$x_2$};
-\node[classpos] at (0.9,1.0) {};
-\node[classpos] at (1.3,1.4) {};
-\node[classpos] at (1.7,1.1) {};
-\node[classneg] at (1.2,2.1) {};
-\node[classneg] at (1.7,2.5) {};
-\node[classneg] at (2.1,2.0) {};
+\begin{tikzpicture}[ml diagram]
+\begin{scope}[x=1.0cm,y=1.0cm]
+\draw[ml axis] (0,0) -- (3.2,0) node[right,ml label] {$U$};
+\draw[ml axis] (0,0) -- (0,3.2) node[above,ml label] {$V$};
+\foreach \x/\y in {0.5/0.5,2.5/2.5} \fill[mlAccent] (\x,\y) circle (3pt);
+\foreach \x/\y in {0.5/2.5,2.5/0.5} \draw[draw=mlInk,fill=white] (\x,\y) circle (3pt);
+\node[ml label,below] at (0.5,0) {$-1$};
+\node[ml label,below] at (2.5,0) {$+1$};
+\node[ml label,left] at (0,0.5) {$-1$};
+\node[ml label,left] at (0,2.5) {$+1$};
+\node at (1.5,3.8) {raw inputs};
 \end{scope}
-
-\draw[-Latex, semithick, black!55] (4.2,1.7) -- (6.2,1.7);
-\node[font=\footnotesize, text=black!70] at (5.2,2.05) {$f(x)$};
-
-\begin{scope}[xshift=7.0cm]
-\node[paneltitle] at (1.7,4.35) {Learned Space};
-\node[panelsub] at (1.7,3.95) {classes separate};
-\draw[-Latex, semithick] (0,0) -- (3.4,0);
-\draw[-Latex, semithick] (0,0) -- (0,3.4);
-\node[axislabel] at (1.7,-0.42) {$z_1$};
-\node[axislabel, rotate=90] at (-0.42,1.7) {$z_2$};
-\node[classpos] at (0.9,0.9) {};
-\node[classpos] at (1.2,1.1) {};
-\node[classpos] at (1.4,0.8) {};
-\node[classneg] at (2.7,2.7) {};
-\node[classneg] at (3.0,3.0) {};
-\node[classneg] at (3.2,2.6) {};
+\draw[ml arrow] (3.9,1.5) -- node[above,ml label] {$\phi(U,V)=UV$} (6.1,1.5);
+\begin{scope}[xshift=6.7cm]
+\draw[ml axis] (0,1.5) -- (3.2,1.5);
+\draw[draw=mlInk,fill=white] (0.5,1.5) circle (3pt);
+\fill[mlAccent] (2.5,1.5) circle (3pt);
+\draw[ml reference] (1.5,0.8) -- (1.5,2.2);
+\node[ml label,below] at (0.5,1.25) {$-1$ ($2$ inputs)};
+\node[ml label,below] at (2.5,1.25) {$+1$ ($2$ inputs)};
+\node at (1.5,3.8) {one retained coordinate};
+\node[ml label] at (1.5,2.55) {threshold $0$};
 \end{scope}
 \end{tikzpicture}
-}
-\caption{The central promise of representation learning is not magical. It is the possibility of mapping a hard raw space into a more useful space where simpler downstream decisions work better.}
+\captionof{figure}{The map loses the separate signs while retaining the target exactly. Filled markers have label one. A simple readout becomes possible without adding target information.}
 \label{fig:bad-vs-good-space}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{L{2.48cm}L{3.15cm}L{3.89cm}}
+\subsection{Information and Readout Risk Are Different Quantities}
+
+Fix an encoder fitted on development data $D$ and consider a fresh case $(X,Y)$. Write $Z=\phi_D(X)$. Conditioning on $D$ prevents information learned during fitting from being confused with information created by transforming this case. If the encoder reads only $X$, then $Y\!\to\!X\!\to\!Z$ is a conditional Markov chain. Whenever the mutual informations are well defined,
+\[
+I(Y;Z\mid D)\le I(Y;X\mid D).
+\]
+For a finite target, the chain rule makes the reason explicit:
+\[
+I(Y;X\mid D)=I(Y;Z\mid D)+I(Y;X\mid Z,D),
+\]
+because $Z$ is determined by $X,D$, and conditional mutual information is nonnegative. Equality holds when the retained representation leaves no further target information in $X$ given $Z,D$. This statement assumes the representation does not also receive the fresh outcome or another unrecorded input.
+
+The same limitation has a prediction form without information notation. For a fixed measurable fitted encoder, unrestricted measurable readouts, and well-defined expected losses (for example, a nonnegative loss),
+\[
+\inf_g\mathbb E[\ell(Y,g(\phi_D(X)))\mid D]
+\ \ge\ \inf_h\mathbb E[\ell(Y,h(X))\mid D].
+\]
+Every represented predictor is also an input predictor, obtained by composition. Restricting what the predictor sees cannot improve the best unrestricted risk. It can improve fitting from limited data or performance within a restricted readout family.
+
+For a chosen family $\mathcal G$, define
+\[
+R_{\mathcal G}(\phi_D)=\inf_{g\in\mathcal G}
+\mathbb E[\ell(Y,g(\phi_D(X)))\mid D].
+\]
+Changing $\phi_D$ can lower this risk by arranging retained distinctions for $\mathcal G$. Actual fitted risk also depends on sample size, regularization, optimization, and selection. A linear probe estimates performance of one such fitted procedure; it does not measure mutual information directly.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{2.6cm}L{3.6cm}L{3.9cm}@{}}
 \toprule
-Raw input & Useful intermediate structure & Why downstream tasks get easier \\
+Input & Candidate representation & Distinction to assess \\
 \midrule
-Pixels & edges, textures, parts, object cues & classification or detection can operate on visual concepts instead of raw intensities \\
-Tokens & phrase patterns, context, semantics & language tasks can reason about meaning rather than only symbol identity \\
-Spectrograms / sensor traces & local frequency cues, rhythm, temporal context & forecasting or recognition can use stable temporal structure instead of raw measurements \\
+Images & Parts, textures, or pooled visual features & Does pooling remove a location or color the target needs? \\
+Messages & Word counts or contextual token vectors & Does the map retain negation, order, and the relevant context? \\
+Sensor traces & Frequency summaries or temporal states & Does summarization remove a brief event or its timing? \\
 \bottomrule
 \end{tabular}
-\caption{A good representation does not magically solve the task. It rearranges the space so that simpler downstream decisions become possible.}
+\captionof{table}{Useful structure is relative to the task. These representations can help a readout while discarding distinctions another target requires.}
 \label{tab:raw-to-useful-structure}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-This is why a weak downstream model on top of a strong representation can outperform a strong downstream model on weak inputs. The representation may already have done most of the conceptual work.
+\section{Embedding Geometry Is a Modeling Choice}
 
-\section{What Makes a Representation Reusable?}
+A vector representation supports a geometry only after a comparison rule is specified. Dot product, Euclidean distance, and cosine similarity retain different aspects of that vector. A useful retrieval neighborhood needs evaluation against relevant judgments or a downstream target; nearby vectors alone do not establish shared meaning.
 
-Not every learned representation transfers. A representation is meaningfully \emph{reusable} only when several conditions hold at once. It should capture the right invariances, so that lighting, paraphrase, nuisance background, or other label-preserving changes do not destroy the relevant structure. It should preserve the information a new task needs, rather than compressing so aggressively that fine distinctions vanish. It should tolerate some mismatch between source objective and target task, because pretraining and downstream use are never exactly the same problem. And its adaptation cost should stay contained: reuse is most valuable when a small labeled set, a linear probe, or a lightweight adapter is enough to unlock the target signal rather than requiring full relearning.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{3.17cm}L{7.06cm}}
-\toprule
-Reusability condition & What to check \\
-\midrule
-Invariances captured & Does the space stay stable under transformations that should not change the label? \\
-Information preserved & Does a probe on frozen features show that the target signal is accessible? \\
-Task mismatch tolerated & How different is the pretraining objective from the new task semantically? \\
-Adaptation cost contained & Can a linear probe or small adapter achieve competitive performance? \\
-\bottomrule
-\end{tabular}
-\caption{Four conditions for meaningful representation reuse. Meeting all four is not always necessary, but checking all four is useful before committing to a reuse-first workflow.}
-\label{tab:reusability-conditions}
-\end{table}
-
-This framing is more durable than naming current model families because it applies equally to word embeddings, visual encoders, audio representations, and tabular feature extractors. Whatever the source architecture, the reuse question is the same: which invariances did it learn, what information does it still carry, how far is the source task from the target, and how much new labeled data does adaptation require? The reuse conditions become easier to see once representation is made geometric. Embeddings are the most common way modern machine learning turns that abstract idea into a usable space.
-
-\section{Embeddings and Geometry: Useful Space, Still a Model Choice}
-
-Embeddings, defined in the previous section as the geometric flavor of representation, are one of the clearest examples of reusable representation learning. Rather than treating each object---a word, image patch, document, audio segment, or user event---as an isolated identifier, we map it to a vector in a learned continuous space where geometric relationships encode useful structure. That geometric view supports retrieval, clustering, similarity search, and transfer. It is also the first place where the change-of-coordinates idea becomes directly inspectable.
-
-\begin{figure}[t]
-\centering
-\definecolor{c7encBlue}{RGB}{56,103,170}
-\definecolor{c7encBlueBg}{RGB}{220,233,251}
-\definecolor{c7downGreen}{RGB}{26,112,64}
-\definecolor{c7downGreenBg}{RGB}{210,238,220}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  x=1cm,
-  y=1cm,
-  font=\small,
-  ebox/.style={draw=c7encBlue, fill=c7encBlueBg, rounded corners=4pt,
-               align=center, minimum height=1.05cm, text width=2.4cm,
-               font=\small, line width=0.8pt},
-  dbox/.style={draw=c7downGreen, fill=c7downGreenBg, rounded corners=4pt,
-               align=center, minimum height=1.05cm, text width=2.4cm,
-               font=\small, line width=0.8pt},
-  arr/.style={-Latex, line width=1.1pt, draw=c7encBlue},
-  branch/.style={-Latex, line width=1.1pt, draw=c7downGreen}
-]
-%% ── Top row: encoding pipeline ──────────────────────────────
-\node[ebox] (raw) at (0.0,0) {raw input};
-\node[ebox] (enc) at (3.8,0) {encoder};
-\node[ebox] (emb) at (7.6,0) {embedding\\vector};
-\draw[arr] (raw) -- (enc);
-\draw[arr] (enc) -- (emb);
-
-%% ── Fan-out point ───────────────────────────────────────────
-\coordinate (fan) at (7.6,-1.3);
-\draw[c7encBlue, line width=1.1pt] (emb.south) -- (fan);
-\filldraw[c7encBlue] (fan) circle (2.5pt);
-
-%% ── Bottom row: downstream tasks ───────────────────────────
-\node[dbox] (probe) at (2.8,-2.8) {linear probe};
-\node[dbox] (retr)  at (6.4,-2.8) {retrieval /\\clustering};
-\node[dbox] (ft)    at (10.0,-2.8) {fine-tuning};
-
-%% ── Straight branches from fan-out to each task ─────────────
-\draw[branch] (fan) -- (probe.north);
-\draw[branch] (fan) -- (retr.north);
-\draw[branch] (fan) -- (ft.north);
-
-%% ── Labels ──────────────────────────────────────────────────
-\node[font=\footnotesize, c7encBlue, anchor=south] at (3.8,0.7)
-    {\textbf{learn once}};
-\node[font=\footnotesize, c7downGreen, anchor=north] at (6.4,-3.65)
-    {\textbf{reuse many ways}};
-\end{tikzpicture}%
-}
-\caption{A reusable representation is valuable because the same encoder and embedding space can support several downstream operations: simple probes, retrieval, clustering, or more task-specific adaptation.}
-\label{fig:rep-encoder-embedding-workflow}
-\end{figure}
-
-\subsection{A Tiny Embedding Example}
-
-Suppose a system has learned the following two-dimensional embeddings:
+For illustration, suppose
 \[
-e_{\text{exam}} = \begin{bmatrix} 0.9 \\ 0.7 \end{bmatrix},
-\qquad
-e_{\text{quiz}} = \begin{bmatrix} 0.8 \\ 0.6 \end{bmatrix},
-\qquad
-e_{\text{guitar}} = \begin{bmatrix} 0.1 \\ 0.95 \end{bmatrix}.
+e_{\rm exam}=(0.9,0.7)^\top,\quad
+e_{\rm quiz}=(0.8,0.6)^\top,\quad
+e_{\rm guitar}=(0.1,0.95)^\top.
 \]
-The dot product between \emph{exam} and \emph{quiz} is
-\[
-0.9(0.8) + 0.7(0.6) = 1.14,
-\]
-while the dot product between \emph{exam} and \emph{guitar} is
-\[
-0.9(0.1) + 0.7(0.95) = 0.755.
-\]
-After normalizing by vector lengths, \emph{exam} and \emph{quiz} remain more similar than \emph{exam} and \emph{guitar}. Even this tiny example captures the intuition: related academic terms point in closer directions in the learned space than an unrelated music term.
+The dot products with exam are $1.14$ and $0.755$. Their cosines are approximately $0.99985$ and $0.69320$. The example was constructed to align two academic terms. It demonstrates a calculation, rather than validating the meaning of an actual trained space.
 
-One distinction is worth making explicit here. The raw dot products \(1.14\) and \(0.755\) suggest stronger alignment between \emph{exam} and \emph{quiz}, but they are not yet scale-free similarities. Dot product mixes direction and length. Cosine similarity removes the length effect and answers the cleaner question: ``are these vectors pointing in similar directions?''
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c7scatBlue}{RGB}{56,103,170}
-\definecolor{c7scatAmber}{RGB}{184,92,16}
-\begin{tikzpicture}[x=4.2cm, y=4.2cm, font=\small]
-\draw[-Latex, semithick, black!75] (0,0) -- (1.12,0);
-\draw[-Latex, semithick, black!75] (0,0) -- (0,1.08);
-\node[font=\footnotesize, text=black!70] at (0.56,-0.13) {dimension 1};
-\node[font=\footnotesize, text=black!70, rotate=90] at (-0.14,0.54) {dimension 2};
-
-\filldraw[fill=c7scatBlue, draw=c7scatBlue] (0.90,0.70) circle (2.8pt);
-\node[anchor=west, font=\footnotesize, text=black] at (0.93,0.76) {exam};
-\filldraw[fill=c7scatBlue, draw=c7scatBlue] (0.80,0.60) circle (2.8pt);
-\node[anchor=west, font=\footnotesize, text=black] at (0.83,0.54) {quiz};
-
-\draw[c7scatAmber, line width=0.9pt, fill=white] (0.10,0.95) circle (3.0pt);
-\node[anchor=west, font=\footnotesize, text=black] at (0.13,1.01) {guitar};
+\begin{tikzpicture}[ml diagram,x=4.2cm,y=4.2cm]
+\draw[ml axis] (0,0) -- (1.15,0);
+\draw[ml axis] (0,0) -- (0,1.12);
+\node[ml label] at (0.56,-0.15) {dimension 1};
+\node[ml label,rotate=90] at (-0.12,0.54) {dimension 2};
+\fill[mlAccent] (0.90,0.70) circle (2.5pt);
+\node[ml label,anchor=west] at (0.94,0.75) {exam};
+\fill[mlAccent] (0.80,0.60) circle (2.5pt);
+\node[ml label,anchor=west] at (0.84,0.55) {quiz};
+\draw[draw=mlInk,fill=white] (0.10,0.95) circle (2.7pt);
+\node[ml label,anchor=west] at (0.14,1.0) {guitar};
 \end{tikzpicture}
-\caption{Even a toy embedding plot makes the chapter's geometric point visible. Related terms occupy nearby directions; unrelated terms sit elsewhere in the learned space.}
+\captionof{figure}{The constructed embeddings place exam and quiz near each other, while guitar points in a different direction. Coordinate proximity alone does not validate a semantic interpretation.}
 \label{fig:tiny-embedding-scatter}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-\subsection{Cosine Similarity}
+\subsection{Cosine Similarity and Its Domain}
 
-Once objects become vectors, we need a way to compare them. For nonzero vectors, the standard choice is cosine similarity:
+For nonzero vectors $a,b\in\mathbb R^d$,
 \[
-\cos(e_i, e_j) = \frac{e_i^\top e_j}{\|e_i\|_2 \|e_j\|_2}.
+s(a,b)=\frac{a^\top b}{\|a\|_2\|b\|_2}\in[-1,1].
 \]
-It measures the angle between two vectors rather than their raw length, which is especially useful when direction matters more than magnitude.
+Cauchy--Schwarz gives the range. Positive rescaling leaves the similarity unchanged; reversing one vector changes its sign. A zero vector has no defined direction, so the formula is undefined there. A system needs an explicit convention or treatment for such cases.
 
-The dot product $e_i^\top e_j$ is large when two vectors point in similar directions. Dividing by the vector lengths turns that raw alignment into a scale-free similarity score.
+Cosine removes length information. With query $q=(1,0)$ and candidates $a=(100,0)$ and $b=(1,1)$, cosine ranks $a$ first: $1>1/\sqrt2$. Euclidean distance ranks $b$ first: $1<99$. Neither comparison is automatically preferable. The task determines whether magnitude or direction should contribute.
 
-\begin{theorem}[Johnson--Lindenstrauss dimension reduction]
-For any finite set $S$ of $n$ points in $\mathbb{R}^d$ and any $0<\varepsilon<1$, there exists a map $f:\mathbb{R}^d\to\mathbb{R}^k$ with
+The quantity $1-s(a,b)$ is commonly used as a dissimilarity, but is not generally a metric. Distinct positive multiples have dissimilarity zero. Even on unit vectors it can violate the triangle inequality: at angles $0,\pi/3,2\pi/3$, consecutive dissimilarities are $1/2$ each while the endpoint dissimilarity is $3/2$. On the unit sphere, Euclidean distance instead satisfies
 \[
-k = O\!\left(\frac{\log n}{\varepsilon^2}\right)
+\|\bar a-\bar b\|_2^2=2[1-s(a,b)],
+\qquad\bar a=a/\|a\|_2.
 \]
-such that for all $u,v\in S$,
-\[
-(1-\varepsilon)\|u-v\|_2^2 \le \|f(u)-f(v)\|_2^2 \le (1+\varepsilon)\|u-v\|_2^2
-\]
-\citep{johnson1984}.
-\end{theorem}
+Thus $\sqrt{2(1-s)}$ is a metric on normalized vectors and gives the same neighbor ordering. Normalization has still merged positive multiples of the original vectors.
 
-The theorem does not claim every useful embedding is a random projection, and it does not replace task-specific representation learning. It does justify a central geometric intuition of the chapter: moderately low-dimensional spaces can preserve many of the pairwise relationships that downstream retrieval, clustering, or probing depend on.
-
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\begin{tikzpicture}[
-  x=1cm,
-  y=1cm,
-  font=\small,
-  paneltitle/.style={font=\footnotesize\bfseries},
-  panelsub/.style={font=\scriptsize, text=black!65},
-  veca/.style={-Latex, line width=0.95pt, black!75},
-  vecb/.style={-Latex, line width=1.1pt, draw=black}
-]
+\begin{tikzpicture}[ml diagram]
 \begin{scope}
-\node[paneltitle] at (1.9,3.55) {Same Direction};
-\node[panelsub] at (1.9,3.15) {length differs, cosine near $1$};
-\draw[-Latex, semithick, black!70] (0,0) -- (3.0,0);
-\draw[-Latex, semithick, black!70] (0,0) -- (0,2.8);
-\draw[veca] (0,0) -- (1.1,0.55);
-\draw[vecb] (0,0) -- (2.2,1.10);
+\node at (1.5,3.4) {same direction};
+\node[ml label] at (1.5,2.9) {$\cos\theta=1$};
+\draw[ml axis] (0,0) -- (3,0);
+\draw[ml axis] (0,0) -- (0,2.5);
+\draw[ml arrow,draw=mlAccent,line width=1pt] (0,0) -- (2.2,1.1);
+\draw[ml feedback,draw=mlInk] (0,0) -- (1.1,0.55);
+\draw[draw=mlInk,fill=white] (1.1,0.55) circle (2pt);
 \end{scope}
-
-\begin{scope}[xshift=6.1cm]
-\node[paneltitle] at (1.9,3.55) {Different Angles};
-\node[panelsub] at (1.9,3.15) {larger angle, cosine smaller};
-\draw[-Latex, semithick, black!70] (0,0) -- (3.0,0);
-\draw[-Latex, semithick, black!70] (0,0) -- (0,2.8);
-\draw[veca] (0,0) -- (2.35,0.25);
-\draw[vecb] (0,0) -- (0.85,2.15);
-\draw[black!50] (0.7,0) arc[start angle=0,end angle=68,radius=0.7];
-\node[font=\scriptsize, text=black!60] at (0.95,0.52) {$\theta$};
+\begin{scope}[xshift=5.2cm]
+\node at (1.5,3.4) {different directions};
+\node[ml label] at (1.5,2.9) {smaller cosine};
+\draw[ml axis] (0,0) -- (3,0);
+\draw[ml axis] (0,0) -- (0,2.5);
+\draw[ml arrow,draw=mlAccent,line width=1pt] (0,0) -- (2.35,0.25);
+\draw[ml feedback,draw=mlInk] (0,0) -- (0.85,2.15);
+\draw[draw=mlLine] (6.07:0.75) arc[start angle=6.07,end angle=68.43,radius=0.75];
+\node[ml label] at (1,0.6) {$\theta$};
 \end{scope}
 \end{tikzpicture}
-\caption{Cosine similarity cares about angle, not just length. That makes it useful when vector magnitude reflects scale or confidence but direction reflects role.}
+\captionof{figure}{Cosine similarity depends on the angle between nonzero vectors, regardless of their lengths.}
 \label{fig:cosine-angle-not-length}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-Cosine and Euclidean similarity answer different questions. Euclidean distance cares about absolute position and scale. Cosine cares about direction. In some applications the difference is minor; in others it changes the neighbor ranking substantially.
+\subsection{What Dimension Reduction Can Guarantee}
 
-\begin{warningbox}
-Embedding neighborhoods are evidence-bearing summaries, not ground-truth meaning. A near neighbor only tells us that the training objective and data made the model treat two objects similarly. That can be useful and still be biased, partial, or unstable.
-\end{warningbox}
+A finite cloud can sometimes retain its Euclidean geometry in fewer dimensions. The Johnson--Lindenstrauss result concerns a specified finite set, rather than every possible future input.
 
-\section{How Representations Are Learned: Supervisory Pressure}
-
-Where does reusable structure come from? The chapter is strongest when these workflows are understood as different kinds of pressure on the learned space, not as disconnected method names. Different objectives produce different reuse profiles. Supervised pretraining often optimizes one label space well and can transfer strongly when the downstream task is close. Self-supervised objectives---masked prediction, contrastive alignment, self-distillation---force the model to preserve context, invariance, or cross-view agreement that may transfer more broadly \citep{bengio2013rep,devlin2019,chen2020simclr,he2020moco,grill2020byol,caron2021dino}. Transfer and adaptation then test how much of that structure survives contact with a new task.
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{L{2.32cm}L{3.06cm}L{4.14cm}}
-\toprule
-Learning type & Where the target comes from & What it pressures the representation to learn \\
-\midrule
-Supervised & human labels & task-specific discriminative structure \\
-Self-supervised & the data itself & reusable structure, invariances, and context \\
-Transfer / adaptation & downstream labels after pretraining & specialization to the target task or domain \\
-\bottomrule
-\end{tabular}
-\caption{These workflows are related, but not interchangeable. The source of supervision shapes what the representation becomes good at.}
-\label{tab:supervised-selfsupervised-transfer}
-\end{table}
-
-\subsection{Supervised Pressure}
-
-In supervised learning, one labeled task shapes the representation. A classifier trained to distinguish diseases from scans learns features that separate those labels. This works well when labels are abundant and the deployment task closely matches the training task.
-
-The limitation is narrowness. A representation learned for one fixed target may not transfer when the next task asks a different question.
-
-\subsection{Self-Supervised Pressure}
-
-\begin{definition}[Self-Supervised Learning]
-Self-supervised learning generates training targets from the data itself---for example, predicting masked words from their surrounding context---rather than relying on external human labels. The prefix \emph{self-} refers to the source of the supervision signal, not the absence of one.
-\end{definition}
-
-A visible example is masked-token prediction. Let $M$ be the set of masked positions in a sequence $x$, and let the model predict a distribution $p_\theta(\cdot \mid \tilde x)$ from the corrupted sequence $\tilde x$. A simple objective is
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\begin{theorem}[Johnson--Lindenstrauss finite-set guarantee]
+There is a universal constant $C$ such that for every $n\ge2$, every set $S$ of $n$ points in $\mathbb R^d$, and every $0<\varepsilon<1$, a linear map $F:\mathbb R^d\to\mathbb R^k$ exists with $k\le\lceil C\varepsilon^{-2}\log n\rceil$ and
 \[
-\mathcal{L}_{\text{mask}}(\theta) = -\frac{1}{|M|}\sum_{i\in M}\log p_\theta(x_i \mid \tilde x).
+(1-\varepsilon)\|u-v\|_2^2
+\le\|F(u)-F(v)\|_2^2
+\le(1+\varepsilon)\|u-v\|_2^2
 \]
-The loss is small only when the model assigns high probability to the original tokens at the masked positions. The training signal is explicit: the model must use surrounding context to recover what was removed.
-
-Self-supervised learning builds prediction problems from structure already in the input. Common patterns include predicting masked or missing parts of a sequence, reconstructing a clean example from a corrupted one, matching two augmented views of the same underlying object, and predicting future segments of time-series or audio data.
-
-The pretext task is not the final goal. It is pressure that teaches invariance, context, continuity, or structure. Later probe and transfer results are only as good as the pressure that created the representation.
-
-The exact objective matters. BERT-style masking pressures the model to recover missing language from context, which is why it helped many downstream language tasks after adaptation \citep{devlin2019}. Contrastive predictive coding made the same pressure explicit for sequential data by having latent states predict future observations \citep{oord2018cpc}. SimCLR and MoCo use augmentations to define what should count as the same image, so the learned representation preserves object identity while discarding nuisance variation \citep{chen2020simclr,he2020moco}. BYOL and DINO showed that strong visual representations can also emerge from self-distillation without explicit negative pairs, provided the training dynamics prevent collapse \citep{grill2020byol,caron2021dino}.
-
-Students do not need to memorize every acronym. The durable lesson is simpler: each objective teaches the model what should stay stable across views, context, corruption, or time, and that choice determines what later transfer is likely to work.
-
-\begin{figure}[t]
-\centering
-\definecolor{c7ssBlueBg}{RGB}{220,233,251}
-\definecolor{c7ssBlue}{RGB}{56,103,170}
-\definecolor{c7ssGreenBg}{RGB}{210,238,220}
-\definecolor{c7ssGreen}{RGB}{26,112,64}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  sbox/.style={draw=black!55, fill=black!4, rounded corners=4pt,
-               align=center, minimum height=1.1cm, text width=2.3cm,
-               font=\small, line width=0.8pt},
-  mbox/.style={draw=c7ssBlue, fill=c7ssBlueBg, rounded corners=4pt,
-               align=center, minimum height=1.1cm, text width=2.5cm,
-               font=\small, line width=0.8pt},
-  tbox/.style={draw=c7ssGreen, fill=c7ssGreenBg, rounded corners=4pt,
-               align=center, minimum height=1.1cm, text width=2.5cm,
-               font=\small, line width=0.8pt},
-  lossbox/.style={draw=black!60, fill=yellow!8, rounded corners=4pt,
-               align=center, minimum height=1.3cm, text width=2.5cm,
-               font=\small, line width=0.8pt},
-  arr/.style={-Latex, line width=1.1pt, draw=black!65}
-]
-%% ── Left: raw data ─────────────────────────────────────────
-\node[sbox] (raw) at (0,0) {raw example};
-
-%% ── Fork point ──────────────────────────────────────────────
-\coordinate (fork) at (1.8,0);
-\draw[black!65, line width=1.1pt] (raw.east) -- (fork);
-\filldraw[black!55] (fork) circle (2.5pt);
-
-%% ── Top path (model) ───────────────────────────────────────
-\node[mbox] (view) at (4.4, 1.5) {corrupted /\\augmented view};
-\node[mbox] (enc)  at (7.6, 1.5) {encoder $\rightarrow z$};
-\draw[arr] (fork) -- (view.west);
-\draw[arr] (view) -- (enc);
-
-%% ── Bottom path (target) ───────────────────────────────────
-\node[tbox] (target) at (4.4,-1.5) {target /\\paired view};
-\draw[arr] (fork) -- (target.west);
-
-%% ── Right: loss ─────────────────────────────────────────────
-\node[lossbox] (loss) at (9.6, 0) {pretext loss:\\predict or\\compare};
-%% Top path feeds into loss from above
-\draw[-Latex, line width=1.1pt, draw=c7ssBlue]
-    (enc.east) -- (9.6, 1.5) -- (loss.north);
-%% Bottom path feeds into loss from below
-\draw[-Latex, line width=1.1pt, draw=c7ssGreen]
-    (target.east) -- (9.6,-1.5) -- (loss.south);
-
-%% ── Path labels ─────────────────────────────────────────────
-\node[font=\footnotesize\bfseries, c7ssBlue] at (6.0, 2.35) {model path};
-\node[font=\footnotesize\bfseries, c7ssGreen] at (6.0,-2.35) {target path (from the same data)};
-\end{tikzpicture}%
-}
-\caption{Self-supervision is not ``learning without targets.'' It is learning from targets created out of the structure already present in the data.}
-\label{fig:selfsupervised-workflow}
-\end{figure}
-
-\subsection{Examples Across Modalities}
-
-Two evidence-bearing cases are more useful here than a long taxonomy. In language, masked-token pretraining teaches the model to encode what neighboring words make plausible, which is why contextual encoders can separate different uses of the same surface token \citep{devlin2019}. In vision, SimCLR showed that representation quality moved sharply with augmentation design, projection heads, and batch size---exactly what we should expect if self-supervision is teaching invariance rather than merely fitting labels \citep{chen2020simclr}. The point is not that every modality uses the same pretext task. It is that each objective defines what structure should be stable enough to reuse later.
-
-The hard part of self-supervision is choosing an objective that cannot be solved by a cheap shortcut. If a corruption can be inverted from a trivial cue, or if paired views do not really describe the same underlying content, the model can score well on the pretraining task while preserving little that helps later.
-
-\begin{codeexample}[caption={A minimal self-supervised training loop}]
-for each raw example x:
-    x_view = corrupt_or_augment(x)
-    target = hidden_part_or_paired_view(x)
-    z = encoder(x_view)
-    prediction = prediction_head(z)
-    loss = pretext_loss(prediction, target)
-    update parameters
-\end{codeexample}
-
-\subsection{Autoencoders as Reconstruction-Based Representation Learning}
-
-Reconstruction is another form of self-supervised pressure. Rather than predicting masked tokens or contrasting augmented views, an autoencoder learns to compress and reconstruct its input, keeping only the structure needed to recover the original signal.
-
-\begin{definition}[Autoencoder]
-An autoencoder learns an encoder that maps an input into a latent representation and a decoder that reconstructs the original input from that latent representation. In the standard representation-learning setup, the latent state is smaller or otherwise constrained.
-\end{definition}
-
-The training signal comes from reconstruction. When the model must recover the original input from a smaller or constrained internal state, it cannot memorize every detail; it must keep the information most useful for rebuilding the example. Under those conditions, reconstruction becomes a representation-learning pressure rather than just a copying exercise.
-
-A simple reconstruction objective is
-\[
-\mathcal{L}_{\mathrm{rec}}(\theta) = \|x - \hat x\|_2^2,
-\qquad
-\hat x = g_\theta(f_\theta(x)),
-\]
-where $f_\theta$ is the encoder and $g_\theta$ is the decoder. The loss is small only when the latent representation preserves enough structure to rebuild the input faithfully.
-
-\begin{codeexample}[caption={A minimal autoencoder loop}]
-for each example x:
-    z = encoder(x)
-    x_hat = decoder(z)
-    loss = reconstruction_distance(x, x_hat)
-    update encoder and decoder
-\end{codeexample}
-
-\begin{example}[A Small Reconstruction Example]
-Suppose a sensor stream has a stable daily pattern with occasional spikes. An autoencoder trained on the stream learns the regular cycle and treats the spikes as hard-to-reconstruct irregularities. The result is useful for denoising, compression, or anomaly detection: the representation has captured what is stable enough to predict or rebuild.
-\end{example}
-
-If the latent space is almost as large and unconstrained as the input, reconstruction collapses into copying rather than abstraction. Bottlenecks, denoising, sparsity, or related constraints turn reconstruction into representation-learning pressure rather than a memorization path.
-
-\begin{example}[Bottleneck ratio matters]
-If the input is 1000-dimensional and the bottleneck is 10-dimensional, the encoder must compress by a factor of 100, creating strong pressure to keep only the most useful structure. If the bottleneck is 900-dimensional, the model can nearly copy the input and learns little of value. The effective constraint is the ratio of bottleneck to input size. Denoising and variational objectives add further pressure against trivial solutions.
-\end{example}
-
-\begin{decisionbox}
-Autoencoders help when the input contains redundancy, when a compressed latent space is useful, or when the downstream task benefits from denoising, anomaly detection, or a compact summary of the input.
-\end{decisionbox}
-
-\begin{warningbox}
-Autoencoders fail when reconstruction is too easy, when the bottleneck is too weak, or when the downstream label depends on structure that reconstruction does not force the model to preserve.
-\end{warningbox}
-
-\subsection{Multimodal Transfer as Shared Structure Across Modalities}
-
-Multimodal transfer asks a related question: when two or more modalities describe the same underlying object or event, can one learned representation serve all of them? The reusable signal is the overlap in meaning across aligned views. A photo and its caption, an audio clip and its transcript, or a radiology image and its report all point to the same underlying content from different directions.
-
-The core idea is shared structure. If training aligns those views, the representation can learn what survives across modality boundaries and ignore what only one view happens to contain. That is why multimodal training often produces reusable structure rather than just a collection of separate encoders.
-
-\begin{codeexample}[caption={A simple paired-view alignment sketch}]
-for each paired example (view_a, view_b):
-    z_a = encoder_a(view_a)
-    z_b = encoder_b(view_b)
-    increase similarity(z_a, z_b)
-    decrease similarity to mismatched pairs in the same batch
-\end{codeexample}
-
-The algorithmic point is simple. The model is rewarded both for what belongs together and for what should stay apart. That contrast is what makes alignment pressure informative rather than merely associative.
-
-\begin{example}[Shared Structure Example]
-A model that learns from product photos paired with short product descriptions can often transfer to later tasks like search, retrieval, or coarse categorization. The paired modalities teach the model what the product is, not just how the image looks or how the text sounds.
-\end{example}
-
-\begin{decisionbox}
-Multimodal transfer helps when the modalities are tightly aligned, when one modality supplies a cheaper or cleaner signal for the other, and when the target task benefits from concepts shared across views.
-\end{decisionbox}
-
-\begin{warningbox}
-Multimodal transfer fails when the alignment is shallow, when captions or transcripts are generic, or when the downstream task depends on modality-specific detail that the shared space never had to preserve.
-\end{warningbox}
-
-Together, reconstruction and cross-modal alignment show two main ways to pressure a model into reusable structure: by rebuilding what was hidden, or by agreeing across different views of the same thing. The next question is when that broader pressure actually pays off downstream.
-
-\section{Why Self-Supervision Scales}
-
-Self-supervision's main practical advantage is that unlabeled data is usually far more abundant than carefully labeled data. With a well-chosen pretraining objective, large amounts of raw data can become representational pressure before a downstream label set even exists. This is not a bigger-is-better claim; it is an explanation for why reuse-first workflows became practical at all.
-
-That advantage is one of the main reasons the field moved toward pretraining and adaptation. Rather than rebuilding features from scratch for every new task, we learn broad reusable structure first and specialize later.
-
-Scale helps because raw data is plentiful, but resist the lazy conclusion. Self-supervision scales only when the objective teaches the invariances or contextual structure the downstream task actually needs. More unlabeled data is not a substitute for a reuse audit \citep{chen2020simclr,devlin2019}.
-
-Scale helps only when the self-supervised objective encourages structure that aligns with downstream tasks. A pretraining signal that rewards surface-level statistics can scale without producing transferable representations. The question is not just ``how much data?'' but ``does the training pressure reward the right invariances?''
-
-\begin{example}[Denoising as a Representation Task]
-Suppose an image model is trained to reconstruct a clean image from a corrupted version. It cannot succeed by memorizing one pixel at a time. It must learn which patterns are stable enough to infer the missing content. That forces the internal representation to organize edges, textures, and shapes rather than only the raw corruption.
-\end{example}
-
-Contrastive learning is an especially influential self-supervised idea. Two views of the same underlying example are pushed to have similar representations; different examples are pushed apart. This teaches invariance: what changes under augmentation should be ignored, while what remains stable should be preserved.
-
-\begin{advancednote}
-\textbf{The InfoNCE loss.} Most modern contrastive methods (SimCLR, MoCo, CLIP) optimize the same loss in different guises. Given an \emph{anchor} representation $z$ and a batch of $N$ candidates $\{z_1, \ldots, z_N\}$ in which exactly one $z_{j^\star}$ is a true positive (a different view of the same example), the InfoNCE loss treats the positive identification as an $N$-way classification problem solved by softmax over cosine similarities:
-\[
-\mathcal{L}_{\mathrm{InfoNCE}}(z, z_{j^\star}) \;=\; -\log \frac{\exp\!\bigl(\mathrm{sim}(z, z_{j^\star}) / \tau\bigr)}{\sum_{j=1}^{N} \exp\!\bigl(\mathrm{sim}(z, z_j) / \tau\bigr)}, \qquad
-\mathrm{sim}(a, b) = \frac{a^\top b}{\|a\|\,\|b\|}.
-\]
-The temperature $\tau > 0$ controls how concentrated the softmax becomes: small $\tau$ sharpens the distinction between the positive and the hardest negatives, large $\tau$ smooths it. Negative examples are the other $N-1$ candidates in the same batch (SimCLR), drawn from a momentum-updated memory bank (MoCo), or paired across modalities (CLIP's image--caption pairs). Mathematically, the loss is a lower bound on the mutual information between the two views, which is why ``InfoNCE'' (Noise-Contrastive Estimation of mutual information) is its formal name. Operationally, this is the loss that produces the embeddings sketched in the alignment box of Figure~\ref{fig:selfsupervised-workflow}.
-\end{advancednote}
-
-Transfer learning makes reuse operational, but it leaves one diagnostic question open: is the useful structure already present in the frozen representation, or does the downstream model have to build it again?
-
-\section{Transfer Begins: Pretrain, Probe, Adapt}
-
-The chapter now shifts from how reusable spaces are created to how they are tested. Once a representation has been learned, we still need to use it. That is where transfer learning begins.
-
-\begin{definition}[Transfer Learning]
-Transfer learning is the reuse of knowledge learned on one task, dataset, or objective to improve performance on another task.
-\end{definition}
-
-Transfer is not a victory lap after pretraining. It is the first serious test of whether the representation contains linearly or cheaply accessible structure for the new task. Yosinski et al.\ showed that lower layers tend to transfer more generally while upper layers become more task-specific. Kornblith et al.\ found that stronger source models often transfer better, but not uniformly across downstream tasks \citep{yosinski2014transfer,kornblith2019transfer}.
-
-The simplest reuse workflow is to pretrain an encoder on a broad source objective, freeze it (fully or partially), train a smaller downstream model on the target task, and only then decide whether part or all of the encoder should be fine-tuned.
-
-\begin{codeexample}[caption={A generic pretrain-and-adapt workflow}]
-encoder = pretrain_on_broad_data()
-
-frozen_features = encoder(target_inputs)
-head = train_linear_probe(frozen_features, target_labels)
-
-if task_or_domain_shift_is_large:
-    fine_tune(encoder, head, target_data)
-\end{codeexample}
-
-\begin{figure}[t]
-\centering
-\definecolor{c7ptBlueBg}{RGB}{220,233,251}
-\definecolor{c7ptBlue}{RGB}{56,103,170}
-\definecolor{c7ptGreenBg}{RGB}{210,238,220}
-\definecolor{c7ptGreen}{RGB}{26,112,64}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  pbox/.style={draw=c7ptBlue, fill=c7ptBlueBg, rounded corners=4pt,
-               align=center, minimum height=1.05cm, text width=2.4cm,
-               font=\small, line width=0.8pt},
-  rbox/.style={draw=c7ptBlue, fill=c7ptBlueBg!55, rounded corners=4pt,
-               align=center, minimum height=1.15cm, text width=2.8cm,
-               font=\small, line width=0.8pt},
-  dbox/.style={draw=c7ptGreen, fill=c7ptGreenBg, rounded corners=4pt,
-               align=center, minimum height=1.05cm, text width=2.6cm,
-               font=\small, line width=0.8pt},
-  arr/.style={-Latex, line width=1.1pt, draw=black!60}
-]
-%% ── Left: pretraining pipeline ──────────────────────────────
-\node[pbox] (pre) at (0.0,0.0) {pretraining};
-\node[rbox] (rep) at (3.8,0.0) {pretrained\\representation};
-\draw[arr] (pre) -- (rep);
-
-%% ── Fan-out point ───────────────────────────────────────────
-\coordinate (fan) at (6.0,0.0);
-\draw[black!60, line width=1.1pt] (rep.east) -- (fan);
-\filldraw[black!50] (fan) circle (2.5pt);
-
-%% ── Right: adaptation choices ───────────────────────────────
-\node[dbox] (probe)   at (9.0, 1.6) {linear probe\\(encoder frozen)};
-\node[dbox] (partial) at (9.0, 0.0) {partial\\fine-tuning};
-\node[dbox] (full)    at (9.0,-1.6) {full\\fine-tuning};
-\draw[-Latex, line width=1.1pt, draw=c7ptGreen] (fan) -- (probe.west);
-\draw[-Latex, line width=1.1pt, draw=c7ptGreen] (fan) -- (partial.west);
-\draw[-Latex, line width=1.1pt, draw=c7ptGreen] (fan) -- (full.west);
-
-%% ── Annotations ─────────────────────────────────────────────
-\node[font=\footnotesize, black!50, anchor=west] at (10.6, 1.6) {\textit{least change}};
-\node[font=\footnotesize, black!50, anchor=west] at (10.6,-1.6) {\textit{most change}};
-\draw[->, thin, black!35] (10.55, 1.3) -- (10.55,-1.3);
-\end{tikzpicture}%
-}
-\caption{Pretraining and downstream adaptation are separate phases. The main engineering question is how much of the pretrained representation to keep fixed and how much to adapt.}
-\label{fig:pretrain-adapt-timeline}
-\end{figure}
-
-So far the chapter has described reusable structure abstractly. The next practical question is whether that structure is already accessible enough to help on a new task. Before adapting a pretrained model, ask four things: what structure is being reused, how much stays frozen, what downstream head or adaptation method is being added, and what evidence would show that reuse---rather than downstream complexity---is doing the real work.
-
-\section{Linear Probe as the First Diagnostic}
-
-A linear probe is a deliberately simple downstream model, often just a linear classifier or regressor trained on frozen embeddings. Following the probe tradition for inspecting intermediate representations, it is useful because it separates two questions without hiding them behind a powerful downstream head \citep{alain2016probes}: did the representation itself capture useful information, or would the downstream model have to create that structure on its own?
-
-This is one of the cleanest habits in the chapter:
-
-\begin{center}
-\emph{Probe first when you want to test the representation, not hide it behind a fancy head.}
-\end{center}
-
-A strong linear probe means the representation has already organized the information in a usable way for that target. If a very complex downstream model is still required, the representation may be less mature than it first appeared. A weak probe does not prove the representation is useless. It means the current frozen representation does not make the target easily accessible under a simple readout---which is exactly the diagnostic question we wanted to ask.
-
-Let $h(x)$ be a frozen representation and let $g_\phi$ be a linear probe trained on top of it. If $g_\phi(h(x))$ performs well, then the target is linearly accessible in the frozen space. That is evidence of reuse, but it does not prove three stronger claims: that the representation is causally organized the way humans describe it, that the signal is robust under distribution shift, or that a nonlinear head could not rescue a weak frozen space. The probe tests accessibility, not truth.
-
-That is the narrow claim the probe supports: linearly accessible information in a frozen space. It is not, by itself, evidence of causal structure or robustness under shift.
-
-A successful linear probe supports the safe claim that a target is linearly accessible in the frozen representation. It does not support the unsafe claims that the representation encodes the human-readable concept causally, that the signal will survive distribution shift, or that a deeper head could not have rescued a weaker representation.
-
-\begin{example}[Few Labels, Frozen Encoder]
-Imagine a vision encoder pretrained on a large collection of unlabeled classroom images. A school later wants to classify a small labeled set of whiteboard photos into categories such as clear, blurred, glare-obstructed, or partially cropped. If the encoder already captures strokes, edges, writing density, and camera artifacts, a small linear probe may perform surprisingly well even with few labels.
-\end{example}
-
-\subsection{When Reuse Fails or Is the Wrong Fit}
-
-Not every pretrained space should be reused. Negative transfer appears when the source invariances are wrong for the target, when label meanings shift, or when full fine-tuning erases useful source structure while specializing.
-
-This is the boundary-testing version of the chapter's claim: a strong frozen probe can still be the wrong coordinate system for the new task. A representation can be linearly accessible and still brittle under shift, too narrow for the target, or too dependent on source-domain assumptions that no longer hold.
-
-\begin{warningbox}
-Use broad reuse-first workflows only when the source representation is plausibly aligned with the target and the evidence justifies the added complexity. Skip them when the task is tiny and specialized, when fresh external evidence matters more than pretrained priors, or when privacy, latency, or interpretability constraints dominate.
-\end{warningbox}
-
-\section{Probe, Freeze, Partial Tune, or Full Tune?}
-
-The previous section argued for probing first. This section is the chapter's single adaptation ladder: run the clean diagnostic first, then choose the shallowest adaptation the evidence justifies. The choice of adaptation strategy is not only a computational decision. It is an experimental claim about the quality and fit of the pretrained representation. Each strategy implies a different answer to one question: how much of the pretrained representation do I trust for this new task?
-
-\textbf{Linear probe (frozen encoder).} Train only a linear head on top of the frozen pretrained features. This strategy makes the strongest claim about the representation---that task-relevant information is already linearly accessible in the frozen space---and is the cleanest diagnostic. If the probe works well, the frozen representation is reusable for that target under a simple linear readout. If it works poorly, the representation either lacks the right signals or stores them in a form that needs a more complex readout.
-
-\textbf{Partial fine-tuning (unfreeze top layers).} Let the later layers update while keeping the early layers frozen. This claims that early-layer representations are general enough to reuse directly, but later-layer abstractions need task-specific adjustment. The tradeoff is between compute efficiency and the risk of overfitting in the upper layers.
-
-\textbf{Full fine-tuning.} Let all layers update. This makes the weakest claim about the pretrained representation: some layers may need substantial adjustment for the new task. Full fine-tuning can achieve higher performance when the target task differs significantly from pretraining, but it requires more labeled data, more compute, and more care to avoid catastrophic forgetting of the source representation.
-
-\begin{warningbox}
-Full fine-tuning on a small labeled set risks \emph{catastrophic forgetting}: the model overwrites previously learned representations to fit the new task, losing reusable structure built during pretraining. This is why the adaptation ladder starts with the gentlest intervention (frozen probe) and escalates only when evidence supports it.
-\end{warningbox}
-
-\textbf{Adapter modules and low-rank updates.} Insert small trainable modules between frozen pretrained layers, or decompose weight updates into low-rank matrices. These strategies capture task-specific adjustments while touching as little of the pretrained space as possible. They are useful when compute or data is limited and preserving most of the pretrained representation is a priority.
-
-Between frozen probes and full fine-tuning lies \emph{few-shot learning}: adapting a model with very few labeled examples, often through prompt engineering or lightweight adapters. The evaluation discipline is the same; only the label budget and adaptation mechanism differ.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.23cm}L{1.40cm}L{1.55cm}L{2.07cm}L{2.10cm}}
-\toprule
-Strategy & Compute & Data needed & Diagnostic clarity & Performance ceiling \\
-\midrule
-Linear probe & Low & Very small & Strongest & Limited if target differs \\
-Partial fine-tuning & Medium & Moderate & Moderate & Moderate \\
-Full fine-tuning & High & Large & Weakest & Highest if shift is large \\
-Adapter / low-rank & Low-medium & Small-moderate & Moderate & Good with less compute \\
-\bottomrule
-\end{tabular}
-\caption{Adaptation strategies differ in what they claim about the pretrained representation and in what they require to work. The linear probe is the starting point; more expensive strategies should be justified by the probe's failure.}
-\label{tab:adaptation-strategies}
-\end{table}
-
-The judgment rule is simple: start with the linear probe. If the probe achieves strong performance, the pretrained representation is already a strong candidate for the task and deeper adaptation may add little. If the probe performs poorly, partial or full fine-tuning may be warranted---but ask \emph{why} the probe failed first. Was the pretraining task too different? Is the target genuinely out of distribution? Is the labeled set too small for fine-tuning to help? Probe failure is a diagnostic, not just a cue to try the next strategy in the table.
-
-\section{Adaptation Depth: Scenario Guide}
-
-The previous section named the options. This short scenario guide turns the same menu into a decision rule rather than another list of methods. Once a representation is shown to contain useful information, the question becomes how much of it should be allowed to move.
-
-The modern design space is wider than freeze versus full fine-tuning. Gradual-unfreezing strategies like ULMFiT made this visible early in NLP, and later adapter modules and low-rank updates made the same point at larger scale: teams can specialize a pretrained model while moving only part of it \citep{howard2018ulmfit,houlsby2019adapters,hu2021lora}. These methods lower compute and preserve more of the original model, but they do not remove the need to show whether the observed gain came from reused representation or from extra task-specific capacity.
-
-\textbf{LoRA: low-rank adapters in one line of math (Extension).} For a pretrained weight matrix $W_0 \in \mathbb{R}^{d_\text{out} \times d_\text{in}}$ in (say) an attention projection, the update during fine-tuning can be written as $W = W_0 + \Delta W$. Full fine-tuning treats every entry of $\Delta W$ as a trainable parameter, so the update has $d_\text{out} \cdot d_\text{in}$ degrees of freedom --- the same scale as the original weight. LoRA \citep{hu2021lora} freezes $W_0$ and constrains the update to a low-rank factorization:
-\[
-\Delta W \;=\; B A, \qquad B \in \mathbb{R}^{d_\text{out} \times r}, \quad A \in \mathbb{R}^{r \times d_\text{in}}, \quad r \ll \min(d_\text{out}, d_\text{in}).
-\]
-Only $A$ and $B$ are trained, reducing the number of fine-tuning parameters from $d_\text{out} d_\text{in}$ to $r(d_\text{out} + d_\text{in})$ --- often two to three orders of magnitude smaller. The factorization is initialized so that $\Delta W = 0$ at the start of fine-tuning (typically $B = 0$, $A$ random), so the fine-tuned model begins identical to the pretrained one and is steered by the rank-$r$ update only as training progresses. At inference, the merged weight $W_0 + BA$ has the same shape as $W_0$, so deployment cost is unchanged. The implicit assumption is that task-specific specialization lives in a low-rank subspace of weight space --- which empirically holds for many fine-tuning regimes but is the hypothesis a LoRA-style adapter is really making. Other parameter-efficient methods (Houlsby-style adapters, prefix tuning, $(IA)^3$) differ in \emph{where} the small set of trainable parameters live; LoRA's contribution is that the trainable parameters can sit \emph{inside} the original weight matrices via a clean rank constraint.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{2.01cm}L{1.35cm}L{1.70cm}L{1.85cm}L{2.10cm}}
-\toprule
-Choice & Cost & Overfitting risk & Diagnostic cleanliness & Performance ceiling \\
-\midrule
-Frozen encoder + probe & low & low & strongest & often lower if shift is large \\
-Parameter-efficient tuning & low to medium & low to medium & stronger than full tuning & often high when modest specialization is enough \\
-Partial fine-tuning & medium & medium & moderate & often good compromise \\
-Full fine-tuning & highest & highest on small data & weakest & highest when enough data and meaningful shift exist \\
-\bottomrule
-\end{tabular}
-\caption{These choices are not value judgments. They are tradeoffs among compute, evidence quality, and adaptation flexibility.}
-\label{tab:adaptation-choice-comparison}
-\end{table}
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{L{3.18cm}L{3.27cm}L{3.08cm}}
-\toprule
-Scenario & Sensible first choice & Why \\
-\midrule
-few labels, similar downstream domain & frozen encoder + linear probe & cheapest test of whether the representation already contains the needed signal \\
-moderate labels, clear task shift, limited compute & parameter-efficient tuning & specializes the model without moving every parameter \\
-moderate labels, moderate domain shift & partial fine-tuning & adapts the representation without fully relearning it \\
-larger label budget, important task, large shift & full fine-tuning & lets the model reshape more of the representation for the new domain \\
-\bottomrule
-\end{tabular}
-\caption{A useful first-pass rule is to match the amount of tuning to the amount of labeled evidence and the severity of domain shift.}
-\label{tab:adaptation-decision-table}
-\end{table}
-
-\begin{decisionbox}
-Freeze first when you want a clean diagnostic of representation quality or when labeled data is small. Use parameter-efficient tuning when full adaptation is too expensive or too entangled for the evidence you have. Fine-tune more deeply only when the task matters enough, the domain shift is meaningful, and you have the data and compute to justify moving more parameters.
-\end{decisionbox}
-
-\begin{example}[Same Representation, Different Target Scenarios]
-Suppose a pretrained encoder already yields a strong frozen linear probe on typed classroom notices. Fine-tuning may add little there because the domain shift is small. Now switch to handwritten whiteboard photos with glare, blur, and camera perspective. The same encoder can still help, but fine-tuning becomes more plausible because the downstream domain asks the representation to adapt to new nuisance structure.
-\end{example}
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{L{3.00cm}L{1.45cm}L{4.38cm}}
-\toprule
-Method & Test accuracy & What the result suggests \\
-\midrule
-Raw-feature logistic regression & 0.555 & weak baseline under low labels and domain shift \\
-Frozen encoder + linear probe & 0.680 & the pretrained representation already exposes useful signal \\
-Frozen encoder + learned classifier & 0.687 & a slightly richer head helps, but only modestly \\
-Partial fine-tuning & 0.568 & more adaptation can overfit before it helps \\
-Full fine-tuning & 0.573 & aggressive tuning can erase the advantage when labels are scarce \\
-\bottomrule
-\end{tabular}
-\caption{A small pedagogical domain-shift example from the companion materials. The point is not that full fine-tuning is always worse, but that low-label adaptation often rewards restraint and good diagnostics.}
-\label{tab:adaptation-results}
-\end{table}
-
-Evidence that transfer learning is genuinely helping should show up in at least one concrete way: similar performance with fewer labeled examples, better performance at the same label budget, faster convergence during downstream training, or better robustness under domain shift or nuisance variation.
-
-Up to this point, reuse has meant a fixed learned space. Attention changes that picture by making the representation itself depend on context at inference time. The key architectural ingredient is attention---a mechanism that lets each position in a sequence directly access any other position, weighted by learned relevance. Understanding attention matters because it underlies the transformer architecture that powers nearly every current foundation model.
-
-\begin{decisionbox}
-\textbf{Mid-chapter checkpoint.} The first half of the chapter (representation, probes, adaptation ladder) is the core diagnostic story: a reusable space and how to test reuse. The sections that follow---attention, multi-head attention, positional encoding, transformer blocks, and the foundation-model workflow---explain how the dominant pretraining architecture creates such spaces. On a first serious pass, follow the q\(^\top\)k attention example end to end and skim the rest. The mechanism details matter when the reuse claim hinges on architecture, not before.
-\end{decisionbox}
-
-\section{Attention: Building Context-Dependent Representations}
-
-Everything so far has treated reusable representation as a space we can inspect, probe, and adapt. Attention adds a second idea: the representation itself can change with context at prediction time. Representation learning accelerated further once models gained a flexible way to build context-dependent features. That mechanism is attention, and transformer-style attention made the shift scalable across modalities \citep{vaswani2017}.
-
-\begin{definition}[Attention]
-Attention is a mechanism that computes context-dependent weighted combinations of representations, allowing each element to focus on the most relevant parts of the input.
-\end{definition}
-
-The central sentence of this section is simple:
-
-\begin{center}
-\emph{Attention matters because representation becomes context-sensitive.}
-\end{center}
-
-In a sentence, a word can attend to earlier or later words. In an image, a patch can attend to other patches. In multimodal systems, text tokens can attend to image regions or audio frames.
-
-\begin{quote}\noindent\textbf{Static vs. contextual representations.} A static embedding gives an object the same vector wherever it appears. A contextual representation shifts with surrounding elements. The word ``bank'' in a finance sentence and a river sentence starts from the same token identity, but attention lets the resulting vector depend on context.\end{quote}
-
-It helps to state the mechanism in plain language before the notation. Each token or patch already has a current representation. Attention lets one element ask, ``which other elements are most relevant to me right now, and how much of each should I borrow?'' In that reading, the query is what the current element is looking for, the keys describe what other elements offer, and the values are the information those elements can contribute.
-
-In the transformer formulation, each element has a query vector $q$, key vectors $k_j$, and value vectors $v_j$. The attention weights are computed by normalizing the full list of query-key similarities:
-\[
-\mathrm{score}_j = \frac{q^\top k_j}{\sqrt{d}},
-\qquad
-\alpha_j = \frac{\exp(\mathrm{score}_j)}{\sum_\ell \exp(\mathrm{score}_\ell)},
-\qquad
-c = \sum_j \alpha_j v_j.
-\]
-Here $c$ is the context-aware representation produced by attention.
-
-The softmax function converts a list of raw scores into nonnegative weights that sum to $1$. It turns ``how relevant is each item?'' into a proper weighted average.
-
-\begin{advancednote}
-\begin{theorem}[Softmax attention produces a convex combination of value vectors (Extension)]
-In the transformer formulation above, each attention weight satisfies \(\alpha_j \ge 0\) and \(\sum_j \alpha_j = 1\). The context vector
-\[
-c = \sum_j \alpha_j v_j
-\]
-is therefore a convex combination of the value vectors \(\{v_j\}\).
+for all $u,v\in S$ \citep{johnson1984}.
 \end{theorem}
+\end{minipage}\par\medskip
 
-\begin{proof}
-Each \(\alpha_j\) is a softmax weight, so it is nonnegative by construction. The denominator in the softmax is the sum of all exponentiated scores, so summing the resulting weights over \(j\) gives \(1\). A weighted sum of vectors with nonnegative weights that sum to \(1\) is, by definition, a convex combination.
-\end{proof}
-\end{advancednote}
+These are bounds on squared distances. A distance $r$ becomes one in $[\sqrt{1-\varepsilon}\,r,\sqrt{1+\varepsilon}\,r]$. The bound need not give $k<d$ for a small input dimension or tight tolerance. Random projections can supply such finite-set guarantees with suitable dimension and probability bounds; an arbitrary learned embedding does not inherit them.
 
-\begin{advancednote}
-\textbf{Attention is kernel smoothing with a learned kernel.} Define the exponential-similarity kernel
+Small distortion need not preserve every nearest neighbor when distances are nearly tied. For original squared distances $a<b$, their ordering is guaranteed by these bounds only when $(1+\varepsilon)a<(1-\varepsilon)b$. At $\varepsilon=0.2$, distances squared $9$ and $16$ remain ordered because $10.8<12.8$. Distances squared $9$ and $10$ have overlapping allowed intervals. Preserving geometry also does not establish that this geometry is predictive or meaningful.
+
+\section{Objectives Reward Different Distinctions}
+
+A representation can be fitted jointly with a supervised readout or through an objective constructed from inputs. The supervision source and the target it defines matter more than whether a method is described as general-purpose.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{2.45cm}L{3.5cm}L{4.15cm}@{}}
+\toprule
+Pressure & Target source & What low loss establishes \\
+\midrule
+Supervised prediction & Recorded task labels & Fit to those measured outcomes under the chosen loss \\
+Masked or future prediction & Withheld portions of the input & Predictability of those portions from permitted context \\
+Reconstruction & An original or clean input & Recovery under the specified distortion measure \\
+Paired-view alignment & A pairing and transformation procedure & Relative alignment of the designated pairs \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Different objectives reward different distinctions. Adaptation fits a target task after pretraining; it is a stage of learning rather than another source of labels.}
+\label{tab:supervised-selfsupervised-transfer}
+\end{minipage}\par\addvspace{\intextsep}
+
+\subsection{Supervised and Masked Prediction}
+
+A supervised encoder and readout can minimize
 \[
-k(q, k) \;=\; \exp\!\bigl(q^\top k / \sqrt{d_k}\bigr).
+\frac1n\sum_i\ell\bigl(y_i,g_w(\phi_\theta(x_i))\bigr).
 \]
-Softmax attention is then exactly Nadaraya--Watson kernel smoothing of the value vectors against the keys:
+Gradients change both maps unless one is frozen. The loss need not reward distinctions irrelevant to the supplied labels, although they may remain in the representation. Supervised features can transfer when another task uses related information; narrow labels do not imply that nothing transfers.
+
+Self-supervised learning constructs targets from observations instead of obtaining a separate annotation for every target. For a token sequence $x$, let $M$ be a nonempty set of withheld positions and $\tilde x$ the corrupted input. One masked-prediction objective is
 \[
-\mathrm{Attn}(q, K, V) \;=\; \sum_j \frac{k(q, k_j)}{\sum_{j'} k(q, k_{j'})}\, v_j.
+L_{\rm mask}(\theta)=-\frac1{|M|}\sum_{i\in M}
+\log p_\theta(x_i\mid\tilde x).
 \]
-Each output is a kernel-weighted average of the values, where the weights are a Gibbs/Boltzmann distribution over similarity-to-query: the score $q^\top k_j$ acts as a negative energy and $\sqrt{d_k}$ acts as a temperature.
+The model is rewarded for assigning probability to the withheld tokens. Its prediction can use surrounding content, frequency shortcuts, or other available cues; the formula alone does not require a particular internal concept. BERT's masking procedure and subsequent adaptation produced improvements on specified language benchmarks \citep{devlin2019}. That evidence concerns those procedures and tasks.
 
-This view explains three things the convex-combination theorem alone does not. (a) \emph{Why softmax}: it turns arbitrary similarity scores into a normalized probability over keys, which is exactly a Gibbs measure at temperature $\sqrt{d_k}$ over the negative-energy field $-q^\top k_j$. (b) \emph{Why the $\sqrt{d_k}$ scaling}: without it, the kernel temperature would effectively shrink as $d_k$ grows because score magnitudes scale with $\sqrt{d_k}$, and the softmax would saturate to a one-hot peak --- the kernel would degenerate from smoothing to nearest-neighbor lookup. (c) \emph{What multi-head attention buys}: each head learns its own $W_Q, W_K$ and so each head defines a different similarity kernel; multi-head attention is an ensemble of kernel smoothers with different metrics. The ``soft retrieval'' interpretation often used informally is precisely this kernel-smoothing identity.
-
-This kernel-smoothing view is developed formally in Tsai et al.\ (2019) and is the foundation for kernel-based efficient-attention variants such as Performer (Choromanski et al.\ 2020), which approximate $k(q, k)$ by random features so that attention costs scale linearly rather than quadratically in sequence length.
-\end{advancednote}
-
-This is the clean mathematical version of the usual intuition that attention forms a weighted average over candidate pieces of context. The pre-projection context vector \(c\) cannot leave the convex hull of the mixed values; later linear maps, residual connections, or feed-forward blocks can move the full layer output elsewhere. What changes here is which values receive most of the weight.
-
-The factor \(\sqrt{d}\) keeps dot-product scores from growing too large as the key/query dimension \(d\) grows. If the coordinates of \(q\) and \(k_j\) are roughly centered with unit-scale variation, the typical magnitude of \(q^\top k_j\) grows with \(d\). Dividing by \(\sqrt{d}\) makes the softmax input less sensitive to dimension, so no single head becomes overwhelmingly peaky merely because its vectors are longer.
-
-\begin{failurebox}
-\textbf{Softmax saturation and attention collapse.} When the pre-softmax scores $q^\top k_j / \sqrt{d}$ are very large in magnitude --- because the $\sqrt{d}$ scaling was dropped, because key/query vectors are not normalized, or because the model has trained itself into an extreme regime --- the softmax saturates: one weight is essentially $1$ and the rest are essentially $0$. The gradient of the softmax at that point is nearly flat, so no useful learning signal flows through that head, and the head effectively stops moving. The symptom at training time is a head whose attention pattern becomes a one-hot mask early and then never changes; the symptom at inference is a model that uses only a tiny fraction of its context. The reverse failure is also possible: when scores collapse toward zero (e.g., severely under-trained projections, or after aggressive normalization), every weight is close to $1/N$ and attention is no different from a uniform average --- the head has stopped distinguishing anything. Both pathologies are diagnosable by inspecting the entropy of the attention distribution per head; healthy heads sit between the two extremes.
-\end{failurebox}
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c7attnBlueBg}{RGB}{220,233,251}
-\definecolor{c7attnBlue}{RGB}{56,103,170}
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  tbox/.style={draw=black!60, fill=black!3, rounded corners=3pt,
-               align=center, minimum height=0.8cm, text width=1.7cm, text=black},
-  qbox/.style={draw=c7attnBlue!70!black, fill=c7attnBlueBg!80, rounded corners=3pt,
-               align=center, minimum height=0.8cm, text width=1.7cm, text=black},
-  sumbox/.style={draw=black!60, fill=black!2, rounded corners=3pt,
-               align=center, minimum height=0.8cm, text width=2.8cm, text=black},
-  ctxbox/.style={draw=black!65, fill=black!4, rounded corners=3pt,
-               align=center, minimum height=0.9cm, text width=3.0cm, text=black}
-]
-\node[tbox] (t1) at (0.0,1.8) {token 1};
-\node[tbox] (t2) at (2.8,1.8) {token 2};
-\node[qbox] (t3) at (5.6,1.8) {query};
-\node[tbox] (t4) at (8.4,1.8) {token 4};
-\node[sumbox] (sum) at (4.2,0.25) {weighted sum\\$\sum_j \alpha_j v_j$};
-\node[ctxbox] (ctx) at (4.2,-1.55) {context vector};
-
-\draw[-Latex, line width=0.5pt, black!45] (t1.south) -- node[pos=0.45, left, font=\scriptsize, fill=white, inner sep=1pt] {low} (sum.north west);
-\draw[-Latex, line width=0.8pt, black!65] (t2.south) -- node[pos=0.45, left, font=\scriptsize, fill=white, inner sep=1pt] {medium} (sum.north);
-\draw[-Latex, line width=1.2pt, c7attnBlue!85!black] (t3.south) -- node[pos=0.48, right, font=\scriptsize, fill=white, inner sep=1pt, text=black] {high} (sum.north east);
-\draw[-Latex, line width=0.5pt, black!45] (t4.south) -- node[pos=0.45, right, font=\scriptsize, fill=white, inner sep=1pt] {low} (sum.north east);
-\draw[-Latex, semithick, black!65] (sum.south) -- (ctx.north);
+\begin{tikzpicture}[ml diagram]
+\node[ml box] (raw) at (0,0) {example $x$};
+\node[ml box,minimum width=2.5cm] (view) at (3.7,0.9) {corrupted view};
+\node[ml key box,minimum width=2.5cm] (model) at (7.5,0.9) {encoder / predictor};
+\node[ml box,minimum width=2.5cm] (target) at (3.7,-0.9) {target from $x$};
+\node[ml box,minimum width=2.5cm] (loss) at (7.5,-0.9) {pretext loss};
+\draw[ml arrow] (raw) -- (view);
+\draw[ml feedback] (raw) -- (target);
+\draw[ml arrow] (view) -- (model);
+\draw[ml arrow] (model) -- (loss);
+\draw[ml feedback] (target) -- (loss);
 \end{tikzpicture}
-\caption{Attention can be read as weighted averaging over relevant items. The current query does not treat every token or patch equally; it builds a context-specific mixture.}
+\captionof{figure}{A masked-prediction example: the model sees a corrupted input, while the original example supplies its target. The dashed path creates supervision from the data itself.}
+\label{fig:selfsupervised-workflow}
+\end{minipage}\par\addvspace{\intextsep}
+
+An autoregressive objective instead predicts each next token from its permitted prefix:
+\[
+L_{\rm next}(\theta)=-\sum_{t=1}^n
+\log p_\theta(x_t\mid x_1,\ldots,x_{t-1}).
+\]
+Masking or other architectural restrictions must enforce that information boundary. A future sensor segment can likewise supply a prediction target, provided the encoder does not see that future segment as input. Self-supervision supplies labels cheaply, but useful target performance remains a separate claim.
+
+\subsection{Contrastive Pairing and Augmentation}
+
+A paired-view objective begins with a rule for what belongs together. An anchor representation $z$, a designated positive partner $z_+$, and $N\ge2$ candidate partners can define
+\[
+\ell=-\log
+\frac{\exp(s(z,z_+)/T)}{\sum_{j=1}^N\exp(s(z,z_j)/T)},
+\qquad T>0,
+\]
+where the denominator includes the positive. This is log loss for selecting that partner. Decreasing $T$ sharpens the candidate probabilities for fixed unequal scores; it does not itself improve the representation. With cosine scores, all vectors used in the denominator must be nonzero.
+
+SimCLR studied augmented image pairs, a projection head, and batch comparisons; its experiments showed that these choices affected linear-evaluation performance \citep{chen2020simclr}. MoCo obtained comparison candidates through a queue and momentum-updated encoder \citep{he2020moco}. These are examples of specified fitting procedures, rather than a guarantee that every contrastive objective preserves object identity.
+
+A positive-pair rule asks the representation to ignore differences between the paired views. A crop can remove the only pedestrian, color removal can erase a color label, and removing negation can reverse a message's meaning. Two views of one file need not preserve the target or even show the same object. Different files can also describe the same semantic class, creating negatives that conflict with a desired grouping. Audit pair construction for the task and conditions where the representation will be used.
+
+Under the InfoNCE sampling model, an anchor and positive are drawn jointly, while the $N-1$ negative partners are independent draws from the partner marginal, independent of the anchor and positive. Then $\log N-\mathbb E[\ell]$ is a lower bound on their mutual information \citep{oord2018cpc}. The raw loss is not that bound. Different or dependent candidate sampling needs separate analysis, and high shared information can concern background or identifiers rather than the eventual target.
+
+A collapsed representation sends every input to the same vector. For equal contrastive scores its partner probability is $1/N$ and loss is $\log N$. A bare agreement objective such as $\|z-z_+\|_2^2$ instead gives zero loss under collapse. This is why an objective that merely asks views to agree needs another mechanism if distinctions between cases are to survive.
+
+BYOL and DINO obtained useful visual representations without explicit negative pairs in their reported experiments \citep{grill2020byol,caron2021dino}. Their fitting procedures include additional structure, such as teacher updates, asymmetric prediction, or centering and sharpening. The collapse example applies to bare agreement; it does not show that these complete procedures necessarily collapse, or that one component universally prevents collapse.
+
+\subsection{Reconstruction Rewards Recovery Under a Chosen Distortion}
+
+An autoencoder has an encoder $z=\phi_\theta(x)$ and decoder $\hat x=g_\psi(z)$. A squared-error objective is
+\[
+L_{\rm rec}=\frac1n\sum_i\|x_i-g_\psi(\phi_\theta(x_i))\|_2^2.
+\]
+A bottleneck, noise, sparsity, or restricted function class can change which solutions are available. An unconstrained identity encoder and decoder achieve perfect reconstruction without reducing the difficulty of a downstream readout. A small number of ideal real-valued coordinates alone does not bound stored information or prevent memorization of a finite sample; finite precision and restrictions on the maps matter.
+
+For a precise task mismatch, let $X=(10Z,0.01Y)$, where $Z\sim\mathcal N(0,1)$ and independent $Y\in\{-1,+1\}$ is equally likely. An encoder retaining only $10Z$ with reconstruction $(10Z,0)$ has squared error $0.0001$ for every case. Yet its retained coordinate is independent of $Y$, so no predictor of $Y$ using that coordinate alone exceeds population accuracy $1/2$. The discarded small coordinate determines the target exactly. Low reconstruction error does not establish preservation of every useful distinction.
+
+A constant encoder is also uninformative, but does not generally minimize reconstruction loss. Its best squared-loss constant decoder is the input mean, with expected error $\mathbb E\|X-\mathbb E X\|^2$. Denoising objectives predict a clean input from a corrupted one; their squared-loss optimum is a conditional mean. That can smooth unpredictable spikes, including events an anomaly task might need to retain. Reconstruction error can be an anomaly score only after evaluating which deviations it detects and misses.
+
+\subsection{Cross-Modal Alignment Retains What Identifies a Pair}
+
+For image embeddings $u_i$ and matched text embeddings $v_i$, scores $s_{ij}=u_i^\top v_j/T$ define a row loss for selecting the matched caption. Averaging it with the corresponding column loss rewards matching in both directions. The target is the pairing, not an independently verified description of every image property.
+
+CLIP learned from image--text pairs and evaluated transfer using text descriptions of candidate classes \citep{radford2021clip}. Product photos paired with descriptions can similarly support retrieval. Generic captions, alignment errors, or details absent from text can limit what the objective rewards. A radiology report, transcript, and image are measurements with different omissions; their correspondence does not make them interchangeable evidence.
+
+Unlabeled or weakly labeled observations can greatly expand available pretraining examples. More data reduce some sampling limitations, but do not repair an inappropriate pairing rule, missing population, or target information removed by the map. Assess the pretraining objective and the proposed reuse separately.
+
+\section{Evaluating Transfer and Adaptation}
+
+A source-trained encoder may provide useful features for a new task. Transfer can mean comparable performance with fewer target labels, better performance at the same budget, or less target fitting work. Those comparisons need a specified source, target population, and resource accounting. Findings about layer transfer in particular image models do not establish a universal ordering of early and late layers \citep{yosinski2014transfer,kornblith2019transfer}.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram]
+\node[ml box] (x) at (0,0) {input $x$};
+\node[ml key box] (e) at (3.2,0) {encoder $f$};
+\node[ml box] (z) at (6.4,0) {$z=f(x)$};
+\draw[ml arrow] (x) -- (e);
+\draw[ml arrow] (e) -- (z);
+\node[ml label,align=center] (probe) at (0,-1.8) {linear probe};
+\node[ml label,align=center] (retr) at (3.2,-1.8) {retrieval / clustering};
+\node[ml label,align=center] (tune) at (6.4,-1.8) {task adaptation};
+\draw[ml arrow] (z.south) -- (6.4,-0.95) -- (0,-0.95) -- (probe.north);
+\draw[ml arrow] (3.2,-0.95) -- (retr.north);
+\draw[ml arrow] (6.4,-0.95) -- (tune.north);
+\end{tikzpicture}
+\captionof{figure}{One learned representation can support probes, retrieval, clustering, and task-specific adaptation. Adaptation may also update the encoder.}
+\label{fig:rep-encoder-embedding-workflow}
+\end{minipage}\par\addvspace{\intextsep}
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{3.0cm}L{7.2cm}@{}}
+\toprule
+Reuse question & Evidence to examine \\
+\midrule
+Which distinctions survive? & Target labels and plausible counterexamples to learned invariances \\
+Is the target accessible? & Protected comparisons of frozen readouts with controlled fitting budgets \\
+Does the population differ? & Performance across relevant target groups, times, and conditions \\
+What adaptation is affordable? & Target data, parameter updates, memory, compute, and inference cost \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Questions for testing reuse. They specify evidence to gather rather than necessary and sufficient conditions for transfer.}
+\label{tab:reusability-conditions}
+\end{minipage}\par\addvspace{\intextsep}
+
+\subsection{What a Linear Probe Can Establish}
+
+A linear probe fits an affine readout on frozen features, for example
+\[
+\hat p(x)=\sigma(w^\top\phi_D(x)+b).
+\]
+The encoder is fixed, while target labels fit $w,b$ and select development settings. Intermediate-layer probes can assess where a target becomes accessible to that readout \citep{alain2016probes}. Strong protected performance supports usefulness of the combined frozen features and fitted linear readout on that population.
+
+A probe cannot uniquely separate information content from geometry, readout capacity, and estimation. A weak result may reflect discarded information, nonlinear organization, too few labels, unsuitable regularization, or failed optimization. A richer head can exploit information a linear head cannot use, but cannot create information about a fresh label absent from both the representation and its other permitted inputs. Control tasks and matched baselines help assess what probe capacity contributes \citep{hewitt2019controlprobes}.
+
+Even an invertible change of feature units preserves information while changing an isotropic penalty. If $z'=cz$ for $c>0$, the same score uses $w'=w/c$, but $\|w'\|^2=\|w\|^2/c^2$. Using the same numeric regularization value can change fitted probe performance. Compare training-only scaling and a suitable development sweep before attributing a gain to additional represented information.
+
+For four equally likely labels with represented centers $(1,0),(-1,0),(0,1),(0,-1)$, affine scores $z_1,-z_1,z_2,-z_2$ select the corresponding class at each center. This is linear accessibility. If the representation is instead independent of those equally likely labels, every predictor using it alone has population accuracy $1/4$. Finite-sample training accuracy can still be high through memorization or leakage.
+
+\subsection{Freezing and Updating Test Different Procedures}
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram]
+\node[ml box] (pre) at (0,0) {pretraining};
+\node[ml key box] (rep) at (3.2,0) {representation};
+\draw[ml arrow] (pre) -- (rep);
+\node[ml box,minimum width=2.7cm] (probe) at (7,1.3) {linear probe};
+\node[ml box,minimum width=2.7cm] (partial) at (7,0) {partial fine-tuning};
+\node[ml box,minimum width=2.7cm] (full) at (7,-1.3) {full fine-tuning};
+\draw[ml arrow] (rep.east) -- (5.1,0) -- (5.1,1.3) -- (probe.west);
+\draw[ml arrow] (5.1,0) -- (partial.west);
+\draw[ml arrow] (5.1,0) -- (5.1,-1.3) -- (full.west);
+\node[ml label,anchor=west] at (8.6,1.3) {frozen};
+\node[ml label,anchor=west] at (8.6,0) {some layers};
+\node[ml label,anchor=west] at (8.6,-1.3) {all layers};
+\end{tikzpicture}
+\captionof{figure}{After pretraining, the encoder can stay frozen or change partly or fully. These choices test different adaptation procedures.}
+\label{fig:pretrain-adapt-timeline}
+\end{minipage}\par\addvspace{\intextsep}
+
+A frozen encoder with a linear head provides one controlled comparison. A nonlinear head keeps the encoder fixed but changes the readout family. Partial fine-tuning changes a specified subset of encoder parameters; full fine-tuning changes all selected encoder parameters. Adapters add trainable modules, while low-rank updates constrain changes to selected weight matrices \citep{howard2018ulmfit,houlsby2019adapters,hu2021lora}.
+
+More trainable parameters can help adapt or overfit. Fine-tuning can also reduce source-task performance, often called forgetting; target overfitting and source forgetting are different observations. A frozen model can fail under shift too. There is no general label count or performance ceiling attached to one adaptation name, and full fine-tuning is not guaranteed to outperform a probe.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{2.6cm}L{3.3cm}L{4.2cm}@{}}
+\toprule
+Procedure & What is allowed to fit & A reason to compare it \\
+\midrule
+Frozen linear probe & Affine target readout & Test accessibility with a restricted readout \\
+Frozen richer head & Target readout of specified capacity & Test whether a different readout uses frozen features better \\
+Partial tuning & Head and specified encoder layers & Test adjustment of selected source features \\
+Adapter / low-rank update & Added modules or factored matrix updates & Test constrained parameter adaptation within resource limits \\
+Full tuning & Head and all selected encoder weights & Test a more flexible adaptation procedure \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Adaptation choices differ in which functions can change. Few labels, shift, and compute limits inform the comparisons; they do not supply an automatic winner.}
+\label{tab:adaptation-strategies}
+\label{tab:adaptation-choice-comparison}
+\label{tab:adaptation-decision-table}
+\end{minipage}\par\addvspace{\intextsep}
+
+A constructed development comparison illustrates why deeper tuning is not an inference from the method name. Suppose identical target splits and label budgets give the scores below. The scores do not identify overfitting, forgetting, or source mismatch by themselves; learning curves, source evaluation, repeated fits, and group errors would help distinguish them.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{6.3cm}r@{}}
+\toprule
+Procedure & Development accuracy \\
+\midrule
+Raw-feature logistic baseline & $0.555$ \\
+Frozen encoder with linear probe & $0.680$ \\
+Frozen encoder with richer head & $0.687$ \\
+Partial fine-tuning & $0.568$ \\
+Full fine-tuning & $0.573$ \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Illustrative scores, not an empirical benchmark. Selecting a procedure from development evidence still requires a protected evaluation of the selected system.}
+\label{tab:adaptation-results}
+\end{minipage}\par\addvspace{\intextsep}
+
+\subsection{Low-Rank Updates: Parameter Count and Matrix Freedom}
+
+For frozen $W_0\in\mathbb R^{m\times n}$, LoRA fits
+\[
+W=W_0+BA,\qquad B\in\mathbb R^{m\times r},\quad A\in\mathbb R^{r\times n}.
+\]
+The update has rank at most $r$, because its columns lie in the span of $B$. Training the two factors uses $r(m+n)$ scalar parameters instead of $mn$ entries for an unrestricted update. For $m=n=1024,r=8$, those counts are $16{,}384$ and $1{,}048{,}576$, a factor of $64$. This counts selected matrix parameters; total training memory and compute also depend on activations, optimizer state, and the rest of the model.
+
+Factor parameters are not distinct matrix degrees of freedom. For any invertible $r\times r$ matrix $S$,
+\[
+BA=(BS)(S^{-1}A).
+\]
+The factors are nonunique. The set of matrices of exactly rank $r$ has local dimension $r(m+n-r)$ when $r\le\min(m,n)$; the $r^2$ redundant factor directions account for the difference. Lower-rank points have further degeneracies. A low-rank update constraint is also not a statement that $W_0+BA$ has low rank or that the nonlinear network's change lies in one fixed linear subspace.
+
+A common initialization uses zero $B$ and random $A$, so the initial update is zero. If both factors start at zero, both first gradients of a differentiable loss through their product are zero. With only $B$ zero, its gradient can be nonzero because $A$ is already nonzero. Initialization is part of the fitting procedure.
+
+For a fixed adapter, the product can be merged into $W_0$ before ordinary dense inference, retaining the same weight shape \citep{hu2021lora}. Unmerged evaluation, switching adapters, or quantized implementations can have different costs. LoRA's reported success on selected tasks is evidence for useful constrained updates there, rather than proof that every task admits the same rank or adaptation cost.
+
+\subsection{Pretraining and Evaluation Boundaries}
+
+Protect the target comparison from all development choices: encoder selection, pooling, feature scaling, layer choice, prompt design, rank selection, and stopping. Fit target-dependent transformations inside training folds. Keep related students, images, or documents within the appropriate group boundaries, and account for chronology. In the deadline task, an encoder of activity history cannot ingest weeks 3--4 while being presented as a week-2 predictor.
+
+Source pretraining can overlap a target benchmark or contain its labels, near-duplicates, future records, or revealing metadata. Freezing the encoder does not remove that exposure. Use documented provenance where possible, check overlaps, and report uncertainty when the source corpus is unavailable. Unlabeled access to target test inputs defines a transductive procedure, which must be stated and compared accordingly; it is not the same as predicting previously unseen inputs.
+
+Resource accounting also changes the claim. Pretraining may be shared across many tasks, but its cost has not vanished. Specify whether a comparison counts only target adaptation or also source data and fitting. A gain can belong to the source data, representation, readout, tuning budget, or access to additional evidence. Controlled comparisons assess these possibilities without pretending one score uniquely identifies them.
+
+\section{Attention Computes a Context-Dependent Mixture}
+
+A static embedding maps the same identifier to the same vector. A contextual encoder can give a token different vectors in a sentence about a river bank and a sentence about a bank account. Attention is one mechanism for constructing such context-dependent features \citep{vaswani2017}.
+
+Use row-vector conventions throughout. Let query inputs be $X\in\mathbb R^{n\times d}$ and context inputs $H\in\mathbb R^{m\times d_c}$. Learned projections give
+\[
+Q=XW_Q\in\mathbb R^{n\times d_k},\quad
+K=HW_K\in\mathbb R^{m\times d_k},\quad
+V=HW_V\in\mathbb R^{m\times d_v},
+\]
+with $W_Q\in\mathbb R^{d\times d_k}$, $W_K\in\mathbb R^{d_c\times d_k}$, and $W_V\in\mathbb R^{d_c\times d_v}$. Self-attention uses the same token matrix for query and context. Cross-attention uses another represented sequence, such as text queries and image context.
+
+For a query row $q$, let $\mathcal A$ be its set of allowed key indices. Finite allowed scores and weights are
+\[
+s_j=qk_j^\top/\sqrt{d_k},\qquad
+\alpha_j=\frac{e^{s_j}}{\sum_{\ell\in\mathcal A}e^{s_\ell}},
+\qquad c=\sum_{j\in\mathcal A}\alpha_jv_j.
+\]
+At least one key must be allowed. Masked keys receive zero weight; a row with every key masked needs separate handling because the formula has no denominator. Query--key scores decide the weights, while values supply the vectors being combined.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\begin{theorem}[A softmax context lies in the values' convex hull]
+For a nonempty set of allowed keys with finite scores, the weights are positive and sum to one. Thus $c$ is a convex combination of their value vectors.
+\end{theorem}
+\begin{proof}
+Exponentials are positive. Dividing each by their positive sum makes the normalized weights sum to one, which is the definition of a convex combination.
+\end{proof}
+\end{minipage}\par\medskip
+
+This constrains the pre-projection context, not every output of a transformer block. It also permits a new direction: averaging $(1,0)$ and $(0,1)$ equally gives $(1/2,1/2)$, parallel to neither value. A convex combination stays within the hull, rather than selecting one candidate direction. Subsequent projections, residuals, and nonlinear transformations need not stay in that hull. Training-time attention dropout can also change the weights' realized sum unless they are renormalized.
+
+\subsection{An Exact Three-Key Calculation}
+
+Take $d_k=2$, query $q=(1,0)$, keys
+\[
+k_1=(\sqrt2\log2,0),\qquad k_2=(0,1),\qquad k_3=(0,-1),
+\]
+and values $v_1=(2,0)$, $v_2=(0,2)$, $v_3=(2,2)$. The scaled scores are $(\log2,0,0)$. Their exponentials are $(2,1,1)$, so
+\[
+\alpha=(1/2,1/4,1/4),\qquad
+c=\tfrac12(2,0)+\tfrac14(0,2)+\tfrac14(2,2)=(3/2,1).
+\]
+If key 1 is masked, the two remaining weights are $1/2$ each and the context becomes $(1,2)$. The values did not change; the permitted comparison did.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering
+\begin{tikzpicture}[ml diagram]
+\foreach \x/\id/\value/\weight in {0/v1/{$(2,0)$}/{$1/2$},3.0/v2/{$(0,2)$}/{$1/4$},6.0/v3/{$(2,2)$}/{$1/4$}}{
+\node[ml box] (\id) at (\x,0) {\value};
+\node[ml label] at (\x,0.7) {\weight};
+}
+\node[ml key box] (mix) at (3,-1.8) {$c=(3/2,1)$};
+\draw[ml arrow,line width=1.2pt] (v1.south) -- (mix.north west);
+\draw[ml arrow] (v2.south) -- (mix.north);
+\draw[ml arrow] (v3.south) -- (mix.north east);
+\node[ml label] at (3,1.25) {unmasked softmax weights};
+\end{tikzpicture}
+\captionof{figure}{The exact toy mixture. Queries and keys supply the weights; the three values supply the coordinates being averaged.}
 \label{fig:attention-weighted-average}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-\subsection{Worked Example: Attention as Weighted Averaging}
-
-Suppose a query vector is
+For all queries, the matrix calculation is
 \[
-q = \begin{bmatrix} 1 \\ 0 \end{bmatrix},
+A=\operatorname{softmax}_{\rm row}(QK^\top/\sqrt{d_k}+M),
+\qquad C=AV.
 \]
-and there are three keys:
+The additive mask $M$ is zero at allowed entries and $-\infty$ at excluded entries. Thus $A$ is $n\times m$ and $C$ is $n\times d_v$. Subtracting one common constant from each allowed score in a row leaves its softmax unchanged, permitting numerically stable evaluation. Adding the same vector to every value instead adds that vector to each context.
+
+Under a specific scaling model, $q_j,k_j$ are independent zero-mean, unit-variance coordinates, with independent coordinate products. Then $\operatorname{Var}(qk^\top)=d_k$, and division by $\sqrt{d_k}$ yields variance one. Learned projections need not satisfy those assumptions. The factor supplies a useful reference scale, rather than guaranteeing that every head has well-conditioned or unpeaked weights.
+
+Softmax has derivative $\partial\alpha_i/\partial s_j=\alpha_i(\mathbf1\{i=j\}-\alpha_j)$. Near a one-hot row these derivatives can be small; near uniform weights the head mixes many values. Neither entropy regime is automatically right or wrong for a task.
+
+An attention row records one computation's weights. It does not establish which input caused a final decision. Equal values can make very different weights produce the same context, and residual paths or later layers can dominate the final output. Jain and Wallace studied these limitations in specified NLP models \citep{jain2019attention}; an explanatory claim needs evidence beyond the map itself.
+
+\subsection{A Smoothing View and the Cost of Pairwise Context}
+
+Writing $k(q,k_j)=\exp(qk_j^\top/\sqrt{d_k})$ gives
 \[
-k_1 = \begin{bmatrix} 2 \\ 0 \end{bmatrix},
-\qquad
-k_2 = \begin{bmatrix} 0 \\ 1 \end{bmatrix},
-\qquad
-k_3 = \begin{bmatrix} 1 \\ 1 \end{bmatrix}.
+c=\frac{\sum_j k(q,k_j)v_j}{\sum_j k(q,k_j)}.
 \]
-The raw dot-product scores are
+This has the algebraic form of a Nadaraya--Watson weighted smoother \citep{tsai2019attentionkernel}. Here kernel means a positive weighting function. Independently learned query and key projections need not define a symmetric positive-semidefinite kernel on original inputs.
+
+Dense self-attention compares $n^2$ pairs. Its score and value products cost $O(n^2d_k+n^2d_v)$ arithmetic per head, besides projections. Explicitly storing all weights uses $O(n^2)$ memory. Exact blocked methods such as FlashAttention reduce storage and memory traffic without eliminating the dense pairwise computation \citep{dao2022flashattention}. Performer uses random-feature approximations; for a fixed feature dimension its reorganized calculation can scale linearly in sequence length, with approximation quality and assumptions requiring separate assessment \citep{choromanski2021performer}.
+
+\section{Transformer Blocks, Order, and Training}
+
+Multiple heads fit separate projections and context mixtures. With $H$ heads, each $C_h\in\mathbb R^{n\times d_v}$, their outputs are concatenated and projected:
 \[
-q^\top k_1 = 2,\qquad q^\top k_2 = 0,\qquad q^\top k_3 = 1.
+\operatorname{MHA}(X)=[C_1\ \cdots\ C_H]W_O,
+\qquad W_O\in\mathbb R^{Hd_v\times d}.
 \]
-Following the formula as written, with \(d=2\), the scaled scores are approximately
+The result has $d$ columns, allowing a residual sum with $X$. With $Hd_k=Hd_v=d$, pairwise arithmetic across heads remains $O(n^2d)$; multiple heads do not remove sequence cost. Heads can learn different relationships, but are not required to correspond to distinct human concepts.
+
+\subsection{Residual Paths and Layer Normalization}
+
+An attention sublayer is combined with a positionwise feed-forward transformation, residual sums, and normalization. A feed-forward map applied to each token row might be
 \[
-(1.414,\ 0,\ 0.707).
+\operatorname{FFN}(x)=\rho(xW_1+b_1)W_2+b_2,
 \]
-Applying a softmax to those scores gives approximate weights
+where $W_1\in\mathbb R^{d\times d_f}$ and $W_2\in\mathbb R^{d_f\times d}$. The parameters are shared across positions; $\rho$ is an elementwise nonlinearity. The feed-forward map changes coordinates within a token after attention has mixed context.
+
+Layer normalization operates across the features of one token \citep{ba2016layernorm}:
 \[
-(0.576,\ 0.140,\ 0.284).
+\operatorname{LN}(x)=\gamma\odot
+\frac{x-\mu(x)\mathbf1}{\sqrt{v(x)+\epsilon}}+\beta,
+\quad\mu(x)=\frac1d\sum_jx_j,
+\quad v(x)=\frac1d\sum_j[x_j-\mu(x)]^2,
 \]
-So the representation will focus mostly on the first key, somewhat on the third, and very little on the second.
+with learned vectors $\gamma,\beta\in\mathbb R^d$ and $\epsilon>0$. The operation does not use statistics from other examples. A constant token has centered vector zero and output $\beta$; $\epsilon$ prevents a zero denominator. Learned scale and shift mean the output need not have zero mean or unit variance. This normalization also is generally lossy.
 
-If the corresponding values are
+A simplified pre-normalized block has two residual updates:
 \[
-v_1 = \begin{bmatrix} 1 \\ 0 \end{bmatrix},
-\qquad
-v_2 = \begin{bmatrix} 0 \\ 1 \end{bmatrix},
-\qquad
-v_3 = \begin{bmatrix} 1 \\ 1 \end{bmatrix},
+Y=X+\operatorname{MHA}(\operatorname{LN}_1(X)),
+\qquad Z=Y+\operatorname{FFN}(\operatorname{LN}_2(Y)).
 \]
-then the context vector is approximately
+A post-normalized alternative is
 \[
-c = 0.576v_1 + 0.140v_2 + 0.284v_3
-= \begin{bmatrix} 0.860 \\ 0.424 \end{bmatrix}.
+Y=\operatorname{LN}_1(X+\operatorname{MHA}(X)),
+\qquad Z=\operatorname{LN}_2(Y+\operatorname{FFN}(Y)).
 \]
+Normalization placement changes gradient paths. Xiong et al.\ analyzed initialization and demonstrated particular pre-normalized training settings without warmup \citep{xiong2020layernorm}. That evidence does not imply that every such architecture needs no warmup or is always more accurate. Dropout, positional mechanisms, masks, and the fitted output head are additional parts of a complete model.
 
-The same calculation in matrix form takes only a few lines of numpy. For a sequence of $n$ tokens with packed matrices $Q \in \mathbb{R}^{n \times d_k}$, $K \in \mathbb{R}^{n \times d_k}$, $V \in \mathbb{R}^{n \times d_v}$, scaled dot-product attention is
-
-\begin{codeexample}
-import numpy as np
-
-def scaled_dot_product_attention(Q, K, V):
-    # Q: (n, d_k)   K: (n, d_k)   V: (n, d_v)
-    d_k = Q.shape[-1]
-    scores = Q @ K.T / np.sqrt(d_k)         # (n, n) similarities
-    # numerically stable softmax along the last axis
-    scores -= scores.max(axis=-1, keepdims=True)
-    weights = np.exp(scores)
-    weights /= weights.sum(axis=-1, keepdims=True)
-    return weights @ V, weights              # (n, d_v),  (n, n)
-
-# Reproducing the worked example above:
-q  = np.array([[1.0, 0.0]])                  # one query
-K  = np.array([[1.0, 0.0],                   # k_1
-               [0.0, 1.0],                   # k_2
-               [0.5, 0.5]])                  # k_3
-V  = np.array([[1.0, 0.0],                   # v_1
-               [0.0, 1.0],                   # v_2
-               [1.0, 1.0]])                  # v_3
-c, w = scaled_dot_product_attention(q, K, V)
-print(w.round(3))   # [[0.576 0.140 0.284]]
-print(c.round(3))   # [[0.860 0.424]]
-\end{codeexample}
-
-The function is the same expression the chapter wrote symbolically, $\mathrm{softmax}(QK^\top/\sqrt{d_k})\,V$. The numerical stability step (subtracting the row maximum before exponentiating) is the only addition beyond the formula; it keeps the softmax from overflowing when scores are large.
-
-For a sequence of length $n$ with model dimension $d$, scaled dot-product attention costs $O(n^2 d)$ time and $O(n^2)$ memory: every query must attend to every key, and the $n \times n$ weight matrix must be materialized. The quadratic cost in $n$ is the single most important fact about attention's scaling. A model that doubles its context window pays roughly four times the attention compute and four times the attention memory, which is why long-context architectures (sparse attention, linear attention, state-space models, FlashAttention's I/O-aware kernels) all try to avoid building the full $n \times n$ matrix. The per-step linear cost in $d$ is comparatively benign.
-
-\begin{example}[Reading a Tiny Attention Matrix]
-Suppose a three-token sentence produces the following attention weights for one head:
-\[
-\begin{bmatrix}
-0.70 & 0.20 & 0.10 \\
-0.15 & 0.70 & 0.15 \\
-0.45 & 0.10 & 0.45
-\end{bmatrix}.
-\]
-Each row shows how one token distributes its attention across the sequence. The matrix reveals which interactions the head emphasizes. It is not a full causal explanation of model behavior.
-
-Permuting the tokens can change the weights because each row depends on token content together with whatever positional or order information the model receives. Attention is therefore not just a bag of pairwise similarities; it is a context-dependent calculation over represented tokens in positions.
-\end{example}
-
-\textbf{Where do queries, keys, and values come from?} Each input vector $x_i$ is mapped to three projections by learned matrices:
-\[
-q_i = W_Q\,x_i, \qquad k_i = W_K\,x_i, \qquad v_i = W_V\,x_i.
-\]
-The same $W_Q, W_K, W_V$ are reused across all positions. They are learned by gradient descent on the downstream training objective, just like any other parameters in the network. Attention does not have privileged access to ``meaning''; it gets to ask the questions and supply the answers that the training pressure rewards.
-
-\subsection{Multi-Head Attention}
-
-A single attention layer mixes context one way: one $W_Q$, one $W_K$, one $W_V$. In practice transformers run $H$ such mixers in parallel, each with its own projections. The outputs are concatenated and passed through a final projection $W_O$:
-\[
-\text{MultiHead}(X) = W_O\,\bigl[\,\text{head}_1(X);\ \text{head}_2(X);\ \ldots;\ \text{head}_H(X)\,\bigr].
-\]
-Each head receives a smaller per-head dimension (typically $d_k = d/H$) so total compute stays close to a single large head. The motivation is that one head may learn to attend to syntactic neighbors, another to semantic role, another to long-range coreference, all in parallel. Empirically, heads specialize during training, although the assignment is not always interpretable in human terms.
-
-\begin{codeexample}
-import numpy as np
-
-def multi_head_attention(X, W_Q, W_K, W_V, W_O, n_heads):
-    """Multi-head self-attention on a batch-free (n, d) input X."""
-    n, d   = X.shape
-    d_k    = d // n_heads
-    # Project once, then split into per-head views by reshape.
-    Q = (X @ W_Q).reshape(n, n_heads, d_k).transpose(1, 0, 2)   # (H, n, d_k)
-    K = (X @ W_K).reshape(n, n_heads, d_k).transpose(1, 0, 2)
-    V = (X @ W_V).reshape(n, n_heads, d_k).transpose(1, 0, 2)
-    # Per-head scaled dot-product attention, all heads in one tensor op.
-    scores = np.einsum('hnk,hmk->hnm', Q, K) / np.sqrt(d_k)      # (H, n, n)
-    scores -= scores.max(axis=-1, keepdims=True)
-    weights = np.exp(scores)
-    weights /= weights.sum(axis=-1, keepdims=True)
-    heads  = np.einsum('hnm,hmk->hnk', weights, V)               # (H, n, d_k)
-    # Concatenate per-head outputs and project back to model dimension.
-    concat = heads.transpose(1, 0, 2).reshape(n, n_heads * d_k)  # (n, d)
-    return concat @ W_O                                          # (n, d)
-\end{codeexample}
-
-The shape arithmetic is the only thing that hides the simplicity: one matmul to produce queries / keys / values, a reshape that turns the last axis into ``head $\times$ head-dimension,'' attention computed inside each head, a concat-and-project that recombines heads. Total compute is $O(H \cdot n^2 \cdot d_k) = O(n^2 d)$---the same as one large head, which is what made multi-head attention practical at scale.
-
-\textbf{Pre-norm versus post-norm transformer blocks (architecture detail).} A transformer block wraps the attention computation with residual connections and layer normalization. \emph{Layer normalization} \citep{ba2016layernorm} normalizes each token's representation independently across its feature dimension:
-\[
-\mathrm{LN}(x) \;=\; \gamma \odot \frac{x - \mu(x)}{\sigma(x) + \varepsilon} + \beta,
-\qquad \mu(x) = \tfrac{1}{d}\sum_i x_i, \quad \sigma^2(x) = \tfrac{1}{d}\sum_i (x_i - \mu(x))^2,
-\]
-with learned scale $\gamma$ and shift $\beta$. The choice of layer norm rather than batch norm matters here: batch norm couples examples in a minibatch, which interacts badly with variable-length sequences and inference-time batches of one; layer norm operates per token and is therefore invariant to batch size.
-
-Two block placements are used in practice. \emph{Post-norm} (the original transformer) is $y = \mathrm{LN}(x + \mathrm{Attention}(x))$ then $z = \mathrm{LN}(y + \mathrm{FFN}(y))$; gradients flow through the normalization on the way back. \emph{Pre-norm} (modern variants) is $y = x + \mathrm{Attention}(\mathrm{LN}(x))$ then $z = y + \mathrm{FFN}(\mathrm{LN}(y))$; the residual stream is unnormalized end to end, which makes very deep stacks easier to optimize and is now the standard. The choice is a real architectural decision: pre-norm trains more stably without learning-rate warmup, post-norm sometimes reaches slightly stronger final performance with more careful schedules. A first-pass reader can take ``a transformer block is attention plus a feed-forward layer, each wrapped in a residual connection and a normalization step'' as the operational summary; this box is for readers building or modifying transformer code.
-
-\subsection{Positional Encoding}
-
-Attention as defined so far is \emph{permutation-equivariant}: shuffle the input tokens and the output is shuffled the same way. That is wrong for sequences where order matters (``dog bites man'' versus ``man bites dog''). The fix is to inject position information into each token's representation before the first attention layer.
-
-The original transformer adds a fixed sinusoidal vector to each input embedding:
-\[
-\text{PE}(p, 2i) = \sin\!\bigl(p\,/\,10000^{2i/d}\bigr), \qquad \text{PE}(p, 2i+1) = \cos\!\bigl(p\,/\,10000^{2i/d}\bigr),
-\]
-where $p$ is the position and $i$ indexes the dimension. On a first pass the operational summary is enough: each position $p$ gets a fixed vector with a different frequency at every dimension, the vector is added to the input embedding, and order information now lives inside the representation.
-
-\begin{advancednote}
-\textbf{Why those particular sines and cosines (Extension).} The choice is not arbitrary. For any fixed offset $\Delta$, the position-encoding pair at $p + \Delta$ is a linear transformation of the pair at $p$:
-\[
-\begin{bmatrix} \text{PE}(p + \Delta, 2i) \\ \text{PE}(p + \Delta, 2i+1) \end{bmatrix}
-=
-\underbrace{\begin{bmatrix} \cos(\omega_i \Delta) & \sin(\omega_i \Delta) \\ -\sin(\omega_i \Delta) & \cos(\omega_i \Delta) \end{bmatrix}}_{\text{a rotation depending only on } \Delta}
-\begin{bmatrix} \text{PE}(p, 2i) \\ \text{PE}(p, 2i+1) \end{bmatrix},
-\]
-with $\omega_i = 1/10000^{2i/d}$. The rotation depends only on the \emph{relative} offset $\Delta$, not on $p$. That is the formal reason sinusoidal encodings let attention learn relative-position relations: a linear layer in the model can compute the rotation that connects two positions a fixed distance apart, regardless of where in the sequence they sit. Modern variants like rotary position embeddings (RoPE) make this rotation explicit inside the attention computation rather than additive at the input, which makes the relative-position property exact in the dot-product score; learned positional embeddings drop the structural guarantee but let the model fit position information empirically.
-\end{advancednote}
-
-The conceptual point is simple: without positional information, the convex-combination theorem above says attention is averaging values, but the input to that average no longer reflects the order of the sequence. Positional encoding is what restores order-sensitivity.
-
-\section{Why Transformers Matter}
-
-This is the bridge from one mechanism to the workflow shift that follows. Transformers became important not only for their results, but because they offered a general architecture for context-aware representation learning at scale. The same broad mechanism works across language, vision, audio, and multimodal systems. CLIP later made the reuse point especially visible: language supervision produced a vision representation that supported strong zero-shot transfer across many image tasks \citep{radford2021clip}.
-
-The point of this section is not a buzzword parade. It is to explain why attention became the dominant vehicle for large-scale reusable representation learning.
-
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c7tfBlueBg}{RGB}{220,233,251}
-\definecolor{c7tfBlue}{RGB}{56,103,170}
-\definecolor{c7tfAmberBg}{RGB}{254,237,215}
-\definecolor{c7tfAmber}{RGB}{184,92,16}
-\definecolor{c7tfGreenBg}{RGB}{210,238,220}
-\definecolor{c7tfGreen}{RGB}{26,112,64}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  inbox/.style={draw=black!55, fill=black!4, rounded corners=4pt,
-                align=center, minimum height=1.1cm, text width=2.4cm,
-                line width=0.8pt},
-  modbox/.style={rounded corners=4pt, align=center, minimum height=1.1cm,
-                 text width=2.6cm, line width=0.8pt},
-  outbox/.style={draw=c7tfGreen, fill=c7tfGreenBg, rounded corners=4pt,
-                 align=center, minimum height=1.1cm, text width=2.6cm,
-                 line width=0.8pt},
-  arr/.style={-Latex, line width=1.1pt, draw=black!60}
-]
-%% ── Input ───────────────────────────────────────────────────
-\node[inbox] (inp) at (0,0) {tokens /\\patches};
-
-%% ── Transformer block (rounded box) ────────────────────────
-\draw[rounded corners=6pt, draw=c7tfBlue!50, fill=c7tfBlueBg!30,
-      line width=1pt] (2.6,-2.0) rectangle (8.0,2.0);
-\node[font=\small\bfseries, c7tfBlue] at (5.3,1.6) {Transformer block};
-
-%% ── Internal modules ────────────────────────────────────────
-\node[modbox, draw=c7tfBlue, fill=c7tfBlueBg] (attn) at (5.3,0.5)
-    {self-attention};
-\node[modbox, draw=c7tfAmber, fill=c7tfAmberBg] (ffn) at (5.3,-0.9)
-    {feed-forward\\update};
-
-%% ── Output ──────────────────────────────────────────────────
-\node[outbox] (out) at (10.6,0) {contextual\\representations};
-
-%% ── Arrows ──────────────────────────────────────────────────
-\draw[arr] (inp.east) -- (2.6,0) -- (2.6,0.5) -- (attn.west);
-\draw[arr] (attn.south) -- (ffn.north);
-\draw[arr] (ffn.east) -- (8.0,-0.9) -- (8.0,0) -- (out.west);
-
-%% ── Repeat annotation ───────────────────────────────────────
-\node[font=\footnotesize, black!50, anchor=north] at (5.3,-2.3)
-    {\textit{repeat $N$ times}};
-\end{tikzpicture}%
-}
-\caption{At a high level, a transformer block repeatedly does two things: mix information across elements through attention, then transform each contextualized representation further.}
+\begin{tikzpicture}[ml diagram,x=0.9cm]
+\node[ml label] (in) at (0,0) {$X$};
+\node[ml box,align=center] (a) at (2.3,0) {normalize\\attention};
+\node[ml key box] (y) at (4.8,0) {$Y$};
+\node[ml box,align=center] (f) at (7.2,0) {normalize\\feed-forward};
+\node[ml label] (out) at (9.7,0) {$Z$};
+\draw[ml arrow] (in) -- (a);
+\draw[ml arrow] (a) -- (y);
+\draw[ml arrow] (y) -- (f);
+\draw[ml arrow] (f) -- (out);
+\draw[ml reference,->] (in.north) -- (0,1.2) -- (4.8,1.2) -- (y.north);
+\node[ml label,fill=white] at (2.4,1.2) {add $X$};
+\draw[ml reference,->] (y.south) -- (4.8,-1.2) -- (9.7,-1.2) -- (out.south);
+\node[ml label,fill=white] at (7.2,-1.2) {add $Y$};
+\end{tikzpicture}
+\captionof{figure}{The two updates of a simplified pre-normalized transformer block. Each sublayer produces an increment added to the residual stream. Stacking blocks applies further such transformations.}
 \label{fig:high-level-transformer-block}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-Transformers matter because they combine flexible context modeling, shared architecture across modalities, and scalable pretraining. That combination made reusable representation learning much easier to scale.
+\subsection{Permutation Equivariance Needs Stated Conditions}
 
-\section{Foundation Models as a Workflow Shift}
-\begin{definition}[Foundation Model]
-A foundation model is a broadly pretrained model intended to support adaptation across many downstream tasks, often across domains or modalities.
-\end{definition}
+Without positions, order-dependent masks, or other order inputs, self-attention with shared projections is permutation-equivariant. Let $P$ permute token rows. Then $Q'=PQ$, $K'=PK$, $V'=PV$, and
+\[
+Q'K'^\top=P(QK^\top)P^\top.
+\]
+Row softmax permutes rows and columns consistently, so $A'=PAP^\top$ and
+\[
+C'=A'V'=PC.
+\]
+The output follows the same permutation; it does not distinguish one ordering through an independent position signal. Shared positionwise maps and tokenwise normalization preserve that property. A permutation-invariant pooling readout then loses order entirely.
 
-The previous sections described a mechanism and an architecture. This section changes level again, from model internals to engineering workflow. The defining shift is not just model size; it is workflow. Rather than training one model for one narrow task, a foundation-model workflow typically collects broad data, picks a large-scale pretraining objective, trains a reusable model, adapts or prompts that model for many narrower tasks, and then evaluates the resulting behavior carefully under real deployment conditions.
+Keeping a causal mask fixed while permuting tokens violates those conditions. The mask changes which content can be accessed and can convey ordering information without an explicit sinusoidal embedding. If a mask is permuted consistently as $M'=PMP^\top$, the equivariance calculation still applies. Comparing reordered sentences must state what happens to positions, masks, and the query whose attention is being inspected.
 
-GPT-3 made this shift hard to ignore: the same pretrained language model could change behavior substantially through prompting and few-shot examples even before full task-specific tuning \citep{brown2020}. CLIP made a parallel point in multimodal transfer, using language supervision to build a reusable image representation with strong zero-shot behavior on many downstream tasks \citep{radford2021clip}. Bommasani et al.\ use ``foundation model'' for precisely this pattern of broad pretraining plus many downstream adaptation paths \citep{bommasani2021}.
+Absolute position vectors can be added to token embeddings; relative biases or rotations can affect scores. The original sinusoidal choice uses paired coordinates
+\[
+\operatorname{PE}(p,2i)=\sin(p/10000^{2i/d}),\quad
+\operatorname{PE}(p,2i+1)=\cos(p/10000^{2i/d}),
+\]
+for valid pairs, conventionally with even $d$. For frequency $\omega_i=10000^{-2i/d}$, let $u_i(p)=(\sin(\omega_i p),\cos(\omega_i p))^\top$. Angle addition gives
+\[
+u_i(p+\Delta)=
+\begin{bmatrix}
+\cos(\omega_i\Delta)&\sin(\omega_i\Delta)\\
+-\sin(\omega_i\Delta)&\cos(\omega_i\Delta)
+\end{bmatrix}u_i(p).
+\]
+The transform for a fixed offset is independent of $p$. Rotary position embeddings apply related rotations to queries and keys, making their positional interaction depend on relative offsets \citep{su2021roformer}. These mechanisms make order available; they do not guarantee useful order reasoning or extrapolation beyond trained sequence lengths.
 
-That is why the cleanest sentence in this section is:
+\section{Foundation Models Change What Is Reused}
 
-\begin{center}
-\emph{Foundation models are better understood as reusable pipelines than as single fixed artifacts.}
-\end{center}
+A foundation model is broadly pretrained and used as a starting point for several downstream tasks or adaptation procedures \citep{bommasani2021}. The definition concerns broad reuse, rather than requiring one architecture or a particular parameter count. A pretrained encoder can supply frozen features; a language model can supply conditional token probabilities or generated responses. Both still need task-specific evaluation.
 
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{L{2.15cm}L{2.4cm}L{1.99cm}L{2.57cm}}
+GPT-3 investigated prompted and few-example behavior across specified language tasks \citep{brown2020}. CLIP evaluated image--text pretraining and text-specified image classification \citep{radford2021clip}. These studies provide evidence about their models, data, and comparisons. Broad pretraining does not establish competence on each new institution, population, or action policy.
+
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{2.65cm}L{3.5cm}L{3.95cm}@{}}
 \toprule
-Workflow & Where most effort goes & What data scale matters most & Common illusion or failure mode \\
+Workflow & What fitting supplies & Evidence still required \\
 \midrule
-Task-specific model from scratch & task dataset and final objective & labeled downstream data & thinking the one-task result says anything about broader reuse \\
-Pretrained model + adaptation & source pretraining plus downstream adaptation & unlabeled source data plus target labels & assuming transfer will work without checking domain shift \\
-Foundation-model workflow & broad data, pretraining, adaptation, and evaluation & large-scale broad data & mistaking broad competence or fluency for grounded reliability \\
+Task model from scratch & Features and predictor for one task & Target-population predictive and decision performance \\
+Source model with adaptation & A starting point plus target fitting & Comparable target evidence and source-resource accounting \\
+Broad model with several uses & Shared fitted structure and multiple adaptation paths & Separate evaluation of each deployed system and evidence source \\
 \bottomrule
 \end{tabular}
-\caption{These workflows differ not only in scale, but in where evidence and failure can enter the pipeline.}
+\captionof{table}{Reuse distributes fitting effort across tasks. It also creates shared sources of exposure, error, and uncertainty that target evaluation must account for.}
 \label{tab:workflow-comparison}
-\end{table}
+\end{minipage}\par\addvspace{\intextsep}
 
-\begin{figure}[t]
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
 \centering
-\definecolor{c7fmBlueBg}{RGB}{220,233,251}
-\definecolor{c7fmBlue}{RGB}{56,103,170}
-\definecolor{c7fmGreenBg}{RGB}{210,238,220}
-\definecolor{c7fmGreen}{RGB}{26,112,64}
-\definecolor{c7fmAmberBg}{RGB}{254,237,215}
-\definecolor{c7fmAmber}{RGB}{184,92,16}
-\definecolor{c7fmRedBg}{RGB}{254,230,230}
-\definecolor{c7fmRed}{RGB}{180,40,40}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  pbox/.style={draw=c7fmBlue, fill=c7fmBlueBg, rounded corners=4pt,
-               align=center, minimum height=1.1cm, text width=2.4cm,
-               line width=0.8pt},
-  dbox/.style={draw=c7fmGreen, fill=c7fmGreenBg, rounded corners=4pt,
-               align=center, minimum height=1.1cm, text width=2.2cm,
-               line width=0.8pt},
-  ebox/.style={draw=c7fmAmber, fill=c7fmAmberBg, rounded corners=4pt,
-               align=center, minimum height=1.1cm, text width=2.4cm,
-               line width=0.8pt},
-  arr/.style={-Latex, line width=1.1pt, draw=black!60}
-]
-%% ── Row 1: Pretraining pipeline ─────────────────────────────
-\node[pbox] (data) at (0,0) {broad data};
-\node[pbox] (pre)  at (3.6,0) {pretraining};
-\node[pbox, draw=c7fmBlue, line width=1.2pt, text width=2.6cm]
-    (fm) at (7.4,0) {foundation\\model};
-\draw[arr] (data) -- (pre);
-\draw[arr] (pre) -- (fm);
-
-%% ── Fan-out ─────────────────────────────────────────────────
-\coordinate (fan) at (7.4,-1.2);
-\draw[black!60, line width=1.1pt] (fm.south) -- (fan);
-\filldraw[black!50] (fan) circle (2.5pt);
-
-%% ── Row 2: Adaptation choices ───────────────────────────────
-\node[dbox] (prompt) at (3.6,-2.6) {prompting};
-\node[dbox] (retr)   at (6.6,-2.6) {retrieval};
-\node[dbox] (ft)     at (9.6,-2.6) {fine-tuning};
-\draw[-Latex, line width=1.1pt, draw=c7fmGreen] (fan) -- (prompt.north);
-\draw[-Latex, line width=1.1pt, draw=c7fmGreen] (fan) -- (retr.north);
-\draw[-Latex, line width=1.1pt, draw=c7fmGreen] (fan) -- (ft.north);
-
-%% ── Row 3: Evaluation ──────────────────────────────────────
-\node[ebox, text width=6.0cm] (eval) at (6.6,-4.6)
-    {evaluation: task, robustness, reliability};
-\draw[-Latex, line width=1.1pt, draw=c7fmAmber] (prompt.south) -- (3.6,-4.0) -- (eval.north west);
-\draw[-Latex, line width=1.1pt, draw=c7fmAmber] (retr.south) -- (eval.north);
-\draw[-Latex, line width=1.1pt, draw=c7fmAmber] (ft.south) -- (9.6,-4.0) -- (eval.north east);
-
-%% ── Annotations ─────────────────────────────────────────────
-\node[font=\footnotesize\bfseries, c7fmBlue]  at (3.6, 0.85) {train once};
-\node[font=\footnotesize\bfseries, c7fmGreen] at (11.0,-2.6) {adapt};
-\node[font=\footnotesize\bfseries, c7fmAmber] at (10.4,-4.6) {verify};
-\end{tikzpicture}%
-}
-\caption{Foundation models are better understood as a workflow shift than as a single model class. Broad pretraining is only the beginning; adaptation and evaluation are where many practical failures emerge.}
+\begin{tikzpicture}[ml diagram]
+\node[ml box] (data) at (0,0) {broad data};
+\node[ml box] (pre) at (3.5,0) {pretraining};
+\node[ml key box] (base) at (7,0) {base model};
+\draw[ml arrow] (data) -- (pre);
+\draw[ml arrow] (pre) -- (base);
+\node[ml box,minimum width=2.6cm] (adapt) at (7,-1.5) {task adaptation};
+\node[ml box,minimum width=2.6cm] (eval) at (2.5,-1.5) {task evaluation};
+\draw[ml arrow] (base) -- (adapt);
+\draw[ml arrow] (adapt) -- (eval);
+\node[ml label,align=center] at (7,-2.5) {prompting, retrieval,\\or fine-tuning};
+\node[ml label,align=center] at (2.5,-2.5) {performance, robustness,\\and reliability};
+\end{tikzpicture}
+\captionof{figure}{Pretraining creates a reusable starting point. Each adapted task still requires its own evaluation.}
 \label{fig:foundation-workflow}
-\end{figure}
-
-\subsection{Why They Are Powerful}
-
-Foundation models can be powerful because they amortize representation learning across many tasks, exploit broad unlabeled or weakly labeled data, reduce downstream label requirements, and support multimodal reuse. The gain is reuse efficiency, not magical understanding: one expensive pretraining run exposes structure that many later tasks can read out, prompt, or adapt.
-
-\subsection{Why They Need More Discipline, Not Less}
-
-The risks are equally important. Training data may be opaque or poorly documented. Broad competence can mask brittle failure modes. Inherited biases and harmful associations can transfer downstream. Large compute costs make experimentation uneven and less transparent. And users may overtrust fluent output as if it were verified knowledge.
-
-\begin{failurebox}
-Foundation models create a serious illusion risk. Because they produce coherent text, plausible image descriptions, or polished outputs across many tasks, users may infer understanding, truthfulness, or reliability that was never demonstrated. Breadth of behavior is not the same as grounded competence.
-\end{failurebox}
-
-\section{Same Base Model, Different Claims}
-
-This is the operational consequence of the foundation-model shift. Downstream adaptation can take many forms: prompting, instruction tuning, retrieval augmentation, frozen feature extraction, linear probing, parameter-efficient fine-tuning, or full fine-tuning \citep{brown2020,lewis2020rag,houlsby2019adapters,hu2021lora}. These are engineering choices, but also epistemic choices. They decide which part of the system is allowed to change, what evidence is available, and what claims become defensible. Retrieval augmentation matters especially because it creates a separate evidence path: part of the answer can now be justified by retrieved documents rather than by the pretrained parameters alone \citep{lewis2020rag}.
-
-\subsection{Prompting, Retrieval, and Fine-Tuning Solve Different Problems}
-
-A useful distinction for current AI work is that prompting, retrieval, and fine-tuning are not three interchangeable ways to ``make the model better.'' They change different parts of the system and should be chosen for different reasons.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{1.83cm}L{2.59cm}L{2.66cm}L{2.59cm}}
-\toprule
-Intervention & What it mainly changes & Best use case & Main risk if misunderstood \\
-\midrule
-Prompting & the instruction and local behavior policy & when the base model already has the needed knowledge or skill but needs clearer task framing & mistaking better phrasing for new evidence or durable adaptation \\
-Retrieval & the evidence available at inference time & when answers must depend on current, auditable external information & blaming the model when the real failure is stale, weak, or missing evidence \\
-Fine-tuning & the predictor itself through parameter updates & when task-specific behavior must be learned consistently beyond prompting alone & attributing every gain to the base model instead of to downstream specialized training \\
-\bottomrule
-\end{tabular}
-\caption{Prompting, retrieval, and fine-tuning improve different parts of the workflow. Treating them as interchangeable obscures where the gain really came from.}
-\label{tab:prompt-retrieve-finetune}
-\end{table}
-
-The distinction becomes clear in the running support-assistant case. If the model already knows how to answer politely but needs clearer format instructions, prompting may be enough. If the answer must follow the current semester's policy documents, retrieval is the central intervention---the evidence has to be present at prediction time. If the assistant must consistently match a specialized institutional tone or recurring support patterns, some form of fine-tuning may be appropriate.
-
-The claim changes with the intervention. A prompting gain supports a behavior-design claim. A retrieval gain supports an evidence-access claim. A fine-tuning gain supports a task-adaptation claim. Collapsing these together produces exactly the kind of blurry evaluation story the book is trying to prevent.
-
-\textbf{Intervention audit.} When a system improves, ask what changed: the instruction, the accessible evidence, or the predictor itself. Then make the claim at that same level rather than attributing the gain to vague ``model quality.''
-
-\textbf{Common failure mode $\rightarrow$ recovery move.} Failure mode: treating prompting, retrieval, and fine-tuning as interchangeable upgrades and making one blurry claim about ``the model.'' Recovery move: run the smallest comparison that changes only one layer of the workflow, name whether the gain came from instruction, evidence, or parameter updates, and keep the claim at that same level.
-
-\begin{figure}[t]
-\centering
-\definecolor{c7alBlueBg}{RGB}{220,233,251}
-\definecolor{c7alBlue}{RGB}{56,103,170}
-\definecolor{c7alAmberBg}{RGB}{254,243,219}
-\definecolor{c7alAmber}{RGB}{184,92,16}
-\definecolor{c7alGreenBg}{RGB}{210,238,220}
-\definecolor{c7alGreen}{RGB}{26,112,64}
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm, font=\small,
-  card/.style={draw=black!50, fill=white, rounded corners=3pt,
-               align=center, minimum height=1.0cm, text width=2.0cm,
-               font=\small, line width=0.7pt}
-]
-%% ── Top: base model ─────────────────────────────────────────
-\node[draw=c7alBlue, fill=c7alBlueBg, rounded corners=4pt,
-      align=center, minimum height=1.1cm, text width=3.4cm,
-      line width=0.9pt] (base) at (7.0,3.5) {same pretrained\\base model};
-
-%% ── Fan-out ─────────────────────────────────────────────────
-\coordinate (fan) at (7.0,2.2);
-\draw[c7alBlue, line width=1.1pt] (base.south) -- (fan);
-\filldraw[c7alBlue] (fan) circle (2.5pt);
-
-%% ── Left group: framing / evidence ─────────────────────────
-\draw[rounded corners=6pt, draw=c7alAmber, fill=c7alAmberBg!40,
-      line width=0.9pt] (-0.4,-2.2) rectangle (5.6,1.6);
-\node[font=\small\bfseries, c7alAmber] at (2.6,1.1)
-    {change framing / evidence};
-\node[card] (p) at (1.2,-0.3) {prompting};
-\node[card] (r) at (3.9,-0.3) {retrieval\\augmentation};
-
-%% ── Right group: readout / parameters ───────────────────────
-\draw[rounded corners=6pt, draw=c7alGreen, fill=c7alGreenBg!40,
-      line width=0.9pt] (6.2,-2.2) rectangle (14.0,1.6);
-\node[font=\small\bfseries, c7alGreen] at (10.1,1.1)
-    {change readout / parameters};
-\node[card] (f)    at (7.6,-0.3) {frozen\\probe};
-\node[card] (peft) at (10.1,-0.3) {parameter-\\efficient tuning};
-\node[card] (full) at (12.6,-0.3) {full\\fine-tuning};
-
-%% ── Arrows from fan-out to groups ───────────────────────────
-\draw[-Latex, line width=1.1pt, draw=c7alAmber] (fan) -- (2.6,1.6);
-\draw[-Latex, line width=1.1pt, draw=c7alGreen] (fan) -- (10.1,1.6);
-
-%% ── Spectrum arrow ──────────────────────────────────────────
-\draw[->, thin, black!35] (0.0,-2.7) -- (13.6,-2.7);
-\node[font=\footnotesize, black!50, anchor=north west] at (0.0,-2.8)
-    {\textit{less change}};
-\node[font=\footnotesize, black!50, anchor=north east] at (13.6,-2.8)
-    {\textit{more change}};
-\end{tikzpicture}%
-}
-\caption{These are not rungs on one universal ladder. They intervene at different places in the workflow: prompting and retrieval change instructions or evidence, while probes and tuning choices change how much of the learned representation is read out or allowed to move.}
 \label{fig:adaptation-ladder}
-\end{figure}
+\end{minipage}\par\addvspace{\intextsep}
 
-\begin{example}[Same Base Model, Different Claims]
-Consider a device-support assistant built on the same pretrained language model. With prompting alone, the defensible claim is narrow: the system can often produce fluent answers, but those answers are not yet grounded in the manufacturer's current manuals and warranty rules. Add retrieval over the official support documents and the claim changes: the system can now be evaluated as a document-grounded assistant whose answers should track retrieved sources. Fine-tune the model on past resolved support chats and another claim becomes possible---the assistant may adapt better to local tone and recurring cases. But that gain introduces ambiguity. Better answers may now come from retrieval, from the pretrained model, or from the fine-tuned parameters, and each source of improvement must be validated separately.
-\end{example}
+\subsection{Prompting, Retrieval, and Tuning Change Different Inputs}
 
-Changing the adaptation method changes the claim you can make. Always ask what part of an observed gain belongs to reusable representation, what part to retrieval or prompting, and what part to downstream parameter updates.
+Let $D_\theta(\cdot\mid x,p,r)$ be a model's output distribution, where $p$ is a prompt and $r$ is retrieved context. Prompt selection changes $p$; retrieval changes $r$ and its construction procedure; parameter tuning changes $\theta$. A frozen feature readout instead adds or fits another mapping from selected internal vectors. These interventions can be combined, but their contributions need separate comparisons when attribution matters.
 
-\section{Chapter Artifact: A Reuse and Adaptation Plan}
-
-By the end of this chapter, you should be able to write down not just which pretrained representation or foundation model to use, but how to test what is actually being reused and what evidence would justify that claim. The aim is to keep reuse claims separate from gains that really come from retrieval, prompting, or downstream tuning. Earlier artifacts handled different jobs: the framing memo named the decision, the metric worksheet named good behavior, the evaluation plan protected the claim, the baseline sheet justified linearity, the structure-diagnosis sheet justified leaving it, and the training report justified the learned-model claim. This chapter's artifact asks a new question: what part of that learned system is reusable, and what evidence would justify saying so?
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{L{3.25cm}L{6.98cm}}
+\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}L{2.0cm}L{3.65cm}L{4.45cm}@{}}
 \toprule
-Plan field & What must be written clearly \\
+Intervention & What changes & What a controlled improvement supports \\
 \midrule
-Seven-question focus & Questions 4, 5, and 6: what representation is being reused, what cleaner baseline comes first, and what evidence separates reuse from other explanations \\
-Source representation or model & What pretrained encoder, embedding model, or foundation model is being reused \\
-Source objective & What pretraining task or data produced that representation \\
-Target task & What downstream problem is being solved now \\
-Expected domain shift & How the new setting differs from the source setting \\
-First diagnostic & Linear probe, frozen features, retrieval-only baseline, or another clean reuse test \\
-Chosen adaptation depth & Prompting, retrieval, probe, partial tuning, or full tuning \\
-Alternative explanations & What else besides representation reuse could explain the gain \\
-Evidence needed & What result would justify claiming that reuse is genuinely helping \\
+Prompting & Instructions, examples, and provided context & Better performance with that prompt procedure \\
+Retrieval & A corpus, index, search rule, and retrieved evidence & Better performance with the tested evidence-access procedure \\
+Fine-tuning & Selected parameters fitted on target data & Better performance of that parameter-adaptation procedure \\
 \bottomrule
 \end{tabular}
-\caption{A reuse and adaptation plan turns transfer learning from a buzzword into a testable design choice.}
-\label{tab:reuse-adaptation-plan}
-\end{table}
+\captionof{table}{A gain belongs first to the tested system change. Retrieval does not necessarily change encoder parameters; a better prompt does not by itself supply new observed facts.}
+\label{tab:prompt-retrieve-finetune}
+\end{minipage}\par\addvspace{\intextsep}
 
-\textbf{Reuse and adaptation plan.} Before adapting a pretrained model, write down what is being reused, what is being changed, the first clean diagnostic of reuse, and what evidence would justify a strong transfer claim.
+For a separate course-policy assistant, prompting may specify response format, retrieval may supply this semester's approved policy, and tuning may fit recurring response patterns. Retrieval-augmented generation was evaluated as one such combination of retrieved passages and a generative model \citep{lewis2020rag}. Retrieved documents provide an auditable information source only when they are relevant, authoritative, current for the claim, and actually support the answer. The system can retrieve the wrong document, misread a correct one, or cite text that does not entail its claim.
 
-\begin{example}[Filled Reuse and Adaptation Plan]
-A university wants to classify short student emails into three support categories: routine, ambiguous, and high-risk.
+Record the corpus version, document date, retrieval settings, prompts, tuned checkpoint, and decoding procedure. Evaluate retrieval coverage, answer support, and end-to-end task success separately. A correct source-based response is not evidence that the source fact was stored in the pretrained parameters. A fluent unsupported response is not evidence that no useful representation was learned.
 
-\textbf{Seven-question focus.} Questions 4 (what is being reused), 5 (cleaner baseline first), 6 (what evidence separates reuse from other explanations).
+Changing prompt, retrieval, and parameters together tests their combined system. Holding other components fixed can assess a specified contribution, although components can interact. A prompt that works with one document format may fail with another. Fine-tuning gains can depend on which evidence the retriever supplies. No single improvement establishes that the base representation itself improved.
 
-\textbf{Source representation.} A widely-used pretrained text encoder; specifically the public 110M-parameter BERT-base checkpoint, accessed as a frozen encoder.
-
-\textbf{Source objective.} Masked language modeling on a large generic web-and-book corpus, plus next-sentence prediction. Not trained on student-support text or institutional vocabulary.
-
-\textbf{Target task.} Three-class classification of student emails routed to advising. Classes are routine (priority 3), ambiguous (priority 2), and high-risk (priority 1, must reach human within 4 hours).
-
-\textbf{Expected domain shift.} (a) Institutional vocabulary (course codes, policy names like ``W deadline''); (b) tone shift toward student-to-staff register; (c) higher stakes around the high-risk class than the source corpus ever had to model.
-
-\textbf{First diagnostic.} A frozen linear probe on a 600-example labeled set. If the probe reaches macro-F1 above 0.65 with no fine-tuning, the encoder is exposing usable signal.
-
-\textbf{Chosen adaptation depth.} Frozen encoder plus linear probe, conditional on the probe diagnostic. If the probe stays below 0.55, escalate to LoRA-style partial tuning of the top three transformer blocks. Full fine-tuning is reserved for the case where partial tuning still misses the high-risk class.
-
-\textbf{Alternative explanations.} (a) The university's existing intake-form keyword filter may be doing most of the work; (b) any retrieval over policy documents added later attributes its gain to evidence quality, not to the encoder; (c) the high-risk class may simply have stronger lexical markers (e.g., explicit mentions of harm) that any model would catch.
-
-\textbf{Evidence needed.} The probe must (i) beat a TF-IDF + logistic regression baseline by more than its 95\% paired bootstrap interval; (ii) show its largest gains on classes other than high-risk, since high-risk is where lexical baselines already work; (iii) preserve gains on a held-out semester collected after the probe was frozen.
-\end{example}
-
-\section{Common Mistakes with Representation Learning}
-
-The recurring mistakes are all versions of one deeper error: confusing reusable behavior with justified evidence about why that behavior exists.
-
-\textbf{Reading embedding neighbors as meaning.} Embedding neighbors are model-dependent summaries of what one training objective made close, not ground-truth semantic similarity. Treating them as evidence about the world rather than about the model invites confident claims that the next checkpoint will silently overturn.
-
-\textbf{Skipping the linear probe.} A weak readout on a fixed representation is the first diagnostic of whether the basic information is even accessible. Jumping to a powerful downstream head hides this question and lets a brittle representation appear strong through head capacity alone.
-
-\textbf{Assuming self-supervision solves label scarcity.} Pretraining helps only when its training pressure approximates what the downstream task needs. A strong pretraining loss is not yet evidence of useful transfer, and a large unlabeled corpus does not substitute for matching the right invariances.
-
-\textbf{Misattributing transfer gains.} An improvement after adopting a foundation model can come from the representation, the retrieval layer, the prompt, or the fine-tuning recipe. Crediting the representation without separating these sources turns one engineering result into a misleading scientific claim.
-
-\textbf{Treating attention maps as explanation.} Attention is data-dependent weighted averaging. The maps say where the model looked, not why it inferred what it inferred, and scale does not remove the need for controlled evaluation on top of them.
-
-\section{Looking Ahead}
-
-This chapter shifted the unit of value from per-task accuracy to reusable structure. A representation earns its keep when it preserves the right invariances and makes the next task easier on top of a lightweight readout.
-
-The next chapter turns reusable structure toward production. If a representation can be sampled, interpolated, and steered, the system is no longer only describing data---it is generating it. Chapter~\ref{ch:generative-representations} asks what a generative model has to preserve to count as faithful to its training distribution, and what evaluation can detect when it has not.
-
-Later parts of the book inherit this chapter's vocabulary directly. The retrieval, ranking, and grounding chapters treat embeddings as the substrate they operate on; the reliability chapter asks what a probe really proves and how representation choices propagate into bounded failure.
-
-\begin{chaptersummary}
-\item Representation learning shifts the unit of value from one-task accuracy to reusable structure. A learned space that preserves the right information makes the next task easier through a lightweight readout rather than a new model from scratch.
-\item Cosine similarity measures direction in an embedding space; magnitude becomes a separable signal about confidence or specificity. Whether direction or magnitude carries the relevant information is a modeling claim, not a default.
-\item Self-supervised pretraining---contrastive, masked, and next-token---earns its reuse claim only when the training pressure approximates what the downstream task needs. A strong pretraining loss is not yet evidence of useful transfer.
-\item The linear probe is the right first diagnostic. A weak readout reveals whether the basic information is accessible at all; a strong readout can hide a brittle representation behind a powerful head.
-\item Attention is data-dependent weighted averaging, not a window into reasoning. Attention maps are diagnostic evidence about where a model looked, never a justification for what it inferred.
-\item Foundation models do not reduce the need for evaluation; they increase it. The same model is now reused across tasks, deployments, and shifts---each one a separate claim that needs its own probe, baseline, and ablation.
-\item Transfer gains must be attributed across representation, retrieval, prompting, and fine-tuning. The strongest improvement may not come from the representation at all, and credit assignment is part of the experimental responsibility.
-\item Reuse is already about modeling. Choosing a pretraining objective, a probe, an adaptation strategy, and a transfer evaluation is the modeling work; the foundation model only sets the substrate on which those choices play out.
-\end{chaptersummary}
+Foundation-model evaluation also needs protection against prompt selection on test cases, benchmark exposure in pretraining, and retrieving labels or answer keys unavailable at the intended use time. Generated confidence is not automatically a calibrated event probability, and polished language does not validate a factual claim. For the deadline task, any representation-based predictor still forecasts the specified event from permitted week-2 inputs and acts through the five-review policy; evaluating that system does not establish an outreach effect.
 
 \begin{studyquestions}
-\item Why can a weak downstream model perform well when built on top of a strong representation?
-\item Why is ``change of coordinates'' a useful mental model for representation learning?
-\item What does cosine similarity measure, and why is it often used with embeddings?
-\item Why is a linear probe a better first diagnostic than a powerful downstream head when you want to test representation quality?
-\item Why does attention help build context-dependent representations?
-\item Why do foundation models increase the importance of evaluation rather than reduce it?
+\item How can a lossy map preserve one target exactly while preventing prediction of another?
+\item Why can a representation improve a linear readout without increasing information about a fresh label?
+\item Which distinctions do cosine normalization and a positive-pair rule deliberately ignore?
+\item What does a frozen probe comparison establish, and which alternative explanations remain?
+\item Why is a convex-hull constraint different from restricting attention to one value direction?
+\item When is self-attention permutation-equivariant, and how can a fixed causal mask change that conclusion?
+\item What evidence distinguishes a retrieval gain from a change to pretrained parameters?
 \end{studyquestions}
 
-\begin{exercises}
-\item \exercisetag{Proof}{Core}Re-prove the convex-combination theorem. Given softmax weights $\alpha_j = \exp(s_j) / \sum_\ell \exp(s_\ell)$ over candidate scores $\{s_j\}$, show that (a) $\alpha_j \ge 0$ for every $j$, (b) $\sum_j \alpha_j = 1$, and (c) therefore the context vector $c = \sum_j \alpha_j v_j$ lies in the convex hull of $\{v_j\}$. Then explain in one sentence why this means a single-head attention layer cannot produce a context vector that points in a direction \emph{no} candidate $v_j$ already points toward.
-\item \exercisetag{Concept}{Core}A model produces attention weights $[0.1, 0.7, 0.2]$ for one token attending to three others. (a) What can you conclude from these weights? (b) What would be an over-interpretation? (c) If you permuted the three context tokens and the weights changed to $[0.6, 0.1, 0.3]$, what does that tell you about the model's sensitivity to position?
-\item \exercisetag{Concept}{Core}Draw a tiny 2D picture of a ``bad'' space and a ``good'' learned space for the same binary classification task. Explain what changed.
-\item \exercisetag{Calculation}{Core}Compute the cosine similarity between the vectors $a=[1,2]^\top$ and $b=[2,1]^\top$.
-\item \exercisetag{Concept}{Core}Suppose a model has strong training performance on its self-supervised pretraining objective but weak downstream transfer. Give two plausible explanations.
-\item \exercisetag{Diagnosis}{Intermediate}For each of the following scenarios, choose a sensible first adaptation strategy and justify it: few labels with small domain shift, moderate labels with moderate shift, many labels with large shift.
-\item \exercisetag{Diagnosis}{Intermediate}Explain why a linear probe may be a better first diagnostic than a deep downstream head when evaluating a new embedding model.
-\item \exercisetag{Concept}{Intermediate}In your own words, explain why attention can be understood as data-dependent weighted averaging.
-\item \exercisetag{Concept}{Intermediate}A model produces the attention row $(0.10, 0.70, 0.20)$ for one token over a three-token sequence. What does that row tell you, and what does it \emph{not} justify you claiming?
-\item \exercisetag{Design}{Intermediate}Use Table~\ref{tab:reuse-adaptation-plan} to sketch a reuse and adaptation plan for one target task of your choice. Include the first clean diagnostic and one alternative explanation you would have to rule out before claiming that reuse helped. If you are carrying one case through the book, say what remains fixed from the training report you produced in Chapter~\ref{ch:optimization-neural-networks} and what this chapter changes first.
-\item \exercisetag{Implementation}{Intermediate}Demonstrate the linear-probe diagnostic on synthetic embeddings. Construct a 4-class dataset with 200 points per class. Build two embedding spaces of dimension 50: (a) random embeddings drawn from $\mathcal{N}(0, I)$ and (b) cluster-aligned embeddings where each class has its own random center plus small Gaussian noise, so classes are nearly linearly separable. Train a logistic-regression linear probe on top of each frozen embedding (\verb|sklearn.linear_model.LogisticRegression|) and report held-out accuracy for both. The cluster-aligned space should reach near-perfect accuracy while the random space stays near $1/4$. Briefly explain why this makes the linear probe a sharp test of representational structure.
+\begin{exercises}[State the representation, permitted inputs, and comparison rule.]
+\item \exercisetag{Calculation}{Core}For the four equally likely sign pairs in Figure~\ref{fig:bad-vs-good-space}, list their representations and labels. Give a linear readout of $Z$ for $Y$. What is the best population accuracy for predicting $\mathbf1\{U=1\}$ from $Z$ alone?
+\item \exercisetag{Calculation}{Core}Compute cosine similarity for $a=(1,2)^\top,b=(2,1)^\top$. Repeat after replacing $a$ by $10a$ and by $-a$. Explain what happens for a zero vector.
+\item \exercisetag{Calculation}{Core}Verify the dot products and cosines of exam with quiz and guitar. For query $(1,0)$, compare candidate $(100,0)$ with $(1,1)$ under Euclidean distance and cosine.
+\item \exercisetag{Calculation}{Intermediate}A JL map has distortion parameter $0.2$ and an original squared pairwise distance of $25$. Give the possible squared and ordinary distances after mapping. Check whether squared distances $9,16$ must retain their ordering and whether $9,10$ must.
+\item \exercisetag{Calculation}{Core}Two masked tokens receive probabilities $1/2$ and $1/4$ for their correct identities. Compute average masked log loss using natural logarithms. Why must the averaging set be nonempty?
+\item \exercisetag{Calculation}{Intermediate}A three-candidate contrastive problem has scores $(\log2,0,0)$ with the first candidate positive and $T=1$. Compute candidate probabilities and loss. Repeat at $T=1/2$. Compare with equal scores and state why a lower loss is not alone evidence of better target transfer.
+\item \exercisetag{Calculation}{Core}In the reconstruction counterexample $X=(10Z,0.01Y)$, calculate expected squared input norm and reconstruction error when the second coordinate is discarded. State the best accuracy on $Y$ using only the retained coordinate, and using both coordinates.
+\item \exercisetag{Calculation}{Intermediate}Construct affine scores selecting four classes at centers $(1,0),(-1,0),(0,1),(0,-1)$. Explain why an embedding independent of four equally likely labels permits only $1/4$ population accuracy, despite possible high training accuracy.
+\item \exercisetag{Diagnosis}{Intermediate}A frozen linear probe performs poorly, while a nonlinear head performs well on protected cases. Give two explanations consistent with this evidence, and one information-preservation claim the comparison does not establish.
+\item \exercisetag{Calculation}{Core}Reproduce the three-key attention calculation, including the $\sqrt{d_k}$ scaling and masked result. Show with values $(1,0),(0,1)$ that a convex mixture can point in a direction different from either value.
+\item \exercisetag{Diagnosis}{Intermediate}A fixed query has weights $(0.1,0.7,0.2)$ over three context rows. With no position inputs or order-dependent mask, swap the first two context rows. What weights and context should result? If an observed system instead gives $(0.6,0.1,0.3)$, list assumptions to investigate before attributing the change to position.
+\item \exercisetag{Calculation}{Intermediate}Self-attention has four tokens, model dimension $6$, and two heads with $d_k=d_v=3$. State the shapes of each projected matrix, attention matrix, context, concatenation, and output projection. How does the attention-matrix shape change for two queries over three context items?
+\item \exercisetag{Calculation}{Intermediate}Let $B=(1,0,2,-1)^\top$ and $A=(2,0,1)$ be rank-one update factors. Compute $BA$, its rank, factor parameter count, and the local dimension of exactly rank-one $4\times3$ updates. Exhibit different factors producing the same product.
+\item \exercisetag{Calculation}{Intermediate}For an update to a $1024\times1024$ matrix with $r=8$, compute the unrestricted entry count, factor parameter count, and dimension of the rank-eight matrix set. Explain why these counts do not determine total training cost or target accuracy.
+\item \exercisetag{Calculation}{Core}For token $x=(1,3)$, $\gamma=(1,1)$, $\beta=(0,0)$, and $\epsilon=3$, compute layer normalization and its output mean and variance. What is the output for a constant token? Why need the normalized variance not equal one?
+\item \exercisetag{Design}{Intermediate}For the week-2 deadline task, compare frozen features, partial tuning, and a simpler baseline under one label budget. Specify training-only transformations, protected chronology and groups, and a rule enforcing at most five reviews. Name an intervention claim this comparison cannot establish.
+\item \begin{minipage}[t]{\linewidth}\exercisetag{Diagnosis}{Intermediate}A course-policy assistant improves after adding retrieval while all model weights remain fixed. Specify evidence needed to assess retrieval coverage, answer support, and final task success. Explain why that result does not establish improved pretrained representation parameters.\end{minipage}
 \end{exercises}
 
-\begin{challengeexercises}
-\item \exercisetag{Design}{Advanced}Construct a tiny embedding example with three objects for which Euclidean distance and cosine similarity rank the neighbors differently. Explain what this reveals about vector magnitude versus direction.
-\item \exercisetag{Concept}{Advanced}A self-supervised vision model is pretrained on natural photographs and then adapted to satellite imagery. Give three technical reasons why transfer may fail even if the pretraining dataset was very large.
-\item \exercisetag{Diagnosis}{Advanced}Explain why a high-performing linear probe is evidence that the representation is useful, but not proof that the model's internal organization is causally meaningful or robust under distribution shift.
-\item \exercisetag{Diagnosis}{Advanced}A foundation-model pipeline improves after adding retrieval augmentation. Explain what new evidence you would need before claiming that the pretrained representation itself became better.
+\begin{challengeexercises}[State the mathematical and evaluation assumptions.]
+\item \exercisetag{Proof}{Advanced}For a fresh case and fixed fitted encoder, derive the unrestricted-risk inequality and the conditional data-processing statement. Explain what changes if the encoder is allowed to read the fresh label or additional context. Give an example distinguishing retained information from linear accessibility.
+\item \exercisetag{Proof}{Advanced}Prove the normalized Euclidean-distance identity for cosine. Verify the three-angle triangle-inequality counterexample, and explain why normalization does not define a metric on all original nonzero vectors.
+\item \exercisetag{Diagnosis}{Advanced}A vision encoder pretrained on natural photographs fails on satellite images. Describe possible target-information loss, unsuitable invariance, and population shift. Design comparisons of reconstruction, frozen readouts, and adaptation that distinguish their claims without assuming one comparison uniquely identifies a cause.
+\item \exercisetag{Proof}{Advanced}Derive softmax score-shift invariance and its Jacobian. Prove the convex-combination result for a nonempty masked row, give two different attention distributions with the same context, and explain why attention weights alone cannot provide a causal explanation.
+\item \exercisetag{Proof}{Advanced}Derive the self-attention permutation relation and state what must happen to a mask. Explain why a fixed causal mask changes the argument. Use the sine--cosine angle-addition formula to derive the displayed position-offset rotation.
+\item \exercisetag{Proof}{Advanced}Prove that $BA$ has rank at most $r$ and that $(BS)(S^{-1}A)$ gives the same update. Explain why $r(m+n)$ counts trained factors rather than independent update directions. Derive why both-zero initialization gives zero first gradients while one-zero initialization need not.
+\item \exercisetag{Design}{Advanced}A foundation-model system improves after simultaneously changing its prompt, retrieval corpus, and tuned parameters. Design an evaluation that separates specified component contributions while allowing interactions, controls benchmark and temporal exposure, and includes relevant failure cases. State which claims remain unsupported.
 \end{challengeexercises}
+
+\clearpage
+\begingroup\pagestyle{empty}\cleardoublepage\endgroup
+\endgroup
